@@ -7,6 +7,17 @@
 ```
 CareerNavigator/
 ├── data/                          # 入力データ（CSVファイル）
+│   ├── members/                   # 会員データ（複数CSVファイル対応）
+│   │   ├── member_1.csv
+│   │   ├── member_2.csv
+│   │   └── ...                    # ディレクトリ内の全CSVを自動読込・結合
+│   ├── acquired/                  # 習得力量データ（複数ファイル対応）
+│   ├── skills/                    # スキル力量データ
+│   ├── education/                 # 教育力量データ
+│   ├── license/                   # 資格力量データ
+│   ├── categories/                # カテゴリデータ
+│   │
+│   # または従来の単一ファイル形式も対応（後方互換性）
 │   ├── member_skillnote.csv
 │   ├── acquiredCompetenceLevel.csv
 │   ├── skill_skillnote.csv
@@ -71,16 +82,57 @@ cd CareerNavigator
 uv sync
 
 # 3. CSVファイルをdataディレクトリに配置
+
+# オプション1: ディレクトリ構造（複数ファイル対応・推奨）
+mkdir -p data/members data/acquired data/skills data/education data/license data/categories
+cp /path/to/member_*.csv data/members/
+cp /path/to/acquired_*.csv data/acquired/
+cp /path/to/skill_*.csv data/skills/
+cp /path/to/education_*.csv data/education/
+cp /path/to/license_*.csv data/license/
+cp /path/to/category_*.csv data/categories/
+
+# オプション2: 従来の単一ファイル方式（後方互換性）
 cp /path/to/csvfiles/*.csv data/
 ```
 
-必要なCSVファイル:
+### データファイル配置方法
+
+#### 方法1: ディレクトリ構造（推奨）
+
+複数のCSVファイルがある場合、各種別ごとにディレクトリに配置すると自動的に読み込み・結合されます：
+
+```
+data/
+├── members/          # 会員データディレクトリ
+│   ├── member_dept_a.csv    # 部署Aの会員
+│   ├── member_dept_b.csv    # 部署Bの会員
+│   └── member_dept_c.csv    # 部署Cの会員
+├── acquired/         # 習得力量データディレクトリ
+│   ├── acquired_2024.csv    # 2024年のデータ
+│   └── acquired_2025.csv    # 2025年のデータ
+├── skills/           # スキル力量（ディレクトリまたは単一ファイル）
+├── education/        # 教育力量
+├── license/          # 資格力量
+└── categories/       # カテゴリ
+```
+
+各ディレクトリ内の**全ての.csvファイル**が自動的に読み込まれ、1つのDataFrameに結合されます。
+
+#### 方法2: 単一ファイル（従来方式）
+
+従来通り、単一ファイルをdataディレクトリ直下に配置することも可能です：
+
 - member_skillnote.csv
 - acquiredCompetenceLevel.csv
 - skill_skillnote.csv
 - education_skillnote.csv
 - license_skillnote.csv
 - competence_category_skillnote.csv
+
+#### 混在も可能
+
+一部をディレクトリ、一部を単一ファイルとして配置することも可能です。システムは自動的に適切な方法で読み込みます
 
 ## 使い方
 

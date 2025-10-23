@@ -16,8 +16,18 @@ class Config:
     # ディレクトリ設定
     DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
     OUTPUT_DIR = os.path.join(PROJECT_ROOT, 'output')
-    
-    # 入力ファイル名
+
+    # 入力ディレクトリ名（各ディレクトリ内の全CSVを読み込み）
+    INPUT_DIRS = {
+        'members': 'members',
+        'acquired': 'acquired',
+        'skills': 'skills',
+        'education': 'education',
+        'license': 'license',
+        'categories': 'categories'
+    }
+
+    # 後方互換性のため、単一ファイル名も保持
     INPUT_FILES = {
         'members': 'member_skillnote.csv',
         'acquired': 'acquiredCompetenceLevel.csv',
@@ -51,9 +61,14 @@ class Config:
     
     @classmethod
     def get_input_path(cls, file_key):
-        """入力ファイルのパスを取得"""
+        """入力ファイルのパスを取得（単一ファイルの場合）"""
         return os.path.join(cls.DATA_DIR, cls.INPUT_FILES[file_key])
-    
+
+    @classmethod
+    def get_input_dir(cls, dir_key):
+        """入力ディレクトリのパスを取得"""
+        return os.path.join(cls.DATA_DIR, cls.INPUT_DIRS[dir_key])
+
     @classmethod
     def get_output_path(cls, file_key):
         """出力ファイルのパスを取得"""
