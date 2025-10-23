@@ -1,0 +1,44 @@
+[project]
+name = "skillnote-recommendation"
+version = "1.0.0"
+description = "スキルノート推薦システム - 技術者向け力量推薦"
+authors = [
+    {name = "Development Team"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "scikit-learn>=1.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+skillnote-convert = "skillnote_recommendation.scripts.convert_data:main"
+skillnote-recommend = "skillnote_recommendation.scripts.run_recommendation:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.black]
+line-length = 100
+target-version = ['py39']
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
