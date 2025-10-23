@@ -16,7 +16,7 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 ```bash
 # プロジェクトディレクトリに移動
-cd skillnote-recommendation
+cd CareerNavigator
 
 # 依存関係のインストール（自動的に仮想環境も作成）
 uv sync
