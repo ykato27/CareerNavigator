@@ -5,7 +5,7 @@
 ## プロジェクト構成
 
 ```
-skillnote-recommendation/
+CareerNavigator/
 ├── data/                          # 入力データ（CSVファイル）
 │   ├── member_skillnote.csv
 │   ├── acquiredCompetenceLevel.csv
@@ -65,7 +65,7 @@ pipx install uv
 
 ```bash
 # 1. プロジェクトをクローンまたはダウンロード
-cd skillnote-recommendation
+cd CareerNavigator
 
 # 2. 依存関係のインストール（自動的に仮想環境も作成されます）
 uv sync
