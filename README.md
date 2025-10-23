@@ -41,12 +41,15 @@ CareerNavigator/
 │   │   ├── data_transformer.py    # データ変換
 │   │   ├── similarity_calculator.py  # 類似度計算
 │   │   ├── recommendation_engine.py  # 推薦エンジン
-│   │   └── recommendation_system.py  # 推薦システム
+│   │   ├── recommendation_system.py  # 推薦システム
+│   │   └── evaluator.py           # 評価器（時系列分割・メトリクス）
 │   └── scripts/                   # 実行スクリプト
 │       ├── convert_data.py        # データ変換
 │       └── run_recommendation.py  # 推薦実行
 │
-├── tests/                         # テストコード
+├── tests/                         # テストコード（194テスト）
+├── docs/                          # ドキュメント
+│   └── EVALUATION.md              # 評価ガイド
 ├── pyproject.toml                 # プロジェクト設定
 ├── .gitignore
 └── README.md
@@ -412,7 +415,28 @@ uv build
 uv pip install -e .
 ```
 
+## ドキュメント
+
+- [評価ガイド (EVALUATION.md)](docs/EVALUATION.md) - 推薦システムの評価方法
+  - 時系列分割による評価
+  - 評価メトリクス (Precision@K, Recall@K, NDCG@K, Hit Rate)
+  - クロスバリデーション
+  - ベストプラクティス
+
+- [テスト設計 (TEST_DESIGN.md)](TEST_DESIGN.md) - テストコードの設計書
+
+- [クイックスタート (TESTING_QUICKSTART.md)](TESTING_QUICKSTART.md) - テスト実装ガイド
+
 ## バージョン履歴
+
+- v1.1.0 (2025-10-23)
+  - 推薦システム評価機能追加
+  - 時系列分割による評価 (Temporal Split)
+  - 評価メトリクス実装 (Precision@K, Recall@K, NDCG@K, Hit Rate)
+  - クロスバリデーション機能
+  - ディレクトリスキャンによる複数CSV対応
+  - カラム構造検証機能
+  - 包括的テストスイート (194テスト)
 
 - v1.0.0 (2025-10-23)
   - 初回リリース
