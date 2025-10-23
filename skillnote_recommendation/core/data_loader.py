@@ -71,6 +71,7 @@ class DataLoader:
 
         Raises:
             FileNotFoundError: ディレクトリが存在しない、またはCSVファイルがない場合
+            ValueError: カラム構造が異なるファイルがある場合
         """
         dir_path = os.path.join(self.data_dir, dir_name)
 
@@ -88,9 +89,34 @@ class DataLoader:
 
         # 全CSVファイルを読み込んで結合
         dfs = []
+        first_columns = None
+
         for csv_file in sorted(csv_files):  # ソートして順序を一定に
             df = pd.read_csv(csv_file, encoding=Config.FILE_ENCODING)
             df.columns = [self.clean_column_name(col) for col in df.columns]
+
+            # カラム構造の整合性チェック
+            if first_columns is None:
+                first_columns = set(df.columns)
+                first_file = os.path.basename(csv_file)
+            else:
+                current_columns = set(df.columns)
+                if first_columns != current_columns:
+                    missing_in_current = first_columns - current_columns
+                    extra_in_current = current_columns - first_columns
+
+                    error_msg = (
+                        f"カラム構造が一致しません:\n"
+                        f"  基準ファイル: {first_file}\n"
+                        f"  問題ファイル: {os.path.basename(csv_file)}\n"
+                    )
+                    if missing_in_current:
+                        error_msg += f"  不足カラム: {sorted(missing_in_current)}\n"
+                    if extra_in_current:
+                        error_msg += f"  余分なカラム: {sorted(extra_in_current)}\n"
+
+                    raise ValueError(error_msg)
+
             dfs.append(df)
 
         # 全てのDataFrameを結合
