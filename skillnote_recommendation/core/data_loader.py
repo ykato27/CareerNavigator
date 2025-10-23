@@ -124,39 +124,9 @@ class DataLoader:
 
         return combined_df
 
-    def load_data_flexible(self, key: str) -> pd.DataFrame:
-        """
-        柔軟にデータを読み込む（ディレクトリまたは単一ファイル）
-
-        Args:
-            key: データキー（'members', 'acquired'など）
-
-        Returns:
-            DataFrame
-        """
-        # まずディレクトリを試す
-        dir_name = Config.INPUT_DIRS.get(key)
-        if dir_name:
-            dir_path = os.path.join(self.data_dir, dir_name)
-            if os.path.exists(dir_path) and os.path.isdir(dir_path):
-                return self.load_csv_from_directory(dir_name)
-
-        # ディレクトリがなければ単一ファイルを試す
-        filename = Config.INPUT_FILES.get(key)
-        if filename:
-            filepath = os.path.join(self.data_dir, filename)
-            if os.path.exists(filepath):
-                return self.load_csv(filename)
-
-        # どちらも見つからない場合
-        raise FileNotFoundError(
-            f"'{key}' のデータが見つかりません。"
-            f"ディレクトリ '{dir_name}' または ファイル '{filename}' を確認してください。"
-        )
-
     def load_all_data(self) -> Dict[str, pd.DataFrame]:
         """
-        全てのCSVファイルを読み込む（ディレクトリまたは単一ファイル）
+        全てのディレクトリからCSVファイルを読み込む
 
         Returns:
             データの辞書（キー: ファイル種別、値: DataFrame）
@@ -167,24 +137,18 @@ class DataLoader:
 
         data = {}
 
-        for key in Config.INPUT_FILES.keys():
+        for key, dir_name in Config.INPUT_DIRS.items():
             try:
-                df = self.load_data_flexible(key)
+                df = self.load_csv_from_directory(dir_name)
                 data[key] = df
 
-                # ディレクトリから読み込んだ場合はファイル数も表示
-                dir_name = Config.INPUT_DIRS.get(key)
-                dir_path = os.path.join(self.data_dir, dir_name) if dir_name else None
-
-                if dir_path and os.path.exists(dir_path) and os.path.isdir(dir_path):
-                    csv_files = glob.glob(os.path.join(dir_path, '*.csv'))
-                    print(f"  ✓ {dir_name}/: {len(csv_files)}ファイル, {len(df)}行")
-                else:
-                    filename = Config.INPUT_FILES.get(key)
-                    print(f"  ✓ {filename}: {len(df)}行")
+                # ファイル数も表示
+                dir_path = os.path.join(self.data_dir, dir_name)
+                csv_files = glob.glob(os.path.join(dir_path, '*.csv'))
+                print(f"  ✓ {dir_name}/: {len(csv_files)}ファイル, {len(df)}行")
 
             except FileNotFoundError as e:
-                print(f"  ✗ {key}: データが見つかりません")
+                print(f"  ✗ {key}: ディレクトリ '{dir_name}/' が見つかりません")
                 raise e
 
         print(f"\n全{len(data)}種類のデータ読み込み完了")
