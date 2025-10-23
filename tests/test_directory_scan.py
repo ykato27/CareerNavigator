@@ -244,6 +244,126 @@ class TestLoadAllDataWithDirectories:
 
 # ==================== 統合テスト ====================
 
+class TestColumnConsistencyCheck:
+    """カラム構造整合性チェックのテスト"""
+
+    def test_inconsistent_columns_raises_error(self, temp_data_dir):
+        """カラム構造が異なるファイルがあるとValueError"""
+        members_dir = temp_data_dir / 'members'
+        members_dir.mkdir()
+
+        # 正常なファイル
+        df1 = pd.DataFrame({
+            'メンバーコード': ['m001', 'm002'],
+            'メンバー名': ['田中太郎', '鈴木花子']
+        })
+        # カラム構造が異なるファイル
+        df2 = pd.DataFrame({
+            'メンバーコード': ['m003'],
+            '名前': ['佐藤次郎'],  # カラム名が違う
+            '部署': ['営業部']     # 余分なカラム
+        })
+
+        df1.to_csv(members_dir / 'member_1.csv', index=False, encoding='utf-8-sig')
+        df2.to_csv(members_dir / 'member_2.csv', index=False, encoding='utf-8-sig')
+
+        loader = DataLoader(data_dir=str(temp_data_dir))
+
+        with pytest.raises(ValueError) as exc_info:
+            loader.load_csv_from_directory('members')
+
+        # エラーメッセージの確認
+        error_msg = str(exc_info.value)
+        assert 'カラム構造が一致しません' in error_msg
+        assert 'member_1.csv' in error_msg
+        assert 'member_2.csv' in error_msg
+
+    def test_missing_columns_detected(self, temp_data_dir):
+        """不足しているカラムが検出される"""
+        members_dir = temp_data_dir / 'members'
+        members_dir.mkdir()
+
+        df1 = pd.DataFrame({
+            'メンバーコード': ['m001'],
+            'メンバー名': ['田中太郎'],
+            '部署': ['開発部']
+        })
+        df2 = pd.DataFrame({
+            'メンバーコード': ['m002'],
+            'メンバー名': ['鈴木花子']
+            # '部署'カラムが欠けている
+        })
+
+        df1.to_csv(members_dir / 'member_1.csv', index=False, encoding='utf-8-sig')
+        df2.to_csv(members_dir / 'member_2.csv', index=False, encoding='utf-8-sig')
+
+        loader = DataLoader(data_dir=str(temp_data_dir))
+
+        with pytest.raises(ValueError) as exc_info:
+            loader.load_csv_from_directory('members')
+
+        error_msg = str(exc_info.value)
+        assert '不足カラム' in error_msg
+        assert '部署' in error_msg
+
+    def test_extra_columns_detected(self, temp_data_dir):
+        """余分なカラムが検出される"""
+        members_dir = temp_data_dir / 'members'
+        members_dir.mkdir()
+
+        df1 = pd.DataFrame({
+            'メンバーコード': ['m001'],
+            'メンバー名': ['田中太郎']
+        })
+        df2 = pd.DataFrame({
+            'メンバーコード': ['m002'],
+            'メンバー名': ['鈴木花子'],
+            '余分カラム': ['データ']  # 余分なカラム
+        })
+
+        df1.to_csv(members_dir / 'member_1.csv', index=False, encoding='utf-8-sig')
+        df2.to_csv(members_dir / 'member_2.csv', index=False, encoding='utf-8-sig')
+
+        loader = DataLoader(data_dir=str(temp_data_dir))
+
+        with pytest.raises(ValueError) as exc_info:
+            loader.load_csv_from_directory('members')
+
+        error_msg = str(exc_info.value)
+        assert '余分なカラム' in error_msg
+        assert '余分カラム' in error_msg
+
+    def test_all_files_same_structure_ok(self, temp_data_dir):
+        """全ファイルが同じ構造なら正常に結合される"""
+        members_dir = temp_data_dir / 'members'
+        members_dir.mkdir()
+
+        # 全て同じカラム構造
+        df1 = pd.DataFrame({
+            'メンバーコード': ['m001', 'm002'],
+            'メンバー名': ['田中太郎', '鈴木花子']
+        })
+        df2 = pd.DataFrame({
+            'メンバーコード': ['m003'],
+            'メンバー名': ['佐藤次郎']
+        })
+        df3 = pd.DataFrame({
+            'メンバーコード': ['m004'],
+            'メンバー名': ['高橋美咲']
+        })
+
+        df1.to_csv(members_dir / 'member_1.csv', index=False, encoding='utf-8-sig')
+        df2.to_csv(members_dir / 'member_2.csv', index=False, encoding='utf-8-sig')
+        df3.to_csv(members_dir / 'member_3.csv', index=False, encoding='utf-8-sig')
+
+        loader = DataLoader(data_dir=str(temp_data_dir))
+        result = loader.load_csv_from_directory('members')
+
+        # 正常に結合される
+        assert len(result) == 4
+        assert set(result.columns) == {'メンバーコード', 'メンバー名'}
+
+
 class TestDirectoryScanIntegration:
     """ディレクトリスキャン機能の統合テスト"""
 
