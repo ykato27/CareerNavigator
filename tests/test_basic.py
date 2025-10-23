@@ -14,7 +14,7 @@ def test_config():
     """設定クラスのテスト"""
     assert Config.DATA_DIR.endswith('data')
     assert Config.OUTPUT_DIR.endswith('output')
-    assert 'members' in Config.INPUT_FILES
+    assert 'members' in Config.INPUT_DIRS
     assert 'members_clean' in Config.OUTPUT_FILES
 
 
@@ -73,10 +73,10 @@ def test_recommendation_model():
 
 def test_config_paths():
     """パス取得のテスト"""
-    input_path = Config.get_input_path('members')
+    input_dir = Config.get_input_dir('members')
     output_path = Config.get_output_path('members_clean')
-    
-    assert 'member_skillnote.csv' in input_path
+
+    assert 'members' in input_dir
     assert 'members_clean.csv' in output_path
 
 

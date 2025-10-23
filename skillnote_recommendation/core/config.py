@@ -26,16 +26,6 @@ class Config:
         'license': 'license',
         'categories': 'categories'
     }
-
-    # 後方互換性のため、単一ファイル名も保持
-    INPUT_FILES = {
-        'members': 'member_skillnote.csv',
-        'acquired': 'acquiredCompetenceLevel.csv',
-        'skills': 'skill_skillnote.csv',
-        'education': 'education_skillnote.csv',
-        'license': 'license_skillnote.csv',
-        'categories': 'competence_category_skillnote.csv'
-    }
     
     # 出力ファイル名
     OUTPUT_FILES = {
@@ -59,11 +49,6 @@ class Config:
     FILE_ENCODING = 'utf-8'
     OUTPUT_ENCODING = 'utf-8-sig'
     
-    @classmethod
-    def get_input_path(cls, file_key):
-        """入力ファイルのパスを取得（単一ファイルの場合）"""
-        return os.path.join(cls.DATA_DIR, cls.INPUT_FILES[file_key])
-
     @classmethod
     def get_input_dir(cls, dir_key):
         """入力ディレクトリのパスを取得"""

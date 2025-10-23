@@ -158,26 +158,38 @@ def temp_output_dir(tmp_path):
 @pytest.fixture
 def sample_csv_files(temp_data_dir, sample_members, sample_skills,
                      sample_education, sample_license, sample_categories, sample_acquired):
-    """サンプルCSVファイルをディスクに作成"""
+    """サンプルCSVファイルをディレクトリ構造で作成"""
     files = {}
 
-    # 各DataFrameをCSVとして保存
-    files['members'] = temp_data_dir / 'member_skillnote.csv'
+    # 各ディレクトリを作成し、DataFrameをCSVとして保存
+    members_dir = temp_data_dir / 'members'
+    members_dir.mkdir()
+    files['members'] = members_dir / 'members.csv'
     sample_members.to_csv(files['members'], index=False, encoding='utf-8-sig')
 
-    files['skills'] = temp_data_dir / 'skill_skillnote.csv'
+    skills_dir = temp_data_dir / 'skills'
+    skills_dir.mkdir()
+    files['skills'] = skills_dir / 'skills.csv'
     sample_skills.to_csv(files['skills'], index=False, encoding='utf-8-sig')
 
-    files['education'] = temp_data_dir / 'education_skillnote.csv'
+    education_dir = temp_data_dir / 'education'
+    education_dir.mkdir()
+    files['education'] = education_dir / 'education.csv'
     sample_education.to_csv(files['education'], index=False, encoding='utf-8-sig')
 
-    files['license'] = temp_data_dir / 'license_skillnote.csv'
+    license_dir = temp_data_dir / 'license'
+    license_dir.mkdir()
+    files['license'] = license_dir / 'license.csv'
     sample_license.to_csv(files['license'], index=False, encoding='utf-8-sig')
 
-    files['categories'] = temp_data_dir / 'competence_category_skillnote.csv'
+    categories_dir = temp_data_dir / 'categories'
+    categories_dir.mkdir()
+    files['categories'] = categories_dir / 'categories.csv'
     sample_categories.to_csv(files['categories'], index=False, encoding='utf-8-sig')
 
-    files['acquired'] = temp_data_dir / 'acquiredCompetenceLevel.csv'
+    acquired_dir = temp_data_dir / 'acquired'
+    acquired_dir.mkdir()
+    files['acquired'] = acquired_dir / 'acquired.csv'
     sample_acquired.to_csv(files['acquired'], index=False, encoding='utf-8-sig')
 
     return files
