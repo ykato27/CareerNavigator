@@ -5,7 +5,7 @@
 """
 
 import pandas as pd
-from typing import Optional
+from typing import Optional, List, Dict
 
 
 class Member:
@@ -38,25 +38,69 @@ class Competence:
 
 class MemberCompetence:
     """会員習得力量クラス"""
-    
-    def __init__(self, member_code: str, competence_code: str, 
+
+    def __init__(self, member_code: str, competence_code: str,
                  level: int, acquired_date: Optional[str] = None):
         self.member_code = member_code
         self.competence_code = competence_code
         self.level = level  # 正規化済みレベル（0-5）
         self.acquired_date = acquired_date
-    
+
     def __repr__(self):
         return f"MemberCompetence(member={self.member_code}, competence={self.competence_code}, level={self.level})"
 
 
+class ReferencePerson:
+    """参考人物クラス"""
+
+    def __init__(self, member_code: str, member_name: str,
+                 reference_type: str, similarity_score: float,
+                 common_competences: List[str], unique_competences: List[str],
+                 competence_gap: Dict[str, int], reason: str):
+        """
+        Args:
+            member_code: 会員コード
+            member_name: 会員名
+            reference_type: 参考タイプ（similar_career, role_model, diverse_career）
+            similarity_score: 類似度スコア（0-1）
+            common_competences: 共通の力量リスト
+            unique_competences: 参考人物が持つユニークな力量リスト
+            competence_gap: 力量レベルの差分 {competence_code: level_diff}
+            reason: なぜこの人が参考になるかの理由
+        """
+        self.member_code = member_code
+        self.member_name = member_name
+        self.reference_type = reference_type
+        self.similarity_score = similarity_score
+        self.common_competences = common_competences
+        self.unique_competences = unique_competences
+        self.competence_gap = competence_gap
+        self.reason = reason
+
+    def to_dict(self):
+        """辞書形式に変換"""
+        return {
+            '会員コード': self.member_code,
+            '会員名': self.member_name,
+            '参考タイプ': self.reference_type,
+            '類似度': round(self.similarity_score, 2),
+            '共通力量数': len(self.common_competences),
+            '参考力量数': len(self.unique_competences),
+            '理由': self.reason
+        }
+
+    def __repr__(self):
+        return f"ReferencePerson(name={self.member_name}, type={self.reference_type}, similarity={self.similarity_score:.2f})"
+
+
 class Recommendation:
     """推薦結果クラス"""
-    
-    def __init__(self, competence_code: str, competence_name: str, 
+
+    def __init__(self, competence_code: str, competence_name: str,
                  competence_type: str, category: str,
                  priority_score: float, category_importance: float,
-                 acquisition_ease: float, popularity: float, reason: str):
+                 acquisition_ease: float, popularity: float, reason: str,
+                 reference_persons: Optional[List[ReferencePerson]] = None):
         self.competence_code = competence_code
         self.competence_name = competence_name
         self.competence_type = competence_type
@@ -66,6 +110,7 @@ class Recommendation:
         self.acquisition_ease = acquisition_ease
         self.popularity = popularity
         self.reason = reason
+        self.reference_persons = reference_persons or []
     
     def to_dict(self):
         """辞書形式に変換"""

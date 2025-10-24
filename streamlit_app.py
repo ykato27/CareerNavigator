@@ -119,7 +119,8 @@ def build_ml_recommender(transformed_data: dict) -> MLRecommender:
     """
     recommender = MLRecommender.build(
         member_competence=transformed_data["member_competence"],
-        competence_master=transformed_data["competence_master"]
+        competence_master=transformed_data["competence_master"],
+        member_master=transformed_data["members_clean"]
     )
     return recommender
 
@@ -349,6 +350,42 @@ if st.session_state.data_loaded and st.session_state.model_trained and st.sessio
                     st.session_state.last_recommendations_df = df_result
 
                     st.success(f"{len(df_result)}件の推薦が生成されました。")
+
+                    # 推薦結果の詳細表示
+                    for idx, rec in enumerate(recs, 1):
+                        with st.expander(f"🎯 推薦 {idx}: {rec.competence_name} (優先度: {rec.priority_score:.1f})"):
+                            # 推薦理由
+                            st.markdown("### 📋 推薦理由")
+                            st.markdown(rec.reason)
+
+                            # 参考人物
+                            if rec.reference_persons:
+                                st.markdown("---")
+                                st.markdown("### 👥 参考になる人物")
+
+                                cols = st.columns(len(rec.reference_persons))
+                                for col_idx, ref_person in enumerate(rec.reference_persons):
+                                    with cols[col_idx]:
+                                        # 参考タイプのアイコンとラベル
+                                        if ref_person.reference_type == "similar_career":
+                                            st.markdown("#### 🤝 類似キャリア")
+                                        elif ref_person.reference_type == "role_model":
+                                            st.markdown("#### ⭐ ロールモデル")
+                                        else:
+                                            st.markdown("#### 🌟 異なるキャリアパス")
+
+                                        st.markdown(f"**{ref_person.member_name}さん**")
+                                        st.markdown(ref_person.reason)
+
+                                        # 差分分析を表示
+                                        st.markdown("**📊 力量の比較**")
+                                        st.metric("共通力量", f"{len(ref_person.common_competences)}個")
+                                        st.metric("参考力量", f"{len(ref_person.unique_competences)}個")
+                                        st.metric("類似度", f"{int(ref_person.similarity_score * 100)}%")
+
+                    # テーブル表示（ダウンロード用）
+                    st.markdown("---")
+                    st.markdown("### 📊 推薦結果一覧")
                     st.dataframe(df_result, use_container_width=True)
 
             except Exception as e:
