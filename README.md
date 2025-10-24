@@ -109,6 +109,24 @@ cp /path/to/category_*.csv data/categories/
 
 ### データファイル配置方法
 
+**重要**: v1.2.0から、データファイルは各サブディレクトリに配置する必要があります。
+
+#### 既存プロジェクトからの移行
+
+以前のバージョンで `data/` 直下にCSVファイルを配置していた場合、以下のコマンドで移行してください：
+
+```bash
+# 既存のCSVファイルを適切なディレクトリに移動
+mv data/member_*.csv data/members/ 2>/dev/null || true
+mv data/acquired*.csv data/acquired/ 2>/dev/null || true
+mv data/skill_*.csv data/skills/ 2>/dev/null || true
+mv data/education_*.csv data/education/ 2>/dev/null || true
+mv data/license_*.csv data/license/ 2>/dev/null || true
+mv data/*category*.csv data/categories/ 2>/dev/null || true
+```
+
+#### ディレクトリ構造
+
 複数のCSVファイルがある場合、各種別ごとにディレクトリに配置すると自動的に読み込み・結合されます：
 
 ```
@@ -136,6 +154,15 @@ data/
 
 同じディレクトリ内の複数CSVファイルは、すべて同じカラム構造を持つ必要があります。
 カラムが異なるファイルが含まれている場合、読み込み時にエラーが発生します
+
+#### データ保護
+
+**重要**: CSVデータファイルはgitリポジトリに含まれません（機密情報保護のため）。
+
+- `.gitignore` により `data/**/*.csv` および `output/*.csv` は除外されています
+- ディレクトリ構造のみが `.gitkeep` ファイルで保持されます
+- 実際のデータファイルは各自で配置してください
+- チーム内でデータを共有する場合は、安全な方法（暗号化、アクセス制限）を使用してください
 
 ## 使い方
 
