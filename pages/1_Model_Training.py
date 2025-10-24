@@ -126,7 +126,7 @@ if st.session_state.get("model_trained", False):
             # この因子で重みが高い力量を取得
             factor_weights = mf_model.H[factor_idx, :]
             top_indices = factor_weights.argsort()[-10:][::-1]
-            top_competences = [mf_model.competence_index[i] for i in top_indices]
+            top_competences = [mf_model.competence_codes[i] for i in top_indices]
             top_weights = [factor_weights[i] for i in top_indices]
 
             # 力量名を取得
@@ -169,10 +169,10 @@ if st.session_state.get("model_trained", False):
         # ランダムに10名をサンプル
         import numpy as np
 
-        n_members_to_show = min(10, len(mf_model.member_index))
-        random_indices = np.random.choice(len(mf_model.member_index), n_members_to_show, replace=False)
+        n_members_to_show = min(10, len(mf_model.member_codes))
+        random_indices = np.random.choice(len(mf_model.member_codes), n_members_to_show, replace=False)
 
-        member_codes = [mf_model.member_index[i] for i in random_indices]
+        member_codes = [mf_model.member_codes[i] for i in random_indices]
         member_names = []
         members_df = st.session_state.transformed_data["members_clean"]
         for code in member_codes:
@@ -212,10 +212,10 @@ if st.session_state.get("model_trained", False):
         st.markdown("各力量がどの潜在因子に関連しているかを示します。")
 
         # ランダムに10個の力量をサンプル
-        n_competences_to_show = min(10, len(mf_model.competence_index))
-        random_comp_indices = np.random.choice(len(mf_model.competence_index), n_competences_to_show, replace=False)
+        n_competences_to_show = min(10, len(mf_model.competence_codes))
+        random_comp_indices = np.random.choice(len(mf_model.competence_codes), n_competences_to_show, replace=False)
 
-        competence_codes = [mf_model.competence_index[i] for i in random_comp_indices]
+        competence_codes = [mf_model.competence_codes[i] for i in random_comp_indices]
         competence_names = []
         for code in competence_codes:
             comp_info = competence_master[competence_master["力量コード"] == code]
