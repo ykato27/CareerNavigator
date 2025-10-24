@@ -162,9 +162,9 @@ if st.session_state.get("model_trained", False):
                 # テーブル
                 st.dataframe(df_factor, use_container_width=True, height=400)
 
-    # 会員の潜在因子分布
-    with st.expander("👥 会員の潜在因子分布"):
-        st.markdown("各会員がどの潜在因子を強く持っているかを示します。")
+    # メンバーの潜在因子分布
+    with st.expander("👥 メンバーの潜在因子分布"):
+        st.markdown("各メンバーがどの潜在因子を強く持っているかを示します。")
 
         # ランダムに10名をサンプル
         import numpy as np
@@ -182,13 +182,13 @@ if st.session_state.get("model_trained", False):
             else:
                 member_names.append(code)
 
-        # 各会員の潜在因子の重みを取得
+        # 各メンバーの潜在因子の重みを取得
         member_factors_data = []
         for idx, member_code in zip(random_indices, member_codes):
             factors = mf_model.W[idx, :]
             for factor_idx, weight in enumerate(factors):
                 member_factors_data.append({
-                    "会員": member_names[member_codes.index(member_code)],
+                    "メンバー": member_names[member_codes.index(member_code)],
                     "潜在因子": f"因子{factor_idx + 1}",
                     "重み": weight
                 })
@@ -196,12 +196,12 @@ if st.session_state.get("model_trained", False):
         df_member_factors = pd.DataFrame(member_factors_data)
 
         # ヒートマップ
-        pivot_table = df_member_factors.pivot(index="会員", columns="潜在因子", values="重み")
+        pivot_table = df_member_factors.pivot(index="メンバー", columns="潜在因子", values="重み")
 
         fig = px.imshow(
             pivot_table,
-            labels=dict(x="潜在因子", y="会員", color="重み"),
-            title="会員の潜在因子分布ヒートマップ",
+            labels=dict(x="潜在因子", y="メンバー", color="重み"),
+            title="メンバーの潜在因子分布ヒートマップ",
             color_continuous_scale="Blues"
         )
         fig.update_layout(height=500)
