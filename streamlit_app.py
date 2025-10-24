@@ -245,7 +245,7 @@ if st.session_state.data_loaded:
 
     # データプレビュー
     with st.expander("📋 データプレビュー"):
-        st.markdown("#### 会員マスタ")
+        st.markdown("#### メンバー")
         st.dataframe(td["members_clean"].head(10))
 
         st.markdown("#### 力量マスタ")
