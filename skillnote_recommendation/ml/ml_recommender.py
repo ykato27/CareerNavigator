@@ -14,11 +14,13 @@ from skillnote_recommendation.ml.diversity import DiversityReranker
 class MLRecommender:
     """機械学習ベース推薦エンジン"""
 
-    def __init__(self,
-                 mf_model: MatrixFactorizationModel,
-                 competence_master: pd.DataFrame,
-                 member_competence: pd.DataFrame,
-                 diversity_reranker: Optional[DiversityReranker] = None):
+    def __init__(
+        self,
+        mf_model: MatrixFactorizationModel,
+        competence_master: pd.DataFrame,
+        member_competence: pd.DataFrame,
+        diversity_reranker: Optional[DiversityReranker] = None
+    ):
         """
         初期化
 
@@ -36,13 +38,41 @@ class MLRecommender:
         # 会員ごとの習得力量をキャッシュ
         self._member_acquired_cache = {}
 
-    def recommend(self,
-                 member_code: str,
-                 top_n: int = 10,
-                 competence_type: Optional[str] = None,
-                 category_filter: Optional[str] = None,
-                 use_diversity: bool = True,
-                 diversity_strategy: str = 'hybrid') -> List[Recommendation]:
+    @classmethod
+    def build(
+        cls,
+        member_competence: pd.DataFrame,
+        competence_master: pd.DataFrame
+    ):
+        """
+        学習用ヘルパー
+        member_competence から行列分解モデルを学習し
+        学習済みモデルを使った MLRecommender を返す
+        """
+        # 行列分解モデルを生成
+        mf_model = MatrixFactorizationModel()
+
+        # 学習を実行
+        # fitは「メンバーコード」「力量コード」「正規化レベル」を使って学習することを想定（推測です）
+        mf_model.fit(member_competence)
+
+        # インスタンス化して返却
+        return cls(
+            mf_model=mf_model,
+            competence_master=competence_master,
+            member_competence=member_competence,
+            diversity_reranker=DiversityReranker()
+        )
+
+    def recommend(
+        self,
+        member_code: str,
+        top_n: int = 10,
+        competence_type: Optional[str] = None,
+        category_filter: Optional[str] = None,
+        use_diversity: bool = True,
+        diversity_strategy: str = 'hybrid'
+    ) -> List[Recommendation]:
         """
         力量を推薦
 
@@ -123,12 +153,16 @@ class MLRecommender:
                 self.competence_master['力量コード'] == comp_code
             ].iloc[0]
 
-            # MLスコアを0-10スケールに変換（優先度スコアとして）
-            # MLスコアは通常0-数値の範囲なので、正規化が必要
+            # MLスコアを0-10スケールに変換
             priority_score = self._normalize_score(ml_score, final_candidates)
 
             # 推薦理由を生成
-            reason = self._generate_reason(comp_info, ml_score, use_diversity, diversity_strategy)
+            reason = self._generate_reason(
+                comp_info,
+                ml_score,
+                use_diversity,
+                diversity_strategy
+            )
 
             recommendation = Recommendation(
                 competence_code=comp_code,
@@ -176,26 +210,18 @@ class MLRecommender:
         if max_score == min_score:
             return 5.0
 
-        # 0-10スケールに正規化
         normalized = ((score - min_score) / (max_score - min_score)) * 10.0
         return round(normalized, 2)
 
-    def _generate_reason(self,
-                        comp_info: pd.Series,
-                        ml_score: float,
-                        use_diversity: bool,
-                        diversity_strategy: str) -> str:
+    def _generate_reason(
+        self,
+        comp_info: pd.Series,
+        ml_score: float,
+        use_diversity: bool,
+        diversity_strategy: str
+    ) -> str:
         """
         推薦理由を生成
-
-        Args:
-            comp_info: 力量情報
-            ml_score: MLスコア
-            use_diversity: 多様性使用フラグ
-            diversity_strategy: 多様性戦略
-
-        Returns:
-            推薦理由の文字列
         """
         comp_name = comp_info['力量名']
         comp_type = comp_info['力量タイプ']
@@ -209,11 +235,11 @@ class MLRecommender:
         else:  # LICENSE
             reason = f"資格「{comp_name}」の取得が、あなたのスキルセットを強化します。"
 
-        # カテゴリ情報を追加
+        # カテゴリ情報
         if category:
             reason += f" （カテゴリ: {category}）"
 
-        # 多様性戦略の情報を追加
+        # 多様性戦略の説明
         if use_diversity:
             if diversity_strategy == 'hybrid':
                 reason += " バランスの取れたスキル習得を考慮して選定されました。"
@@ -226,19 +252,20 @@ class MLRecommender:
 
         return reason
 
-    def calculate_diversity_metrics(self, recommendations: List[Recommendation]) -> Dict[str, float]:
+    def calculate_diversity_metrics(
+        self,
+        recommendations: List[Recommendation]
+    ) -> Dict[str, float]:
         """
         推薦結果の多様性指標を計算
-
-        Args:
-            recommendations: 推薦結果リスト
-
-        Returns:
-            多様性指標の辞書
         """
-        # Recommendationオブジェクトを(力量コード, スコア)のタプルに変換
-        candidates = [(rec.competence_code, rec.priority_score) for rec in recommendations]
+        # Recommendationオブジェクトを (力量コード, スコア) のタプルに変換
+        candidates = [
+            (rec.competence_code, rec.priority_score)
+            for rec in recommendations
+        ]
 
         return self.diversity_reranker.calculate_diversity_metrics(
-            candidates, self.competence_master
+            candidates,
+            self.competence_master
         )
