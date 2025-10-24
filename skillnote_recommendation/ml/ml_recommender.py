@@ -397,20 +397,24 @@ class MLRecommender:
             self.member_competence["メンバーコード"] == member_code
         ]
 
-        # 力量カテゴリー名カラムが存在するか確認
-        if "力量カテゴリー名" not in self.competence_master.columns:
-            # カラムが存在しない場合は空の辞書を返す
+        # member_competence に既に「力量カテゴリー名」カラムが存在するか確認
+        if "力量カテゴリー名" in member_comps.columns:
+            # 既に存在する場合は、そのまま使用
+            category_counts = member_comps["力量カテゴリー名"].dropna().value_counts().to_dict()
+        elif "力量カテゴリー名" in self.competence_master.columns:
+            # member_competence にない場合は、competence_master からマージ
+            merged = member_comps.merge(
+                self.competence_master[["力量コード", "力量カテゴリー名"]],
+                on="力量コード",
+                how="left",
+                suffixes=("", "_master")
+            )
+            # マージ後のカラム名を確認（_y サフィックスがつく可能性）
+            cat_col = "力量カテゴリー名_master" if "力量カテゴリー名_master" in merged.columns else "力量カテゴリー名"
+            category_counts = merged[cat_col].dropna().value_counts().to_dict()
+        else:
+            # どちらにも存在しない場合は空の辞書
             return {}
-
-        # 力量コードからカテゴリ情報を取得
-        merged = member_comps.merge(
-            self.competence_master[["力量コード", "力量カテゴリー名"]],
-            on="力量コード",
-            how="left"
-        )
-
-        # NaN値を除外してカテゴリ別にカウント
-        category_counts = merged["力量カテゴリー名"].dropna().value_counts().to_dict()
 
         # 空文字列のキーを削除
         category_counts = {k: v for k, v in category_counts.items() if k and str(k).strip()}
