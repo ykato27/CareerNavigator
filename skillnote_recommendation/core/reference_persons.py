@@ -92,6 +92,9 @@ class ReferencePersonFinder:
         for member_code, similarity in similarities:
             if member_code == target_member_code:
                 continue
+            # 上位者（自分よりスキルレベルが高い人）のみを候補とする
+            if not self._is_higher_skilled(member_code, target_member_code):
+                continue
             # 類似度が高い人を優先
             if similarity > 0.3:  # 最低限の類似度
                 candidates.append((member_code, similarity))
@@ -142,6 +145,9 @@ class ReferencePersonFinder:
         candidates = []
         for holder in holders:
             if holder == target_member_code:
+                continue
+            # 上位者（自分よりスキルレベルが高い人）のみを候補とする
+            if not self._is_higher_skilled(holder, target_member_code):
                 continue
             if holder in similarity_dict:
                 candidates.append((holder, similarity_dict[holder]))
@@ -200,6 +206,9 @@ class ReferencePersonFinder:
         for holder in holders:
             if holder == target_member_code:
                 continue
+            # 上位者（自分よりスキルレベルが高い人）のみを候補とする
+            if not self._is_higher_skilled(holder, target_member_code):
+                continue
             if holder in similarity_dict:
                 sim = similarity_dict[holder]
                 # 類似度が低い人を優先（異なるキャリア）
@@ -211,6 +220,9 @@ class ReferencePersonFinder:
             candidates = []
             for holder in holders:
                 if holder == target_member_code:
+                    continue
+                # 上位者（自分よりスキルレベルが高い人）のみを候補とする
+                if not self._is_higher_skilled(holder, target_member_code):
                     continue
                 if holder in similarity_dict:
                     candidates.append((holder, similarity_dict[holder]))
@@ -310,6 +322,19 @@ class ReferencePersonFinder:
             self.member_competence["メンバーコード"] == member_code
         ]
         return dict(zip(df["力量コード"], df["正規化レベル"]))
+
+    def _get_total_skill_level(self, member_code: str) -> float:
+        """会員の総合スキルレベルを取得（正規化レベルの合計）"""
+        df = self.member_competence[
+            self.member_competence["メンバーコード"] == member_code
+        ]
+        return df["正規化レベル"].sum()
+
+    def _is_higher_skilled(self, reference_member_code: str, target_member_code: str) -> bool:
+        """参考人物が対象者より上位者（スキルレベルが高い）かどうかを判定"""
+        target_level = self._get_total_skill_level(target_member_code)
+        reference_level = self._get_total_skill_level(reference_member_code)
+        return reference_level > target_level
 
     def _get_member_name(self, member_code: str) -> str:
         """会員名を取得"""
