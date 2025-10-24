@@ -1,18 +1,22 @@
 """
 キャリア推薦システム Streamlitアプリ
-（メイン画面アップロード版・RecommendationSystem連携・ML学習修正版）
+- CSVアップロード（カテゴリ別・複数ファイル対応）
+- データ読み込みと変換
+- MLモデル学習（NMF）
+- 推薦実行
+- 推薦結果のダウンロード
 """
+
+import os
+import tempfile
+from io import StringIO
 
 import streamlit as st
 import pandas as pd
-import tempfile
-import os
 
 from skillnote_recommendation.core.data_loader import DataLoader
 from skillnote_recommendation.core.data_transformer import DataTransformer
-from skillnote_recommendation.core.recommendation_system import RecommendationSystem
-from skillnote_recommendation.core.role_model import RoleModelFinder
-from skillnote_recommendation.ml.ml_recommender import MLRecommender  # パスは実際の構成に合わせること
+from skillnote_recommendation.ml.ml_recommender import MLRecommender
 
 
 # =========================================================
@@ -25,51 +29,58 @@ st.set_page_config(
 )
 
 st.title("🎯 キャリア推薦システム")
-st.markdown("**ルールベース** と **機械学習（ML）** による力量推薦")
+st.markdown("ルールベースと機械学習による力量推薦のためのインターフェース")
 
 
 # =========================================================
 # セッション初期化
 # =========================================================
-for key in [
-    "data_loaded",
-    "recommendation_system",
-    "ml_recommender",
-    "role_model_finder",
-    "raw_data",
-    "transformed_data",
-    "temp_dir"
-]:
-    if key not in st.session_state:
-        if key == "data_loaded":
-            st.session_state[key] = False
-        else:
-            st.session_state[key] = None
+def _init_session_state():
+    defaults = {
+        "data_loaded": False,
+        "model_trained": False,
+        "raw_data": None,
+        "transformed_data": None,
+        "ml_recommender": None,
+        "temp_dir": None,
+        "last_recommendations_df": None,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+
+_init_session_state()
 
 
 # =========================================================
 # 補助関数
 # =========================================================
-def load_csv_to_memory(uploaded_file):
-    """アップロードされたCSVをDataFrameに読み込み"""
+def load_csv_to_memory(uploaded_file: "UploadedFile") -> pd.DataFrame:
+    """アップロードされた単一CSVファイルをDataFrameに読み込む"""
     return pd.read_csv(uploaded_file, encoding="utf-8-sig")
 
 
-def save_uploaded_files(temp_dir, subdir_name, uploaded_files):
-    """指定サブディレクトリに複数CSVを保存"""
-    os.makedirs(os.path.join(temp_dir, subdir_name), exist_ok=True)
+def save_uploaded_files(temp_dir: str, subdir_name: str, uploaded_files):
+    """
+    指定カテゴリ用のサブディレクトリを作成し
+    その中に複数のCSVをUTF-8で保存する
+    """
+    category_dir = os.path.join(temp_dir, subdir_name)
+    os.makedirs(category_dir, exist_ok=True)
+
     for i, file in enumerate(uploaded_files):
         df = load_csv_to_memory(file)
-        path = os.path.join(
-            temp_dir,
-            subdir_name,
-            f"{os.path.splitext(file.name)[0]}_{i+1}.csv"
-        )
-        df.to_csv(path, index=False, encoding="utf-8-sig")
+        filename_base = os.path.splitext(file.name)[0]
+        out_path = os.path.join(category_dir, f"{filename_base}_{i+1}.csv")
+        df.to_csv(out_path, index=False, encoding="utf-8-sig")
 
 
-def create_temp_dir_with_csv(uploaded_dict):
-    """全カテゴリのCSVを一時ディレクトリにまとめて保存"""
+def create_temp_dir_with_csv(uploaded_dict: dict) -> str:
+    """
+    カテゴリごとの複数CSVを一時ディレクトリ下に保存する
+    uploaded_dictのキーは 'members' 'skills' 'education' 'license' 'categories' 'acquired'
+    """
     temp_dir = tempfile.mkdtemp()
     for category, files in uploaded_dict.items():
         if files:
@@ -77,16 +88,72 @@ def create_temp_dir_with_csv(uploaded_dict):
     return temp_dir
 
 
+def build_transformed_data(raw_data: dict) -> dict:
+    """
+    DataTransformerを使い
+    推薦や学習に使う形式にまとめる
+    """
+    transformer = DataTransformer()
+
+    competence_master = transformer.create_competence_master(raw_data)
+    member_competence, valid_members = transformer.create_member_competence(
+        raw_data,
+        competence_master
+    )
+    skill_matrix = transformer.create_skill_matrix(member_competence)
+    members_clean = transformer.clean_members_data(raw_data)
+
+    transformed_data = {
+        "competence_master": competence_master,
+        "member_competence": member_competence,
+        "skill_matrix": skill_matrix,
+        "members_clean": members_clean,
+        "valid_members": valid_members,
+    }
+    return transformed_data
+
+
+def build_ml_recommender(transformed_data: dict) -> MLRecommender:
+    """
+    MLRecommenderを学習済みの状態で作成する
+    """
+    recommender = MLRecommender.build(
+        member_competence=transformed_data["member_competence"],
+        competence_master=transformed_data["competence_master"]
+    )
+    return recommender
+
+
+def convert_recommendations_to_dataframe(recommendations) -> pd.DataFrame:
+    """
+    Recommendationオブジェクトのリストを表示用/ダウンロード用のDataFrameに変換する
+    """
+    if not recommendations:
+        return pd.DataFrame()
+
+    # Recommendation.to_dict() がある前提
+    rows = []
+    for rank, rec in enumerate(recommendations, start=1):
+        rec_dict = rec.to_dict()
+        rec_dict["順位"] = rank
+        rows.append(rec_dict)
+
+    # 順位を先頭列にする
+    df = pd.DataFrame(rows)
+    cols = ["順位"] + [c for c in df.columns if c != "順位"]
+    df = df[cols]
+    return df
+
+
 # =========================================================
-# メイン画面：データアップロードUI
+# アップロードUI
 # =========================================================
 st.subheader("📁 データアップロード")
+st.markdown("カテゴリごとにCSVファイルをドラッグ＆ドロップしてください。複数ファイルに対応します。")
 
-st.markdown("各カテゴリごとにCSVファイルをアップロードしてください（複数可）")
+col_left, col_right = st.columns(2)
 
-col1, col2 = st.columns(2)
-
-with col1:
+with col_left:
     uploaded_members = st.file_uploader(
         "👥 メンバー",
         type=["csv"],
@@ -106,7 +173,7 @@ with col1:
         key="education"
     )
 
-with col2:
+with col_right:
     uploaded_license = st.file_uploader(
         "🎓 力量（資格）",
         type=["csv"],
@@ -128,17 +195,25 @@ with col2:
 
 st.markdown("---")
 
+
 # =========================================================
 # データ読み込み処理
 # =========================================================
-if st.button("📥 データ読み込み", type="primary"):
+st.subheader("📥 データ読み込み")
+
+if st.button("データ読み込みを実行", type="primary"):
+    # 全カテゴリが少なくとも1つアップロードされているか確認
     if all([
-        uploaded_members, uploaded_skills, uploaded_education,
-        uploaded_license, uploaded_categories, uploaded_acquired
+        uploaded_members,
+        uploaded_skills,
+        uploaded_education,
+        uploaded_license,
+        uploaded_categories,
+        uploaded_acquired
     ]):
-        with st.spinner("データを読み込み中..."):
+        with st.spinner("データを読み込み・変換中..."):
             try:
-                # 一時ディレクトリにファイル保存（DataLoader互換）
+                # 一時ディレクトリを作成しアップロード済みファイルを書き出す
                 temp_dir = create_temp_dir_with_csv({
                     "members": uploaded_members,
                     "skills": uploaded_skills,
@@ -148,98 +223,160 @@ if st.button("📥 データ読み込み", type="primary"):
                     "acquired": uploaded_acquired
                 })
 
-                # データ読み込み
+                # DataLoaderで生データを読み込む
                 loader = DataLoader(data_dir=temp_dir)
                 raw_data = loader.load_all_data()
 
-                # データ変換
-                transformer = DataTransformer()
+                # DataTransformerで変換済みデータを構築
+                transformed_data = build_transformed_data(raw_data)
 
-                competence_master = transformer.create_competence_master(raw_data)
-                member_competence, valid_members = transformer.create_member_competence(
-                    raw_data,
-                    competence_master
-                )
-                skill_matrix = transformer.create_skill_matrix(member_competence)
-                members_clean = transformer.clean_members_data(raw_data)
-
-                transformed_data = {
-                    "competence_master": competence_master,
-                    "member_competence": member_competence,
-                    "skill_matrix": skill_matrix,
-                    "members_clean": members_clean
-                }
-
-                # 推薦システム初期化
-                rec_system = RecommendationSystem(
-                    output_dir=temp_dir,
-                    df_members=members_clean,
-                    df_competence_master=competence_master,
-                    df_member_competence=member_competence,
-                    df_similarity=None
-                )
-
-                # ロールモデル検索
-                role_finder = RoleModelFinder(
-                    members=members_clean,
-                    member_competence=member_competence,
-                    competence_master=competence_master
-                )
-
-                # セッション保存
+                # セッションに保存
+                st.session_state.temp_dir = temp_dir
                 st.session_state.raw_data = raw_data
                 st.session_state.transformed_data = transformed_data
-                st.session_state.recommendation_system = rec_system
-                st.session_state.role_model_finder = role_finder
-                st.session_state.temp_dir = temp_dir
                 st.session_state.data_loaded = True
 
-                st.success("✅ データ読み込みと変換が完了しました。")
-                st.rerun()
+                st.success("✅ データが正常に読み込まれました。")
+                st.session_state.model_trained = False
+                st.session_state.ml_recommender = None
+                st.session_state.last_recommendations_df = None
 
             except Exception as e:
                 st.error(f"❌ エラーが発生しました: {e}")
     else:
-        st.warning("⚠️ 全てのカテゴリで少なくとも1つのCSVをアップロードしてください。")
+        st.warning("全てのカテゴリで少なくとも1つのCSVファイルをアップロードしてください。")
+
+
+# ここまででデータ未読込ならガイドを表示
+if not st.session_state.data_loaded:
+    st.markdown("### 必要なデータ")
+    st.markdown(
+        "1. メンバー\n"
+        "2. 力量（スキル）\n"
+        "3. 力量（教育）\n"
+        "4. 力量（資格）\n"
+        "5. 力量カテゴリー\n"
+        "6. 保有力量"
+    )
 
 
 # =========================================================
-# MLモデル学習処理
+# MLモデル学習
 # =========================================================
 if st.session_state.data_loaded:
-    st.markdown("### 🤖 MLモデル学習")
+    st.markdown("---")
+    st.subheader("🤖 MLモデル学習")
 
     if st.button("MLモデル学習を実行"):
         with st.spinner("MLモデルを学習中..."):
             try:
-                # DataFrameから学習済みのレコメンダを構築
-                ml_recommender = MLRecommender.build(
-                    member_competence=st.session_state.transformed_data["member_competence"],
-                    competence_master=st.session_state.transformed_data["competence_master"]
+                ml_recommender = build_ml_recommender(
+                    st.session_state.transformed_data
                 )
-
                 st.session_state.ml_recommender = ml_recommender
+                st.session_state.model_trained = True
                 st.success("✅ MLモデル学習が完了しました。")
             except Exception as e:
                 st.error(f"❌ エラーが発生しました: {e}")
 
 
 # =========================================================
-# 画面表示制御
+# 推薦処理と結果表示
 # =========================================================
-if not st.session_state.data_loaded:
-    st.markdown("### 📋 必要なファイル一覧")
-    st.markdown("""
-    1. 👥 メンバー（member_skillnote.csv など）
-    2. 🧠 力量（スキル）（skill_skillnote.csv など）
-    3. 📘 力量（教育）（education_skillnote.csv など）
-    4. 🎓 力量（資格）（license_skillnote.csv など）
-    5. 🗂 力量カテゴリー（competence_category_skillnote.csv など）
-    6. 📊 保有力量（acquiredCompetenceLevel.csv など）
-    """)
-else:
-    st.success("✅ データが正常に読み込まれました。")
-    st.markdown("次のステップとして推薦処理や分析機能を実行できます。")
+if st.session_state.data_loaded and st.session_state.model_trained and st.session_state.ml_recommender:
+    st.markdown("---")
+    st.subheader("🎯 推薦処理")
 
+    td = st.session_state.transformed_data
+    members_df = td["members_clean"]
+
+    # メンバー選択プルダウン
+    member_codes = members_df["メンバーコード"].tolist()
+    code_to_name = dict(
+        zip(members_df["メンバーコード"], members_df["メンバー名"])
+    )
+
+    selected_member_code = st.selectbox(
+        "推薦対象のメンバーを選択してください",
+        options=member_codes,
+        format_func=lambda code: f"{code} : {code_to_name.get(code, '')}"
+    )
+
+    # 推薦件数
+    top_n = st.slider(
+        "推薦件数",
+        min_value=5,
+        max_value=30,
+        value=10,
+        step=5
+    )
+
+    # 力量タイプフィルタ
+    competence_type_ui = st.selectbox(
+        "力量タイプフィルタ",
+        options=["全て", "SKILL", "EDUCATION", "LICENSE"],
+        index=0
+    )
+    competence_type = None if competence_type_ui == "全て" else competence_type_ui
+
+    # 多様性戦略
+    diversity_strategy = st.selectbox(
+        "多様性戦略",
+        options=["hybrid", "mmr", "category", "type"],
+        index=0
+    )
+
+    # 推薦実行ボタン
+    if st.button("推薦を実行"):
+        with st.spinner("推薦を生成中..."):
+            try:
+                recommender = st.session_state.ml_recommender
+
+                recs = recommender.recommend(
+                    member_code=selected_member_code,
+                    top_n=top_n,
+                    competence_type=competence_type,
+                    category_filter=None,
+                    use_diversity=True,
+                    diversity_strategy=diversity_strategy
+                )
+
+                if not recs:
+                    st.warning("推薦できる力量がありません。")
+                    st.session_state.last_recommendations_df = None
+                else:
+                    df_result = convert_recommendations_to_dataframe(recs)
+                    st.session_state.last_recommendations_df = df_result
+
+                    st.success(f"{len(df_result)}件の推薦が生成されました。")
+                    st.dataframe(df_result, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"❌ 推薦処理中にエラーが発生しました: {e}")
+
+
+# =========================================================
+# 推薦結果ダウンロード
+# =========================================================
+if st.session_state.last_recommendations_df is not None:
+    st.markdown("---")
+    st.subheader("💾 推薦結果のダウンロード")
+
+    csv_buffer = StringIO()
+    st.session_state.last_recommendations_df.to_csv(
+        csv_buffer,
+        index=False,
+        encoding="utf-8-sig"
+    )
+
+    st.download_button(
+        label="推薦結果をCSVでダウンロード",
+        data=csv_buffer.getvalue(),
+        file_name="recommendations.csv",
+        mime="text/csv"
+    )
+
+
+# フッタ
 st.markdown("---")
-st.caption("🤖 Generated with ChatGPT（MLRecommender.build対応版）")
+st.caption("Generated by CareerNavigator UI")
