@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
+from collections import defaultdict
 from skillnote_recommendation.core.recommendation_engine import RecommendationEngine
 
 
@@ -334,3 +335,157 @@ class RecommendationEvaluator:
         df = pd.DataFrame([metrics])
         df.to_csv(output_path, index=False, encoding='utf-8-sig')
         print(f"\n評価結果を出力: {output_path}")
+
+    def calculate_diversity_metrics(
+        self,
+        recommendations_list: List[List],
+        competence_master: pd.DataFrame
+    ) -> Dict[str, float]:
+        """
+        推薦結果の多様性指標を計算
+
+        Args:
+            recommendations_list: 会員ごとの推薦結果リスト（各要素は推薦オブジェクトのリスト）
+            competence_master: 力量マスタ
+
+        Returns:
+            多様性指標の辞書
+        """
+        if not recommendations_list or len(recommendations_list) == 0:
+            return {
+                'avg_category_diversity': 0.0,
+                'avg_type_diversity': 0.0,
+                'avg_unique_categories': 0.0,
+                'avg_unique_types': 0.0,
+                'coverage': 0.0
+            }
+
+        category_diversities = []
+        type_diversities = []
+        unique_categories_list = []
+        unique_types_list = []
+        all_recommended_competences = set()
+
+        for recommendations in recommendations_list:
+            if len(recommendations) == 0:
+                continue
+
+            # 推薦された力量のカテゴリとタイプを集計
+            categories = set()
+            types = set()
+
+            for rec in recommendations:
+                all_recommended_competences.add(rec.competence_code)
+
+                # カテゴリとタイプを取得
+                categories.add(rec.category if rec.category else 'Unknown')
+                types.add(rec.competence_type)
+
+            # カテゴリ多様性：ユニークなカテゴリ数 / 推薦数
+            category_diversity = len(categories) / len(recommendations)
+            category_diversities.append(category_diversity)
+            unique_categories_list.append(len(categories))
+
+            # タイプ多様性：ユニークなタイプ数 / 推薦数
+            type_diversity = len(types) / len(recommendations)
+            type_diversities.append(type_diversity)
+            unique_types_list.append(len(types))
+
+        # カバレッジ：推薦に含まれた力量の割合
+        total_competences = len(competence_master)
+        coverage = len(all_recommended_competences) / total_competences if total_competences > 0 else 0.0
+
+        return {
+            'avg_category_diversity': np.mean(category_diversities) if category_diversities else 0.0,
+            'avg_type_diversity': np.mean(type_diversities) if type_diversities else 0.0,
+            'avg_unique_categories': np.mean(unique_categories_list) if unique_categories_list else 0.0,
+            'avg_unique_types': np.mean(unique_types_list) if unique_types_list else 0.0,
+            'coverage': coverage,
+            'total_unique_recommended': len(all_recommended_competences)
+        }
+
+    def evaluate_with_diversity(
+        self,
+        train_data: pd.DataFrame,
+        test_data: pd.DataFrame,
+        competence_master: pd.DataFrame,
+        top_k: int = 10,
+        member_sample: Optional[List[str]] = None,
+        similarity_data: pd.DataFrame = None
+    ) -> Dict[str, float]:
+        """
+        推薦結果を評価（多様性指標込み）
+
+        Args:
+            train_data: 学習データ（過去の習得力量）
+            test_data: 評価データ（将来の習得力量）
+            competence_master: 力量マスタ
+            top_k: 推薦する上位K件
+            member_sample: 評価対象会員リスト（Noneの場合は全会員）
+            similarity_data: 類似度データ（Noneの場合は空のDataFrame）
+
+        Returns:
+            評価メトリクス + 多様性指標の辞書
+        """
+        # 基本的な評価メトリクスを計算
+        base_metrics = self.evaluate_recommendations(
+            train_data=train_data,
+            test_data=test_data,
+            competence_master=competence_master,
+            top_k=top_k,
+            member_sample=member_sample,
+            similarity_data=similarity_data
+        )
+
+        # 多様性計算のために推薦結果を再生成
+        if member_sample is None:
+            member_sample = test_data['メンバーコード'].unique().tolist()
+
+        # エンジンの準備
+        if self.engine is None:
+            from skillnote_recommendation.core.recommendation_engine import RecommendationEngine
+
+            if similarity_data is None:
+                similarity_data = pd.DataFrame(columns=['力量1', '力量2', '類似度'])
+
+            members_data = pd.DataFrame({
+                'メンバーコード': train_data['メンバーコード'].unique()
+            })
+
+            engine = RecommendationEngine(
+                df_members=members_data,
+                df_competence_master=competence_master,
+                df_member_competence=train_data,
+                df_similarity=similarity_data
+            )
+        else:
+            engine = self.engine
+
+        # 各会員の推薦結果を収集
+        recommendations_list = []
+        for member_code in member_sample:
+            actual_acquired = test_data[
+                test_data['メンバーコード'] == member_code
+            ]['力量コード'].unique().tolist()
+
+            if len(actual_acquired) == 0:
+                continue
+
+            recommendations = engine.recommend(
+                member_code=member_code,
+                top_n=top_k
+            )
+
+            if len(recommendations) > 0:
+                recommendations_list.append(recommendations)
+
+        # 多様性指標を計算
+        diversity_metrics = self.calculate_diversity_metrics(
+            recommendations_list,
+            competence_master
+        )
+
+        # 統合
+        combined_metrics = {**base_metrics, **diversity_metrics}
+
+        return combined_metrics
