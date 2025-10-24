@@ -40,9 +40,15 @@ env/
 .DS_Store
 Thumbs.db
 
-# Data files (入力データは除外しない)
-# output/ ディレクトリは出力データなのでgitignoreに含める
+# Data files
+# data/ ディレクトリ以下のCSVファイルは除外（機密情報保護）
+data/**/*.csv
+data/**/*.xlsx
+data/**/*.xls
+
+# output/ ディレクトリは出力データなので除外
 output/*.csv
+output/*.xlsx
 
 # Test
 .pytest_cache/
