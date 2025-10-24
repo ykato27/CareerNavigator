@@ -147,7 +147,8 @@ class ReferencePersonFinder:
             if holder == target_member_code:
                 continue
             # 上位者（自分よりスキルレベルが高い人）のみを候補とする
-            if not self._is_higher_skilled(holder, target_member_code):
+            # ロールモデルなので、推薦力量のレベルもチェック
+            if not self._is_higher_skilled(holder, target_member_code, recommended_competence_code):
                 continue
             if holder in similarity_dict:
                 candidates.append((holder, similarity_dict[holder]))
@@ -207,7 +208,8 @@ class ReferencePersonFinder:
             if holder == target_member_code:
                 continue
             # 上位者（自分よりスキルレベルが高い人）のみを候補とする
-            if not self._is_higher_skilled(holder, target_member_code):
+            # 異なるキャリアパスでも、推薦力量のレベルはチェック
+            if not self._is_higher_skilled(holder, target_member_code, recommended_competence_code):
                 continue
             if holder in similarity_dict:
                 sim = similarity_dict[holder]
@@ -222,7 +224,8 @@ class ReferencePersonFinder:
                 if holder == target_member_code:
                     continue
                 # 上位者（自分よりスキルレベルが高い人）のみを候補とする
-                if not self._is_higher_skilled(holder, target_member_code):
+                # 異なるキャリアパスでも、推薦力量のレベルはチェック
+                if not self._is_higher_skilled(holder, target_member_code, recommended_competence_code):
                     continue
                 if holder in similarity_dict:
                     candidates.append((holder, similarity_dict[holder]))
@@ -330,11 +333,88 @@ class ReferencePersonFinder:
         ]
         return df["正規化レベル"].sum()
 
-    def _is_higher_skilled(self, reference_member_code: str, target_member_code: str) -> bool:
-        """参考人物が対象者より上位者（スキルレベルが高い）かどうかを判定"""
-        target_level = self._get_total_skill_level(target_member_code)
-        reference_level = self._get_total_skill_level(reference_member_code)
-        return reference_level > target_level
+    def _get_average_skill_level(self, member_code: str) -> float:
+        """会員の平均スキルレベルを取得"""
+        df = self.member_competence[
+            self.member_competence["メンバーコード"] == member_code
+        ]
+        if len(df) == 0:
+            return 0.0
+        return df["正規化レベル"].mean()
+
+    def _get_competence_count(self, member_code: str) -> int:
+        """会員の保有力量数を取得"""
+        df = self.member_competence[
+            self.member_competence["メンバーコード"] == member_code
+        ]
+        return len(df)
+
+    def _get_competence_level(self, member_code: str, competence_code: str) -> Optional[float]:
+        """特定の力量のレベルを取得"""
+        df = self.member_competence[
+            (self.member_competence["メンバーコード"] == member_code) &
+            (self.member_competence["力量コード"] == competence_code)
+        ]
+        if len(df) == 0:
+            return None
+        return df["正規化レベル"].values[0]
+
+    def _is_higher_skilled(
+        self,
+        reference_member_code: str,
+        target_member_code: str,
+        recommended_competence_code: Optional[str] = None
+    ) -> bool:
+        """
+        参考人物が対象者より上位者かどうかを複数の基準で判定
+
+        判定基準:
+        1. 総合スキルレベル（合計値）が高い
+        2. 平均スキルレベル（質）が高い、または保有力量数が多い
+        3. 推薦力量を保有している場合、一定レベル以上で保有している
+
+        Args:
+            reference_member_code: 参考人物のコード
+            target_member_code: 対象者のコード
+            recommended_competence_code: 推薦力量コード（ある場合）
+
+        Returns:
+            参考人物が上位者の場合True
+        """
+        # 1. 総合スキルレベルの比較（必須条件）
+        target_total = self._get_total_skill_level(target_member_code)
+        reference_total = self._get_total_skill_level(reference_member_code)
+
+        if reference_total <= target_total:
+            return False
+
+        # 2. 平均レベルまたは保有力量数の比較
+        target_avg = self._get_average_skill_level(target_member_code)
+        reference_avg = self._get_average_skill_level(reference_member_code)
+        target_count = self._get_competence_count(target_member_code)
+        reference_count = self._get_competence_count(reference_member_code)
+
+        # 平均レベルが高い、または保有力量数が多い
+        has_quality_or_breadth = (
+            reference_avg >= target_avg * 0.9  # 平均レベルがほぼ同等以上
+            or reference_count > target_count  # または保有力量数が多い
+        )
+
+        if not has_quality_or_breadth:
+            return False
+
+        # 3. 推薦力量のレベルチェック（該当する場合）
+        if recommended_competence_code:
+            ref_comp_level = self._get_competence_level(
+                reference_member_code, recommended_competence_code
+            )
+            if ref_comp_level is not None:
+                # 推薦力量を保有している場合、一定レベル以上であることを確認
+                # 正規化レベルが3以上（5段階評価で中級以上）を要求
+                if ref_comp_level < 3.0:
+                    return False
+
+        return True
 
     def _get_member_name(self, member_code: str) -> str:
         """会員名を取得"""
