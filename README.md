@@ -26,22 +26,43 @@ CareerNavigator/
 │
 ├── skillnote_recommendation/      # パッケージ
 │   ├── __init__.py
-│   ├── core/                      # コアモジュール
+│   ├── core/                      # コアモジュール（ルールベース推薦）
 │   │   ├── config.py              # 設定管理
 │   │   ├── models.py              # データモデル
 │   │   ├── data_loader.py         # データ読み込み
 │   │   ├── data_transformer.py    # データ変換
 │   │   ├── similarity_calculator.py  # 類似度計算
-│   │   ├── recommendation_engine.py  # 推薦エンジン
+│   │   ├── recommendation_engine.py  # ルールベース推薦エンジン
 │   │   ├── recommendation_system.py  # 推薦システム
-│   │   └── evaluator.py           # 評価器（時系列分割・メトリクス）
+│   │   └── evaluator.py           # 評価器（時系列分割・メトリクス・多様性評価）
+│   ├── ml/                        # 機械学習モジュール
+│   │   ├── __init__.py
+│   │   ├── matrix_factorization.py  # Matrix Factorizationモデル
+│   │   ├── diversity.py           # 多様性再ランキング
+│   │   └── ml_recommender.py      # ML推薦システム
 │   └── scripts/                   # 実行スクリプト
 │       ├── convert_data.py        # データ変換
 │       └── run_recommendation.py  # 推薦実行
 │
-├── tests/                         # テストコード（194テスト）
+├── tests/                         # テストコード（253テスト）
+│   ├── test_basic.py
+│   ├── test_data_loader.py
+│   ├── test_directory_scan.py
+│   ├── test_data_transformer.py
+│   ├── test_similarity_calculator.py
+│   ├── test_recommendation_engine.py
+│   ├── test_recommendation_system.py
+│   ├── test_evaluator.py
+│   ├── test_matrix_factorization.py
+│   ├── test_diversity.py
+│   └── test_ml_recommender.py
+│
 ├── docs/                          # ドキュメント
-│   └── EVALUATION.md              # 評価ガイド
+│   ├── EVALUATION.md              # 評価ガイド
+│   ├── QUICKSTART.md              # クイックスタート
+│   ├── TESTING_QUICKSTART.md      # テスト実装ガイド
+│   └── TEST_DESIGN.md             # テスト設計書
+│
 ├── pyproject.toml                 # プロジェクト設定
 ├── .gitignore
 └── README.md
@@ -140,6 +161,8 @@ uv run python -m skillnote_recommendation.scripts.run_recommendation
 
 ### Pythonコードから利用
 
+#### ルールベース推薦システム
+
 ```python
 from skillnote_recommendation import RecommendationSystem
 
@@ -161,6 +184,48 @@ for rec in recommendations:
 
 # CSV出力
 system.export_recommendations('m48', 'recommendations_m48.csv', top_n=20)
+```
+
+#### 機械学習ベース推薦システム
+
+```python
+from skillnote_recommendation.ml import MLRecommender
+from skillnote_recommendation.core.data_loader import DataLoader
+
+# データ読み込み
+loader = DataLoader()
+data = loader.load_all_data()
+
+# ML推薦システム初期化
+ml_recommender = MLRecommender(data)
+
+# 会員m48への推薦
+recommendations = ml_recommender.recommend(
+    member_code='m48',
+    top_n=10,
+    use_diversity=True,           # 多様性再ランキング有効化
+    diversity_strategy='hybrid'   # hybrid/mmr/category/type
+)
+
+# 結果表示
+for rec in recommendations:
+    print(f"{rec['力量名']}: スコア {rec['MLスコア']:.3f} - {rec['推薦理由']}")
+
+# SKILLタイプのみ + 多様性重視
+skill_recommendations = ml_recommender.recommend(
+    member_code='m48',
+    top_n=10,
+    competence_type='SKILL',
+    diversity_strategy='mmr'
+)
+
+# 多様性メトリクス計算
+diversity_metrics = ml_recommender.calculate_diversity_metrics(
+    recommendations,
+    ml_recommender.competence_master
+)
+print(f"カテゴリ多様性: {diversity_metrics['category_diversity']:.3f}")
+print(f"タイプ多様性: {diversity_metrics['type_diversity']:.3f}")
 ```
 
 ### インタラクティブシェルで実行
@@ -245,15 +310,48 @@ deactivate
 
 ## 推薦アルゴリズム
 
+本システムは**ルールベース**と**機械学習ベース**の2つの推薦手法を提供します。
+
+### ルールベース推薦
+
 ```
 優先度スコア = (カテゴリ重要度 × 0.4) + (習得容易性 × 0.3) + (人気度 × 0.3)
 ```
 
-### 評価要素
+#### 評価要素
 
 1. **カテゴリ重要度**: カテゴリ内での習得者数に基づく重要度
 2. **習得容易性**: 類似力量を保有している場合の習得しやすさ
 3. **人気度**: 全体での習得率
+
+### 機械学習ベース推薦
+
+#### Matrix Factorization (協調フィルタリング)
+
+- **手法**: NMF (Non-negative Matrix Factorization)
+- **入力**: 会員×力量マトリクス（習得=1, 未習得=0）
+- **出力**: 未習得力量に対する予測スコア
+- **潜在因子数**: 20次元（デフォルト）
+- **特徴**: 会員の習得パターンから類似会員の習得傾向を学習
+
+#### 多様性再ランキング
+
+ML予測スコアに基づく推薦結果を多様性の観点から再ランキング：
+
+1. **MMR (Maximal Marginal Relevance)**
+   - 関連度と多様性のバランスを取る
+   - λパラメータで調整可能（デフォルト=0.7）
+
+2. **カテゴリ多様性**
+   - 異なるカテゴリから推薦
+   - カテゴリごとの上限設定可能
+
+3. **タイプ多様性**
+   - SKILL/EDUCATION/LICENSE をバランス良く推薦
+   - タイプ比率の指定可能
+
+4. **ハイブリッド戦略**
+   - 上記3手法を組み合わせた総合的な多様性確保
 
 ## カスタマイズ
 
@@ -396,17 +494,38 @@ uv pip install -e .
 
 ## ドキュメント
 
-- [評価ガイド (EVALUATION.md)](docs/EVALUATION.md) - 推薦システムの評価方法
+- [評価ガイド (docs/EVALUATION.md)](docs/EVALUATION.md) - 推薦システムの評価方法
   - 時系列分割による評価
   - 評価メトリクス (Precision@K, Recall@K, NDCG@K, Hit Rate)
+  - 多様性評価メトリクス
   - クロスバリデーション
   - ベストプラクティス
 
-- [テスト設計 (TEST_DESIGN.md)](TEST_DESIGN.md) - テストコードの設計書
+- [クイックスタート (docs/QUICKSTART.md)](docs/QUICKSTART.md) - 使い方ガイド
 
-- [クイックスタート (TESTING_QUICKSTART.md)](TESTING_QUICKSTART.md) - テスト実装ガイド
+- [テスト設計 (docs/TEST_DESIGN.md)](docs/TEST_DESIGN.md) - テストコードの設計書（100+テストケース）
+
+- [テスト実装ガイド (docs/TESTING_QUICKSTART.md)](docs/TESTING_QUICKSTART.md) - テスト実装手順
 
 ## バージョン履歴
+
+- v1.2.0 (2025-10-24)
+  - **機械学習ベース推薦システム追加** (skillnote_recommendation/ml/)
+    - Matrix Factorization (NMF) による協調フィルタリング
+    - 多様性再ランキング (MMR, Category, Type, Hybrid)
+    - MLRecommender: ML推薦システムの統合インターフェース
+  - **多様性評価メトリクス追加**
+    - カテゴリ多様性、タイプ多様性、カバレッジ、リスト内多様性
+    - evaluate_with_diversity() による統合評価
+  - **データ入力方式の一本化**
+    - ディレクトリ構造のみをサポート（単一ファイル対応を削除）
+    - data/members/, data/acquired/ など各ディレクトリに複数CSVを配置
+  - **テストスイート拡充** (253テスト)
+    - ML関連テスト追加 (matrix_factorization, diversity, ml_recommender)
+    - ディレクトリスキャン機能の包括的テスト
+  - **ドキュメント整理**
+    - docs/ディレクトリに全ドキュメントを集約
+    - README更新（ML使用例、多様性戦略の説明）
 
 - v1.1.0 (2025-10-23)
   - 推薦システム評価機能追加

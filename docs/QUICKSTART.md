@@ -25,17 +25,28 @@ uv sync
 ### ステップ3: データを配置
 
 ```bash
-# CSVファイルをdataディレクトリにコピー
-cp /path/to/csvfiles/*.csv data/
+# ディレクトリ構造を作成
+mkdir -p data/members data/acquired data/skills data/education data/license data/categories
+
+# CSVファイルを各ディレクトリにコピー
+cp /path/to/member*.csv data/members/
+cp /path/to/acquired*.csv data/acquired/
+cp /path/to/skill*.csv data/skills/
+cp /path/to/education*.csv data/education/
+cp /path/to/license*.csv data/license/
+cp /path/to/category*.csv data/categories/
 ```
 
-必要なファイル:
-- member_skillnote.csv
-- acquiredCompetenceLevel.csv
-- skill_skillnote.csv
-- education_skillnote.csv
-- license_skillnote.csv
-- competence_category_skillnote.csv
+データ構造（各ディレクトリに複数CSVファイルを配置可能）:
+```
+data/
+├── members/          # 会員データ（複数ファイル可）
+├── acquired/         # 習得力量データ（複数ファイル可）
+├── skills/           # スキル力量データ
+├── education/        # 教育力量データ
+├── license/          # 資格力量データ
+└── categories/       # カテゴリデータ
+```
 
 ### ステップ4: 実行
 
@@ -77,7 +88,7 @@ uv run black skillnote_recommendation/
 
 ## Pythonコードで使う
 
-### 基本的な使い方
+### ルールベース推薦（基本）
 
 ```python
 from skillnote_recommendation import RecommendationSystem
@@ -89,7 +100,7 @@ system = RecommendationSystem()
 system.print_recommendations('m48', top_n=10)
 ```
 
-### 詳細な使い方
+### ルールベース推薦（詳細）
 
 ```python
 from skillnote_recommendation import RecommendationSystem
@@ -124,6 +135,51 @@ system.export_recommendations(
     'recommendations_m48.csv',
     top_n=20
 )
+```
+
+### 機械学習ベース推薦
+
+```python
+from skillnote_recommendation.ml import MLRecommender
+from skillnote_recommendation.core.data_loader import DataLoader
+
+# データ読み込み
+loader = DataLoader()
+data = loader.load_all_data()
+
+# ML推薦システム初期化
+ml_recommender = MLRecommender(data)
+
+# 基本的な推薦
+recommendations = ml_recommender.recommend(
+    member_code='m48',
+    top_n=10
+)
+
+# 推薦結果表示
+for rec in recommendations:
+    print(f"{rec['力量名']}: {rec['MLスコア']:.3f}")
+    print(f"  理由: {rec['推薦理由']}")
+```
+
+### 多様性を重視した推薦
+
+```python
+# MMR戦略で多様性重視
+recommendations = ml_recommender.recommend(
+    member_code='m48',
+    top_n=10,
+    use_diversity=True,
+    diversity_strategy='mmr'  # mmr/category/type/hybrid
+)
+
+# 多様性メトリクス確認
+diversity = ml_recommender.calculate_diversity_metrics(
+    recommendations,
+    ml_recommender.competence_master
+)
+print(f"カテゴリ多様性: {diversity['category_diversity']:.3f}")
+print(f"タイプ多様性: {diversity['type_diversity']:.3f}")
 ```
 
 ## トラブルシューティング
@@ -161,6 +217,8 @@ ls -la output/
 
 ## 次のステップ
 
-- [詳細ドキュメント](README.md) - すべての機能と使い方
-- [開発ガイド](README.md#開発環境のセットアップ) - 開発環境の構築とテスト方法
-- [カスタマイズ](README.md#カスタマイズ) - パラメータ調整と拡張方法
+- [README](../README.md) - すべての機能と使い方
+- [評価ガイド](EVALUATION.md) - 推薦システムの評価方法（時系列分割、多様性メトリクス）
+- [テスト設計](TEST_DESIGN.md) - テストコードの設計書（100+テストケース）
+- [開発ガイド](../README.md#開発環境のセットアップ) - 開発環境の構築とテスト方法
+- [カスタマイズ](../README.md#カスタマイズ) - パラメータ調整と拡張方法
