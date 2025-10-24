@@ -278,7 +278,11 @@ if st.session_state.data_loaded:
                 st.session_state.model_trained = True
                 st.success("✅ MLモデル学習が完了しました。")
             except Exception as e:
+                import traceback
                 st.error(f"❌ エラーが発生しました: {e}")
+                st.code(traceback.format_exc())
+                st.info("デバッグ情報:")
+                st.write("transformed_data keys:", list(st.session_state.transformed_data.keys()))
 
 
 # =========================================================
