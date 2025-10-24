@@ -1,5 +1,5 @@
 """
-スキルノート推薦システム Streamlitアプリ
+キャリア推薦システム Streamlitアプリ
 
 ルールベースとML両方の推薦機能を提供するWebアプリケーション
 """
@@ -21,14 +21,14 @@ from skillnote_recommendation.ml import MLRecommender
 
 # ページ設定
 st.set_page_config(
-    page_title="スキルノート推薦システム",
+    page_title="キャリア推薦システム",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # タイトル
-st.title("🎯 スキルノート推薦システム")
+st.title("🎯 キャリア推薦システム")
 st.markdown("**ルールベース** と **機械学習（ML）** による力量推薦")
 
 # セッション状態の初期化
@@ -82,39 +82,39 @@ st.sidebar.header("📁 データアップロード")
 st.sidebar.markdown("### 必須データ（全6種類）")
 
 uploaded_members = st.sidebar.file_uploader(
-    "会員データ (members.csv)",
+    "メンバー (member_skillnote.csv)",
     type=['csv'],
     key='members'
 )
 
-uploaded_acquired = st.sidebar.file_uploader(
-    "習得力量データ (acquired.csv)",
-    type=['csv'],
-    key='acquired'
-)
-
 uploaded_skills = st.sidebar.file_uploader(
-    "スキル力量マスター (skills.csv)",
+    "力量（スキル） (skill_skillnote.csv)",
     type=['csv'],
     key='skills'
 )
 
 uploaded_education = st.sidebar.file_uploader(
-    "教育力量マスター (education.csv)",
+    "力量（教育） (education_skillnote.csv)",
     type=['csv'],
     key='education'
 )
 
 uploaded_license = st.sidebar.file_uploader(
-    "資格力量マスター (license.csv)",
+    "力量（資格） (license_skillnote.csv)",
     type=['csv'],
     key='license'
 )
 
 uploaded_categories = st.sidebar.file_uploader(
-    "カテゴリマスター (categories.csv)",
+    "力量カテゴリー (competence_category_skillnote.csv)",
     type=['csv'],
     key='categories'
+)
+
+uploaded_acquired = st.sidebar.file_uploader(
+    "保有力量 (acquiredCompetenceLevel.csv)",
+    type=['csv'],
+    key='acquired'
 )
 
 # データ読み込みボタン
@@ -190,12 +190,12 @@ if not st.session_state.data_loaded:
 
     st.markdown("### 📋 必要なファイル")
     st.markdown("""
-    1. **会員データ** (members.csv) - 会員マスター
-    2. **習得力量データ** (acquired.csv) - 会員の習得力量
-    3. **スキル力量マスター** (skills.csv) - SKILLタイプの力量
-    4. **教育力量マスター** (education.csv) - EDUCATIONタイプの力量
-    5. **資格力量マスター** (license.csv) - LICENSEタイプの力量
-    6. **カテゴリマスター** (categories.csv) - 力量カテゴリ
+    1. **メンバー** (member_skillnote.csv) - メンバー
+    2. **力量（スキル）** (skill_skillnote.csv) - 保有（スキル）
+    3. **力量（教育）** (education_skillnote.csv) - 保有（教育）
+    4. **力量（資格）** (license_skillnote.csv) - 保有（資格）
+    5. **力量カテゴリー** (competence_category_skillnote.csv) - 力量カテゴリー
+    6. **保有力量** (acquiredCompetenceLevel.csv) - 保有力量
     """)
 
     st.markdown("### 🆕 新規ユーザーの推薦")
@@ -759,3 +759,4 @@ else:
 
 st.markdown("---")
 st.markdown("🤖 Generated with [Claude Code](https://claude.com/claude-code)")
+
