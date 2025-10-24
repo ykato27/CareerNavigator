@@ -1,6 +1,6 @@
 """
 キャリア推薦システム Streamlitアプリ
-（メイン画面アップロード版・カテゴリ別・複数CSV対応）
+（メイン画面アップロード版・DataTransformer修正版）
 """
 
 import streamlit as st
@@ -31,7 +31,7 @@ st.markdown("**ルールベース** と **機械学習（ML）** による力量
 # =========================================================
 # セッション初期化
 # =========================================================
-for key in ["data_loaded", "recommendation_system", "ml_recommender", "role_model_finder", "raw_data"]:
+for key in ["data_loaded", "recommendation_system", "ml_recommender", "role_model_finder", "raw_data", "transformed_data"]:
     if key not in st.session_state:
         st.session_state[key] = None if key != "data_loaded" else False
 
@@ -63,7 +63,7 @@ def create_temp_dir_with_csv(uploaded_dict):
 
 
 # =========================================================
-# メイン画面：データアップロード
+# メイン画面：データアップロードUI
 # =========================================================
 st.subheader("📁 データアップロード")
 
@@ -84,7 +84,7 @@ with col2:
 st.markdown("---")
 
 # =========================================================
-# データ読み込み
+# データ読み込み処理
 # =========================================================
 if st.button("📥 データ読み込み", type="primary"):
     if all([
@@ -93,6 +93,7 @@ if st.button("📥 データ読み込み", type="primary"):
     ]):
         with st.spinner("データを読み込み中..."):
             try:
+                # 一時ディレクトリにファイル保存
                 temp_dir = create_temp_dir_with_csv({
                     "members": uploaded_members,
                     "skills": uploaded_skills,
@@ -102,21 +103,34 @@ if st.button("📥 データ読み込み", type="primary"):
                     "acquired": uploaded_acquired
                 })
 
-                # データ読み込み・変換
+                # --- データ読み込み ---
                 loader = DataLoader(data_dir=temp_dir)
                 raw_data = loader.load_all_data()
-                transformer = DataTransformer(raw_data)
-                transformed_data = transformer.transform_all()
 
-                # 推薦システム・ロールモデル初期化
+                # --- データ変換 ---
+                transformer = DataTransformer()
+
+                competence_master = transformer.create_competence_master(raw_data)
+                member_competence, valid_members = transformer.create_member_competence(raw_data, competence_master)
+                skill_matrix = transformer.create_skill_matrix(member_competence)
+                members_clean = transformer.clean_members_data(raw_data)
+
+                transformed_data = {
+                    "competence_master": competence_master,
+                    "member_competence": member_competence,
+                    "skill_matrix": skill_matrix,
+                    "members_clean": members_clean
+                }
+
+                # --- 推薦システム初期化 ---
                 rec_system = RecommendationSystem(output_dir=temp_dir)
                 role_finder = RoleModelFinder(
-                    members=transformed_data["members_clean"],
-                    member_competence=transformed_data["member_competence"],
-                    competence_master=transformed_data["competence_master"]
+                    members=members_clean,
+                    member_competence=member_competence,
+                    competence_master=competence_master
                 )
 
-                # セッション保存
+                # --- セッション保存 ---
                 st.session_state.raw_data = raw_data
                 st.session_state.transformed_data = transformed_data
                 st.session_state.recommendation_system = rec_system
@@ -124,7 +138,7 @@ if st.button("📥 データ読み込み", type="primary"):
                 st.session_state.temp_dir = temp_dir
                 st.session_state.data_loaded = True
 
-                st.success("✅ データ読み込みが完了しました。")
+                st.success("✅ データ読み込みと変換が完了しました。")
                 st.rerun()
 
             except Exception as e:
@@ -134,13 +148,12 @@ if st.button("📥 データ読み込み", type="primary"):
 
 
 # =========================================================
-# データ読み込み後の画面
+# MLモデル学習処理
 # =========================================================
 if st.session_state.data_loaded:
-    st.markdown("### ✅ データ確認")
-    st.info("データ読み込みが完了しました。続いて推薦・学習処理を実行できます。")
+    st.markdown("### 🤖 MLモデル学習")
 
-    if st.button("🤖 MLモデル学習"):
+    if st.button("MLモデル学習を実行"):
         with st.spinner("MLモデルを学習中..."):
             try:
                 ml_recommender = MLRecommender(st.session_state.raw_data)
@@ -148,7 +161,12 @@ if st.session_state.data_loaded:
                 st.success("✅ MLモデル学習が完了しました。")
             except Exception as e:
                 st.error(f"❌ エラーが発生しました: {e}")
-else:
+
+
+# =========================================================
+# 画面表示制御
+# =========================================================
+if not st.session_state.data_loaded:
     st.markdown("### 📋 必要なファイル一覧")
     st.markdown("""
     1. 👥 **メンバー**（member_skillnote.csv など）  
@@ -158,3 +176,9 @@ else:
     5. 🗂 **力量カテゴリー**（competence_category_skillnote.csv など）  
     6. 📊 **保有力量**（acquiredCompetenceLevel.csv など）
     """)
+else:
+    st.success("✅ データが正常に読み込まれました。")
+    st.markdown("次のステップとして推薦処理や分析機能を実行できます。")
+
+st.markdown("---")
+st.caption("🤖 Generated with ChatGPT（DataTransformer対応版）")
