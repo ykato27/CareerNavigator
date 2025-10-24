@@ -181,7 +181,7 @@ if all_uploaded:
 
                 # DataLoaderで読み込み
                 loader = DataLoader(temp_dir)
-                raw_data = loader.load_all()
+                raw_data = loader.load_all_data()
 
                 # DataTransformerで変換済みデータを構築
                 transformed_data = build_transformed_data(raw_data)
@@ -265,3 +265,4 @@ else:
         "5. **力量カテゴリー**: カテゴリ階層マスタ\n"
         "6. **習得済み力量**: 会員の保有力量データ"
     )
+
