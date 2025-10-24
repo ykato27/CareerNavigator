@@ -299,8 +299,16 @@ with col2:
         default=["SKILL", "EDUCATION", "LICENSE"],
         help="複数選択可能。例: スキルのみ、スキルと教育、など"
     )
+
     # 空リストの場合はNoneに変換（全てを推薦）
     competence_type = selected_types if selected_types else None
+
+    # 選択が空の場合の警告
+    if not selected_types:
+        st.warning("⚠️ 力量タイプが選択されていません。全てのタイプから推薦します。")
+    else:
+        # 選択されたタイプを確認表示
+        st.caption(f"選択中: {', '.join(selected_types)}")
 
 with col3:
     diversity_strategy = st.selectbox(
@@ -332,7 +340,52 @@ if st.button("推薦を実行", type="primary"):
 
             # セッション状態に保存
             if not recs:
-                st.warning("推薦できる力量がありません。")
+                st.warning("⚠️ 推薦できる力量がありません。")
+
+                # 診断情報を表示
+                st.info("### 💡 推薦が空になった理由:")
+
+                # 選択された力量タイプを表示
+                if competence_type:
+                    type_str = "、".join(competence_type) if isinstance(competence_type, list) else competence_type
+                    st.write(f"**選択された力量タイプ**: {type_str}")
+                else:
+                    st.write("**選択された力量タイプ**: 全て")
+
+                # 保有力量の情報を表示
+                member_comp = td["member_competence"][
+                    td["member_competence"]["メンバーコード"] == selected_member_code
+                ]
+                acquired_count = len(member_comp)
+                st.write(f"**既習得力量数**: {acquired_count}個")
+
+                # タイプ別の保有力量数を表示
+                if len(member_comp) > 0:
+                    comp_master = td["competence_master"]
+                    acquired_codes = member_comp["力量コード"].unique()
+                    acquired_info = comp_master[comp_master["力量コード"].isin(acquired_codes)]
+
+                    type_counts = acquired_info["力量タイプ"].value_counts().to_dict()
+                    st.write("**タイプ別保有力量数**:")
+                    for comp_type, count in type_counts.items():
+                        st.write(f"  - {comp_type}: {count}個")
+
+                # 改善案を提示
+                st.markdown("### 🔧 改善案:")
+                suggestions = []
+
+                if competence_type and len(competence_type) < 3:
+                    suggestions.append("- **力量タイプを追加**: 他の力量タイプも選択してみてください")
+
+                if acquired_count > 50:
+                    suggestions.append("- **すでに多くの力量を習得**: 新しい分野への挑戦も検討してみてください")
+
+                suggestions.append("- **推薦数を増やす**: スライダーで推薦数を増やしてみてください")
+                suggestions.append("- **多様性戦略を変更**: 異なる多様性戦略を試してみてください")
+
+                for suggestion in suggestions:
+                    st.write(suggestion)
+
                 st.session_state.last_recommendations_df = None
                 st.session_state.last_recommendations = None
                 st.session_state.last_target_member_code = None
