@@ -72,8 +72,10 @@ CareerNavigator/
 
 ### 前提条件
 
-- Python 3.9以上
+- **Python 3.11以上** （推奨: Python 3.12 または 3.13）
 - uv（Pythonパッケージマネージャー）
+
+**注意**: Python 3.10以下はサポートしていません。Python 3.11以降は性能が大幅に向上しており（3.9比で25%以上）、長期サポートが提供されます。
 
 ### uvのインストール
 
@@ -88,13 +90,29 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 pipx install uv
 ```
 
+### Pythonバージョンの確認・インストール
+
+uvを使えば、必要なPythonバージョンを自動的にインストールできます：
+
+```bash
+# 現在のPythonバージョンを確認
+python --version
+
+# Python 3.12以降を推奨（3.11でも動作）
+cd CareerNavigator
+uv python install 3.12  # または 3.13
+
+# システムにPython 3.11以上がインストール済みの場合はそれを使用
+# uv sync が自動的に検出します
+```
+
 ### プロジェクトのセットアップ
 
 ```bash
 # 1. プロジェクトをクローンまたはダウンロード
 cd CareerNavigator
 
-# 2. 依存関係のインストール（自動的に仮想環境も作成されます）
+# 2. 依存関係のインストール（自動的にPython 3.11+の仮想環境も作成されます）
 uv sync
 
 # 3. CSVファイルをdataディレクトリに配置
@@ -547,12 +565,19 @@ uv pip install -e .
   - **データ入力方式の一本化**
     - ディレクトリ構造のみをサポート（単一ファイル対応を削除）
     - data/members/, data/acquired/ など各ディレクトリに複数CSVを配置
+  - **データ保護強化**
+    - .gitignoreでCSV/Excelファイルを除外（機密情報保護）
+    - .gitkeepでディレクトリ構造のみ保持
+  - **Pythonバージョン要件更新**
+    - Python 3.11以上を要求（3.9はEOL間近のため）
+    - 性能向上（3.9比で25%以上高速）
   - **テストスイート拡充** (253テスト)
     - ML関連テスト追加 (matrix_factorization, diversity, ml_recommender)
     - ディレクトリスキャン機能の包括的テスト
   - **ドキュメント整理**
     - docs/ディレクトリに全ドキュメントを集約
     - README更新（ML使用例、多様性戦略の説明）
+    - データ保護・移行ガイドの追加
 
 - v1.1.0 (2025-10-23)
   - 推薦システム評価機能追加
