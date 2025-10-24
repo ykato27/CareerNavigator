@@ -565,3 +565,91 @@ class TestIntegration:
 
         assert 0.0 <= avg_precision <= 1.0
         assert 0.0 <= avg_recall <= 1.0
+
+
+
+# ==================== 多様性指標テスト ====================
+
+class TestDiversityMetrics:
+    """多様性指標のテスト"""
+
+    def test_calculate_diversity_metrics_basic(self, sample_competence_master):
+        """基本的な多様性指標計算"""
+        from skillnote_recommendation.core.models import Recommendation
+
+        evaluator = RecommendationEvaluator()
+
+        # サンプル推薦リスト
+        recommendations_list = [
+            [
+                Recommendation("s001", "Python", "SKILL", "プログラミング", 8.0, 0, 0, 0, "理由1"),
+                Recommendation("s002", "Java", "SKILL", "プログラミング", 7.0, 0, 0, 0, "理由2"),
+                Recommendation("e001", "AWS研修", "EDUCATION", "クラウド", 6.0, 0, 0, 0, "理由3"),
+            ]
+        ]
+
+        metrics = evaluator.calculate_diversity_metrics(
+            recommendations_list,
+            sample_competence_master
+        )
+
+        assert "avg_category_diversity" in metrics
+        assert "avg_type_diversity" in metrics
+        assert "coverage" in metrics
+
+    def test_diversity_metrics_range(self, sample_competence_master):
+        """多様性指標の値域"""
+        from skillnote_recommendation.core.models import Recommendation
+
+        evaluator = RecommendationEvaluator()
+
+        recommendations_list = [
+            [
+                Recommendation("s001", "Python", "SKILL", "プログラミング", 8.0, 0, 0, 0, "理由"),
+                Recommendation("s002", "Java", "SKILL", "データベース", 7.0, 0, 0, 0, "理由"),
+            ]
+        ]
+
+        metrics = evaluator.calculate_diversity_metrics(
+            recommendations_list,
+            sample_competence_master
+        )
+
+        assert 0.0 <= metrics["avg_category_diversity"] <= 1.0
+        assert 0.0 <= metrics["avg_type_diversity"] <= 1.0
+        assert 0.0 <= metrics["coverage"] <= 1.0
+
+    def test_diversity_metrics_empty_recommendations(self, sample_competence_master):
+        """空の推薦リスト"""
+        evaluator = RecommendationEvaluator()
+
+        metrics = evaluator.calculate_diversity_metrics([], sample_competence_master)
+
+        assert metrics["avg_category_diversity"] == 0.0
+        assert metrics["coverage"] == 0.0
+
+    def test_evaluate_with_diversity(self, temporal_member_competence, sample_competence_master):
+        """多様性込みの評価"""
+        evaluator = RecommendationEvaluator()
+
+        train_data, test_data = evaluator.temporal_train_test_split(
+            temporal_member_competence,
+            train_ratio=0.7
+        )
+
+        metrics = evaluator.evaluate_with_diversity(
+            train_data=train_data,
+            test_data=test_data,
+            competence_master=sample_competence_master,
+            top_k=5
+        )
+
+        # 基本メトリクス
+        assert "precision@5" in metrics
+        assert "recall@5" in metrics
+
+        # 多様性指標
+        assert "avg_category_diversity" in metrics
+        assert "avg_type_diversity" in metrics
+        assert "coverage" in metrics
+
