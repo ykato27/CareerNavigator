@@ -6,6 +6,9 @@ from io import StringIO
 
 import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 
 
 # =========================================================
@@ -60,6 +63,134 @@ def convert_recommendations_to_dataframe(recommendations) -> pd.DataFrame:
     cols = ["順位"] + [c for c in df.columns if c != "順位"]
     df = df[cols]
     return df
+
+
+def create_member_positioning_data(member_competence, member_master, mf_model):
+    """
+    全メンバーの位置データを作成
+
+    Returns:
+        DataFrame with columns: メンバーコード, メンバー名, 総合スキルレベル,
+        保有力量数, 平均レベル, 潜在因子1, 潜在因子2
+    """
+    data = []
+
+    for member_code in member_master["メンバーコード"]:
+        # 保有力量データを取得
+        member_comp = member_competence[member_competence["メンバーコード"] == member_code]
+
+        if len(member_comp) == 0:
+            continue
+
+        # メンバー名
+        member_name = member_master[member_master["メンバーコード"] == member_code]["メンバー名"].values[0]
+
+        # スキルメトリクス
+        total_level = member_comp["正規化レベル"].sum()
+        competence_count = len(member_comp)
+        avg_level = member_comp["正規化レベル"].mean()
+
+        # 潜在因子（NMFモデルから）
+        latent_factor_1 = 0
+        latent_factor_2 = 0
+        if member_code in mf_model.member_index:
+            member_idx = mf_model.member_index[member_code]
+            latent_factor_1 = mf_model.W[member_idx, 0] if mf_model.n_components > 0 else 0
+            latent_factor_2 = mf_model.W[member_idx, 1] if mf_model.n_components > 1 else 0
+
+        data.append({
+            "メンバーコード": member_code,
+            "メンバー名": member_name,
+            "総合スキルレベル": total_level,
+            "保有力量数": competence_count,
+            "平均レベル": avg_level,
+            "潜在因子1": latent_factor_1,
+            "潜在因子2": latent_factor_2
+        })
+
+    return pd.DataFrame(data)
+
+
+def create_positioning_plot(position_df, target_member_code, reference_person_codes,
+                            x_col, y_col, title):
+    """
+    メンバーポジショニングプロットを作成
+
+    Args:
+        position_df: メンバー位置データ
+        target_member_code: 対象メンバーコード
+        reference_person_codes: 参考人物のコードリスト
+        x_col: X軸に使用する列名
+        y_col: Y軸に使用する列名
+        title: グラフタイトル
+    """
+    # メンバータイプを分類
+    df = position_df.copy()
+    df["メンバータイプ"] = "その他"
+    df.loc[df["メンバーコード"] == target_member_code, "メンバータイプ"] = "あなた"
+    df.loc[df["メンバーコード"].isin(reference_person_codes), "メンバータイプ"] = "参考人物"
+
+    # 色とサイズのマッピング
+    color_map = {
+        "あなた": "#FF4B4B",
+        "参考人物": "#4B8BFF",
+        "その他": "#CCCCCC"
+    }
+
+    size_map = {
+        "あなた": 20,
+        "参考人物": 15,
+        "その他": 8
+    }
+
+    df["color"] = df["メンバータイプ"].map(color_map)
+    df["size"] = df["メンバータイプ"].map(size_map)
+
+    # プロット順序を調整（あなた→参考人物→その他の順で描画）
+    df["plot_order"] = df["メンバータイプ"].map({"その他": 1, "参考人物": 2, "あなた": 3})
+    df = df.sort_values("plot_order")
+
+    # Plotlyで散布図を作成
+    fig = go.Figure()
+
+    for member_type in ["その他", "参考人物", "あなた"]:
+        df_subset = df[df["メンバータイプ"] == member_type]
+
+        fig.add_trace(go.Scatter(
+            x=df_subset[x_col],
+            y=df_subset[y_col],
+            mode="markers",
+            name=member_type,
+            marker=dict(
+                size=df_subset["size"],
+                color=df_subset["color"],
+                line=dict(width=1, color="white")
+            ),
+            text=df_subset["メンバー名"],
+            hovertemplate=(
+                "<b>%{text}</b><br>" +
+                f"{x_col}: %{{x:.1f}}<br>" +
+                f"{y_col}: %{{y:.2f}}<br>" +
+                "<extra></extra>"
+            )
+        ))
+
+    fig.update_layout(
+        title=title,
+        xaxis_title=x_col,
+        yaxis_title=y_col,
+        hovermode="closest",
+        height=500,
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        )
+    )
+
+    return fig
 
 
 # =========================================================
@@ -150,9 +281,13 @@ if st.button("推薦を実行", type="primary"):
             if not recs:
                 st.warning("推薦できる力量がありません。")
                 st.session_state.last_recommendations_df = None
+                st.session_state.last_recommendations = None
+                st.session_state.last_target_member_code = None
             else:
                 df_result = convert_recommendations_to_dataframe(recs)
                 st.session_state.last_recommendations_df = df_result
+                st.session_state.last_recommendations = recs
+                st.session_state.last_target_member_code = selected_member_code
 
                 st.success(f"{len(df_result)}件の推薦が生成されました。")
 
@@ -262,3 +397,105 @@ if st.session_state.get("last_recommendations_df") is not None:
         file_name="recommendations.csv",
         mime="text/csv"
     )
+
+    # =========================================================
+    # メンバーポジショニングマップ
+    # =========================================================
+    if st.session_state.get("last_recommendations") is not None:
+        st.markdown("---")
+        st.subheader("🗺️ メンバーポジショニングマップ")
+        st.markdown(
+            "あなたと参考人物が、全メンバーの中でどの位置にいるかを可視化します。\n"
+            "**赤色**があなた、**青色**が参考人物、**灰色**がその他のメンバーです。"
+        )
+
+        # 参考人物のコードを収集
+        reference_person_codes = []
+        for rec in st.session_state.last_recommendations:
+            if rec.reference_persons:
+                for ref_person in rec.reference_persons:
+                    if ref_person.member_code not in reference_person_codes:
+                        reference_person_codes.append(ref_person.member_code)
+
+        # ポジショニングデータを作成
+        position_df = create_member_positioning_data(
+            td["member_competence"],
+            td["members_clean"],
+            recommender.mf_model
+        )
+
+        target_code = st.session_state.last_target_member_code
+
+        # 複数のビューを表示
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "📊 スキルレベル vs 保有力量数",
+            "📈 平均レベル vs 保有力量数",
+            "🔮 潜在因子マップ",
+            "📋 データテーブル"
+        ])
+
+        with tab1:
+            st.markdown("### 総合スキルレベル vs 保有力量数")
+            st.markdown(
+                "**X軸**: 総合スキルレベル（全保有力量の正規化レベルの合計）\n\n"
+                "**Y軸**: 保有力量数\n\n"
+                "右上に行くほど、多くの力量を高いレベルで保有していることを示します。"
+            )
+            fig1 = create_positioning_plot(
+                position_df, target_code, reference_person_codes,
+                "総合スキルレベル", "保有力量数",
+                "総合スキルレベル vs 保有力量数"
+            )
+            st.plotly_chart(fig1, use_container_width=True)
+
+        with tab2:
+            st.markdown("### 平均レベル vs 保有力量数")
+            st.markdown(
+                "**X軸**: 保有力量数（スキルの幅）\n\n"
+                "**Y軸**: 平均レベル（スキルの深さ）\n\n"
+                "右上に行くほど、幅広い力量を深く習得していることを示します。"
+            )
+            fig2 = create_positioning_plot(
+                position_df, target_code, reference_person_codes,
+                "保有力量数", "平均レベル",
+                "スキルの幅 vs 深さ"
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+
+        with tab3:
+            st.markdown("### 潜在因子マップ（NMF空間）")
+            st.markdown(
+                "**X軸**: 潜在因子1（第1スキルパターン）\n\n"
+                "**Y軸**: 潜在因子2（第2スキルパターン）\n\n"
+                "NMFモデルが学習したスキルパターンの空間で、メンバーを配置します。\n"
+                "近くにいる人は似たスキルパターンを持っています。"
+            )
+            fig3 = create_positioning_plot(
+                position_df, target_code, reference_person_codes,
+                "潜在因子1", "潜在因子2",
+                "潜在因子空間でのメンバー分布"
+            )
+            st.plotly_chart(fig3, use_container_width=True)
+
+        with tab4:
+            st.markdown("### 全メンバーのデータ")
+            # あなたと参考人物を強調表示
+            display_df = position_df.copy()
+            display_df["タイプ"] = "その他"
+            display_df.loc[display_df["メンバーコード"] == target_code, "タイプ"] = "あなた"
+            display_df.loc[display_df["メンバーコード"].isin(reference_person_codes), "タイプ"] = "参考人物"
+
+            # タイプでソート（あなた→参考人物→その他）
+            display_df["sort_order"] = display_df["タイプ"].map({"あなた": 0, "参考人物": 1, "その他": 2})
+            display_df = display_df.sort_values(["sort_order", "総合スキルレベル"], ascending=[True, False])
+            display_df = display_df.drop(columns=["sort_order"])
+
+            # 列の順序を調整
+            cols = ["タイプ", "メンバー名", "総合スキルレベル", "保有力量数", "平均レベル", "潜在因子1", "潜在因子2"]
+            display_df = display_df[cols]
+
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                height=400
+            )
