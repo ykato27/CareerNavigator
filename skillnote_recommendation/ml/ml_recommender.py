@@ -307,17 +307,27 @@ class MLRecommender:
         # カテゴリ別の保有状況を分析
         if cat and cat in category_profile:
             cat_count = category_profile[cat]
-            total_cat = len(self.competence_master[
-                self.competence_master["力量カテゴリー名"] == cat
-            ])
-            cat_ratio = int((cat_count / total_cat * 100)) if total_cat > 0 else 0
 
-            relevance = (
-                f"🎯 **あなたのプロファイルとの関連性**\n\n"
-                f"あなたは既に「{cat}」カテゴリの力量を{cat_count}個保有しており、"
-                f"このカテゴリの{cat_ratio}%をカバーしています。\n"
-                f"この力量を習得することで、{cat}分野での専門性がさらに強化されます。"
-            )
+            # 力量カテゴリー名カラムが存在する場合のみカテゴリ分析
+            if "力量カテゴリー名" in self.competence_master.columns:
+                total_cat = len(self.competence_master[
+                    self.competence_master["力量カテゴリー名"] == cat
+                ])
+                cat_ratio = int((cat_count / total_cat * 100)) if total_cat > 0 else 0
+
+                relevance = (
+                    f"🎯 **あなたのプロファイルとの関連性**\n\n"
+                    f"あなたは既に「{cat}」カテゴリの力量を{cat_count}個保有しており、"
+                    f"このカテゴリの{cat_ratio}%をカバーしています。\n"
+                    f"この力量を習得することで、{cat}分野での専門性がさらに強化されます。"
+                )
+            else:
+                # カラムが存在しない場合はシンプルなメッセージ
+                relevance = (
+                    f"🎯 **あなたのプロファイルとの関連性**\n\n"
+                    f"あなたは既に「{cat}」カテゴリの力量を{cat_count}個保有しています。\n"
+                    f"この力量を習得することで、専門性がさらに強化されます。"
+                )
             return relevance
 
         # カテゴリ情報がない場合は、全体的な傾向を説明
@@ -387,6 +397,11 @@ class MLRecommender:
             self.member_competence["メンバーコード"] == member_code
         ]
 
+        # 力量カテゴリー名カラムが存在するか確認
+        if "力量カテゴリー名" not in self.competence_master.columns:
+            # カラムが存在しない場合は空の辞書を返す
+            return {}
+
         # 力量コードからカテゴリ情報を取得
         merged = member_comps.merge(
             self.competence_master[["力量コード", "力量カテゴリー名"]],
@@ -394,8 +409,11 @@ class MLRecommender:
             how="left"
         )
 
-        # カテゴリ別にカウント
-        category_counts = merged["力量カテゴリー名"].value_counts().to_dict()
+        # NaN値を除外してカテゴリ別にカウント
+        category_counts = merged["力量カテゴリー名"].dropna().value_counts().to_dict()
+
+        # 空文字列のキーを削除
+        category_counts = {k: v for k, v in category_counts.items() if k and str(k).strip()}
 
         return category_counts
 

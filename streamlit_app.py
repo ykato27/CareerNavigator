@@ -243,7 +243,24 @@ if st.button("データ読み込みを実行", type="primary"):
                 st.session_state.last_recommendations_df = None
 
             except Exception as e:
-                st.error(f"❌ エラーが発生しました: {e}")
+                import traceback
+                st.error(f"❌ データ読み込み中にエラーが発生しました: {type(e).__name__}: {e}")
+
+                # 詳細なトレースバックを表示
+                with st.expander("🔍 詳細なエラー情報を表示"):
+                    st.code(traceback.format_exc())
+
+                    st.markdown("### デバッグ情報")
+                    st.write("**エラー型:**", type(e).__name__)
+                    st.write("**エラーメッセージ:**", str(e))
+
+                    # アップロードされたファイルの情報
+                    st.markdown("### アップロードされたファイル")
+                    for category, files in uploaded_dict.items():
+                        if files:
+                            st.write(f"**{category}:**", [f.name for f in files])
+
+                    st.info("💡 このエラー情報をスクリーンショットして開発者に共有してください。")
     else:
         st.warning("全てのカテゴリで少なくとも1つのCSVファイルをアップロードしてください。")
 
@@ -393,6 +410,8 @@ if st.session_state.data_loaded and st.session_state.model_trained and st.sessio
                     st.dataframe(df_result, use_container_width=True)
 
             except Exception as e:
+                import traceback
+
                 # ColdStartErrorを個別に処理
                 from skillnote_recommendation.ml.exceptions import ColdStartError, MLModelNotTrainedError
 
@@ -413,7 +432,32 @@ if st.session_state.data_loaded and st.session_state.model_trained and st.sessio
                     st.error("❌ MLモデルが学習されていません")
                     st.info("「MLモデル学習を実行」ボタンをクリックしてから、推薦を実行してください。")
                 else:
-                    st.error(f"❌ 推薦処理中にエラーが発生しました: {e}")
+                    st.error(f"❌ 推薦処理中にエラーが発生しました: {type(e).__name__}: {e}")
+
+                    # 詳細なトレースバックを表示
+                    with st.expander("🔍 詳細なエラー情報を表示"):
+                        st.code(traceback.format_exc())
+
+                        st.markdown("### デバッグ情報")
+                        st.write("**エラー型:**", type(e).__name__)
+                        st.write("**エラーメッセージ:**", str(e))
+
+                        # データ構造の検証
+                        if st.session_state.transformed_data:
+                            td = st.session_state.transformed_data
+                            st.write("**transformed_data のキー:**", list(td.keys()))
+
+                            if "competence_master" in td:
+                                comp_master = td["competence_master"]
+                                st.write("**competence_master のカラム:**", list(comp_master.columns))
+                                st.write("**competence_master のサンプル:**")
+                                st.dataframe(comp_master.head(3))
+
+                            if "member_competence" in td:
+                                member_comp = td["member_competence"]
+                                st.write("**member_competence のカラム:**", list(member_comp.columns))
+
+                        st.info("💡 このエラー情報をスクリーンショットして開発者に共有してください。")
 
 
 # =========================================================
