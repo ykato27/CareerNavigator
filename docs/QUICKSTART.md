@@ -44,7 +44,7 @@ cp /path/to/category*.csv data/categories/
 データ構造（各ディレクトリに複数CSVファイルを配置可能）:
 ```
 data/
-├── members/          # 会員データ（複数ファイル可）
+├── members/          # メンバーデータ（複数ファイル可）
 ├── acquired/         # 習得力量データ（複数ファイル可）
 ├── skills/           # スキル力量データ
 ├── education/        # 教育力量データ
@@ -111,9 +111,9 @@ from skillnote_recommendation import RecommendationSystem
 
 system = RecommendationSystem()
 
-# 会員情報を取得
+# メンバー情報を取得
 info = system.get_member_info('m48')
-print(f"会員: {info['name']}")
+print(f"メンバー: {info['name']}")
 print(f"SKILL: {info['skill_count']}件")
 
 # SKILLのみ推薦

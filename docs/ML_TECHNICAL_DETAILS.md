@@ -15,7 +15,7 @@
 
 ## 概要
 
-本システムは、**協調フィルタリング**に基づく機械学習推薦システムです。Non-negative Matrix Factorization (NMF) を用いて会員の習得パターンをモデル化し、多様性再ランキングにより推薦の質を向上させます。
+本システムは、**協調フィルタリング**に基づく機械学習推薦システムです。Non-negative Matrix Factorization (NMF) を用いてメンバーの習得パターンをモデル化し、多様性再ランキングにより推薦の質を向上させます。
 
 ### 主な特徴
 
@@ -62,15 +62,15 @@ skillnote_recommendation/ml/
 
 #### 数式
 
-会員×力量マトリクス $V$ を2つの低ランク行列の積に分解：
+メンバー×力量マトリクス $V$ を2つの低ランク行列の積に分解：
 
 $$
 V \approx WH
 $$
 
 where:
-- $V \in \mathbb{R}^{m \times n}$ : 会員×力量マトリクス (m会員, n力量)
-- $W \in \mathbb{R}^{m \times k}$ : 会員の潜在因子行列
+- $V \in \mathbb{R}^{m \times n}$ : メンバー×力量マトリクス (mメンバー, n力量)
+- $W \in \mathbb{R}^{m \times k}$ : メンバーの潜在因子行列
 - $H \in \mathbb{R}^{k \times n}$ : 力量の潜在因子行列
 - $k$ : 潜在因子数（デフォルト: 20）
 
@@ -116,7 +116,7 @@ def fit(self, skill_matrix: pd.DataFrame) -> 'MatrixFactorizationModel':
     """NMFモデルを学習
 
     Args:
-        skill_matrix: 会員×力量のDataFrame (行: 会員, 列: 力量)
+        skill_matrix: メンバー×力量のDataFrame (行: メンバー, 列: 力量)
 
     Returns:
         self
@@ -126,7 +126,7 @@ def fit(self, skill_matrix: pd.DataFrame) -> 'MatrixFactorizationModel':
 **処理内容:**
 1. DataFrameからNumPy配列に変換
 2. NMFモデルの学習
-3. W (会員因子) と H (力量因子) を保存
+3. W (メンバー因子) と H (力量因子) を保存
 4. インデックスマッピングを作成
 
 **2. predict(member_code, competence_codes)**
@@ -140,7 +140,7 @@ def predict(
     """力量スコアを予測
 
     Args:
-        member_code: 会員コード
+        member_code: メンバーコード
         competence_codes: 予測対象力量コード（Noneの場合全力量）
 
     Returns:
@@ -155,7 +155,7 @@ $$
 $$
 
 where:
-- $W_m$ : 会員mの潜在因子ベクトル (k次元)
+- $W_m$ : メンバーmの潜在因子ベクトル (k次元)
 - $H_c$ : 力量cの潜在因子ベクトル (k次元)
 
 **3. predict_top_k(member_code, k, exclude_acquired)**
@@ -170,7 +170,7 @@ def predict_top_k(
     """Top-K推薦
 
     Args:
-        member_code: 会員コード
+        member_code: メンバーコード
         k: 推薦件数
         exclude_acquired: 習得済み力量を除外するか
 
@@ -187,18 +187,18 @@ def predict_top_k(
 
 | 値 | 特徴 | 適用ケース |
 |----|------|----------|
-| 5-10 | 高速、シンプル | 小規模データ（会員<100） |
-| **10-20** | **バランス** | **中規模データ（会員100-1000）** ⭐ |
-| 20-50 | 高精度、遅い | 大規模データ（会員>1000） |
+| 5-10 | 高速、シンプル | 小規模データ（メンバー<100） |
+| **10-20** | **バランス** | **中規模データ（メンバー100-1000）** ⭐ |
+| 20-50 | 高精度、遅い | 大規模データ（メンバー>1000） |
 
 **選択基準:**
 ```python
-if 会員数 < 100:
+if メンバー数 < 100:
     n_components = 10
-elif 会員数 < 1000:
+elif メンバー数 < 1000:
     n_components = 20  # デフォルト
 else:
-    n_components = min(50, int(sqrt(会員数)))
+    n_components = min(50, int(sqrt(メンバー数)))
 ```
 
 #### init (初期化方法)
@@ -233,7 +233,7 @@ NMFは非負制約により、因子が**加算的**に解釈できます。
 **例: k=5の場合**
 
 ```python
-会員A = 0.8 × 因子1 + 0.2 × 因子2 + 0.5 × 因子3 + 0.0 × 因子4 + 0.3 × 因子5
+メンバーA = 0.8 × 因子1 + 0.2 × 因子2 + 0.5 × 因子3 + 0.0 × 因子4 + 0.3 × 因子5
 ```
 
 各因子は以下のような「テーマ」を表す可能性：
@@ -246,7 +246,7 @@ NMFは非負制約により、因子が**加算的**に解釈できます。
 #### 因子の抽出
 
 ```python
-# 会員因子の取得
+# メンバー因子の取得
 member_factors = model.get_member_factors('m001')
 # → array([0.8, 0.2, 0.5, 0.0, 0.3])
 
@@ -274,9 +274,9 @@ $$
 where:
 - $C$ : 候補力量集合
 - $S$ : 既に選択された力量集合
-- $Q$ : クエリ（会員）
+- $Q$ : クエリ（メンバー）
 - $\lambda$ : 関連度と多様性のバランスパラメータ (0.7推奨)
-- $\text{Sim}_1$ : 会員と力量の類似度（MLスコア）
+- $\text{Sim}_1$ : メンバーと力量の類似度（MLスコア）
 - $\text{Sim}_2$ : 力量間の類似度（カテゴリの一致度）
 
 **実装:**
@@ -636,7 +636,7 @@ m003       0     1     1     1     0     1   ...
 """
 
 # 型: pd.DataFrame
-# 行: 会員コード (index)
+# 行: メンバーコード (index)
 # 列: 力量コード (columns)
 # 値: 0 (未習得) or 1 (習得済み)
 ```
@@ -652,7 +652,7 @@ m003       0     1     1     1     0     1   ...
         '力量種別': 'SKILL',
         'カテゴリ名': '技術管理',
         'MLスコア': 0.85,
-        '推薦理由': 'ML推薦 (類似会員のパターンから学習)'
+        '推薦理由': 'ML推薦 (類似メンバーのパターンから学習)'
     },
     ...
 ]
@@ -761,7 +761,7 @@ reranker.rerank_type_diversity(candidates, competence_info, k=10, type_ratios=te
 # スパースなデータの除去
 min_acquisitions = 3  # 最低習得力量数
 
-filtered_members = member_competence.groupby('会員コード').filter(
+filtered_members = member_competence.groupby('メンバーコード').filter(
     lambda x: len(x) >= min_acquisitions
 )
 ```
@@ -770,7 +770,7 @@ filtered_members = member_competence.groupby('会員コード').filter(
 
 ```python
 # scikit-learnのn_jobsパラメータは使用できないため、
-# 複数会員の予測を並列化
+# 複数メンバーの予測を並列化
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -873,7 +873,7 @@ sparse_skill_matrix = csr_matrix(skill_matrix.values)
 #### 3. 推薦結果が全て同じ
 
 **症状:**
-全会員に同じ力量が推薦される
+全メンバーに同じ力量が推薦される
 
 **原因:**
 - データが少なすぎる

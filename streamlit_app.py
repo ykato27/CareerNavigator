@@ -235,7 +235,7 @@ if st.session_state.data_loaded:
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("会員数", len(td["members_clean"]))
+        st.metric("メンバー数", len(td["members_clean"]))
 
     with col2:
         st.metric("力量数", len(td["competence_master"]))

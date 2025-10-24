@@ -60,7 +60,7 @@ if st.session_state.get("model_trained", False):
         st.session_state.ml_recommender = None
         st.rerun()
 else:
-    st.info("📚 NMF（非負値行列分解）を使用して、会員の力量習得パターンを学習します。")
+    st.info("📚 NMF（非負値行列分解）を使用して、メンバーの力量習得パターンを学習します。")
 
     if st.button("🚀 MLモデル学習を実行", type="primary"):
         with st.spinner("MLモデルを学習中..."):
@@ -97,7 +97,7 @@ if st.session_state.get("model_trained", False):
         st.metric("潜在因子数", mf_model.n_components)
 
     with col2:
-        st.metric("会員数", len(mf_model.member_index))
+        st.metric("メンバー数", len(mf_model.member_index))
 
     with col3:
         st.metric("力量数", len(mf_model.competence_index))
@@ -110,8 +110,8 @@ if st.session_state.get("model_trained", False):
     st.markdown("### 🔍 NMF潜在因子の分析")
 
     st.markdown(
-        "NMFは会員×力量マトリクスを**会員因子行列**と**力量因子行列**に分解します。\n"
-        "各潜在因子は、特定の力量群（スキルセット）を表し、会員はこれらの因子の組み合わせで表現されます。"
+        "NMFはメンバー×力量マトリクスを**メンバー因子行列**と**力量因子行列**に分解します。\n"
+        "各潜在因子は、特定の力量群（スキルセット）を表し、メンバーはこれらの因子の組み合わせで表現されます。"
     )
 
     # 各潜在因子の特徴を分析
