@@ -158,9 +158,9 @@ with col2:
         key="categories"
     )
 
-    st.markdown("#### 6️⃣ 習得済み力量")
+    st.markdown("#### 6️⃣ 保有力量")
     uploaded_dict["acquired"] = st.file_uploader(
-        "習得済み力量データ",
+        "保有力量データ",
         type=["csv"],
         accept_multiple_files=True,
         key="acquired"
@@ -241,7 +241,7 @@ if st.session_state.data_loaded:
         st.metric("力量数", len(td["competence_master"]))
 
     with col3:
-        st.metric("習得済み力量レコード数", len(td["member_competence"]))
+        st.metric("保有力量レコード数", len(td["member_competence"]))
 
     # データプレビュー
     with st.expander("📋 データプレビュー"):
@@ -251,18 +251,18 @@ if st.session_state.data_loaded:
         st.markdown("#### 力量マスタ")
         st.dataframe(td["competence_master"].head(10))
 
-        st.markdown("#### 会員習得力量")
+        st.markdown("#### メンバー保有力量")
         st.dataframe(td["member_competence"].head(10))
 
 else:
     st.markdown("---")
     st.markdown("### 📌 必要なデータ")
     st.markdown(
-        "1. **メンバー**: 会員情報\n"
+        "1. **メンバー**: 登録メンバー情報\n"
         "2. **力量（スキル）**: スキルマスタ\n"
         "3. **力量（教育）**: 研修マスタ\n"
         "4. **力量（資格）**: 資格マスタ\n"
-        "5. **力量カテゴリー**: カテゴリ階層マスタ\n"
-        "6. **習得済み力量**: 会員の保有力量データ"
+        "5. **力量カテゴリー**: カテゴリーマスタ\n"
+        "6. **保有力量**: メンバーの保有力量データ"
     )
 
