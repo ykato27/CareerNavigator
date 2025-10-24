@@ -1,6 +1,6 @@
 """
 キャリア推薦システム Streamlitアプリ
-（メイン画面アップロード版・DataTransformer修正版）
+（メイン画面アップロード版・RecommendationSystem連携修正版）
 """
 
 import streamlit as st
@@ -93,7 +93,7 @@ if st.button("📥 データ読み込み", type="primary"):
     ]):
         with st.spinner("データを読み込み中..."):
             try:
-                # 一時ディレクトリにファイル保存
+                # 一時ディレクトリにファイル保存（DataLoader互換）
                 temp_dir = create_temp_dir_with_csv({
                     "members": uploaded_members,
                     "skills": uploaded_skills,
@@ -122,8 +122,16 @@ if st.button("📥 データ読み込み", type="primary"):
                     "members_clean": members_clean
                 }
 
-                # --- 推薦システム初期化 ---
-                rec_system = RecommendationSystem(output_dir=temp_dir)
+                # --- 推薦システム初期化（DataFrameを直接渡す） ---
+                rec_system = RecommendationSystem(
+                    output_dir=temp_dir,
+                    df_members=members_clean,
+                    df_competence_master=competence_master,
+                    df_member_competence=member_competence,
+                    df_similarity=None  # 類似度情報なし
+                )
+
+                # --- ロールモデル検索 ---
                 role_finder = RoleModelFinder(
                     members=members_clean,
                     member_competence=member_competence,
@@ -179,6 +187,3 @@ if not st.session_state.data_loaded:
 else:
     st.success("✅ データが正常に読み込まれました。")
     st.markdown("次のステップとして推薦処理や分析機能を実行できます。")
-
-st.markdown("---")
-st.caption("🤖 Generated with ChatGPT（DataTransformer対応版）")
