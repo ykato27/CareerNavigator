@@ -184,6 +184,26 @@ data/
 
 ## 使い方
 
+### 🌐 Streamlit Webアプリ（推奨）
+
+ブラウザベースの対話的なWebアプリケーションで推薦システムを利用できます。
+
+```bash
+# Streamlitアプリの起動
+uv run streamlit run streamlit_app.py
+```
+
+ブラウザが自動的に開き、以下の機能が利用できます：
+
+- ✅ CSVファイルのドラッグ&ドロップアップロード
+- ✅ 既存会員・新規ユーザーへの推薦
+- ✅ ルールベースとML両方の推薦を比較
+- ✅ ロールモデル（参考となる会員）の表示
+- ✅ 多様性メトリクスの可視化
+- ✅ 推薦結果のCSVダウンロード
+
+**詳細**: [Streamlitアプリガイド](docs/STREAMLIT_GUIDE.md)
+
 ### コマンドラインから実行
 
 ```bash
@@ -539,6 +559,14 @@ uv pip install -e .
 
 ## ドキュメント
 
+- [Streamlitアプリガイド (docs/STREAMLIT_GUIDE.md)](docs/STREAMLIT_GUIDE.md) - **Webアプリケーション完全ガイド**
+  - 起動方法と使い方
+  - 既存会員・新規ユーザーへの推薦
+  - ロールモデル機能
+  - 多様性メトリクスの見方
+  - CSVダウンロード
+  - トラブルシューティング
+
 - [評価ガイド (docs/EVALUATION.md)](docs/EVALUATION.md) - 推薦システムの評価方法
   - 時系列分割による評価
   - 評価メトリクス (Precision@K, Recall@K, NDCG@K, Hit Rate)
@@ -546,11 +574,13 @@ uv pip install -e .
   - クロスバリデーション
   - ベストプラクティス
 
-- [クイックスタート (docs/QUICKSTART.md)](docs/QUICKSTART.md) - 使い方ガイド
+- [クイックスタート (docs/QUICKSTART.md)](docs/QUICKSTART.md) - コマンドライン使い方ガイド
 
 - [テスト設計 (docs/TEST_DESIGN.md)](docs/TEST_DESIGN.md) - テストコードの設計書（100+テストケース）
 
 - [テスト実装ガイド (docs/TESTING_QUICKSTART.md)](docs/TESTING_QUICKSTART.md) - テスト実装手順
+
+- [新規ユーザーCSVテンプレート (templates/)](templates/) - 新規ユーザー用CSVテンプレートと使い方
 
 ## バージョン履歴
 
