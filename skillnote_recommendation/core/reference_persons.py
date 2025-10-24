@@ -21,15 +21,15 @@ class ReferencePersonFinder:
                  competence_master: pd.DataFrame):
         """
         Args:
-            member_competence: 会員習得力量データ
-            member_master: 会員マスタ
+            member_competence: メンバー習得力量データ
+            member_master: メンバーマスタ
             competence_master: 力量マスタ
         """
         self.member_competence = member_competence
         self.member_master = member_master
         self.competence_master = competence_master
 
-        # 会員×力量マトリクスを作成
+        # メンバー×力量マトリクスを作成
         self.member_skill_matrix = member_competence.pivot_table(
             index="メンバーコード",
             columns="力量コード",
@@ -47,7 +47,7 @@ class ReferencePersonFinder:
         推薦された力量に対して参考になる人物を3タイプ検索
 
         Args:
-            target_member_code: 対象会員コード
+            target_member_code: 対象メンバーコード
             recommended_competence_code: 推薦された力量コード
             top_n: 各タイプから返す人数（デフォルト: 各タイプ1人ずつ、合計3人）
 
@@ -264,17 +264,17 @@ class ReferencePersonFinder:
     # =========================================================
 
     def _calculate_similarities(self, target_member_code: str) -> List[Tuple[str, float]]:
-        """対象会員と全会員の類似度を計算"""
+        """対象メンバーと全メンバーの類似度を計算"""
         if target_member_code not in self.member_skill_matrix.index:
             return []
 
-        # 対象会員のベクトル
+        # 対象メンバーのベクトル
         target_vector = self.member_skill_matrix.loc[target_member_code].values.reshape(1, -1)
 
-        # 全会員との類似度を計算
+        # 全メンバーとの類似度を計算
         similarities = cosine_similarity(target_vector, self.member_skill_matrix.values)[0]
 
-        # (会員コード, 類似度) のリストを作成
+        # (メンバーコード, 類似度) のリストを作成
         result = []
         for idx, member_code in enumerate(self.member_skill_matrix.index):
             result.append((member_code, similarities[idx]))
@@ -298,7 +298,7 @@ class ReferencePersonFinder:
         # 共通の力量
         common = list(target_competences & reference_competences)
 
-        # 参考人物が持つユニークな力量（対象会員が持っていない）
+        # 参考人物が持つユニークな力量（対象メンバーが持っていない）
         unique = list(reference_competences - target_competences)
 
         # レベル差分を計算
@@ -314,27 +314,27 @@ class ReferencePersonFinder:
         return common, unique, gap
 
     def _get_member_competences(self, member_code: str) -> List[str]:
-        """会員が保有する力量コードのリストを取得"""
+        """メンバーが保有する力量コードのリストを取得"""
         return self.member_competence[
             self.member_competence["メンバーコード"] == member_code
         ]["力量コード"].unique().tolist()
 
     def _get_member_competence_levels(self, member_code: str) -> Dict[str, int]:
-        """会員の力量レベルを辞書で取得"""
+        """メンバーの力量レベルを辞書で取得"""
         df = self.member_competence[
             self.member_competence["メンバーコード"] == member_code
         ]
         return dict(zip(df["力量コード"], df["正規化レベル"]))
 
     def _get_total_skill_level(self, member_code: str) -> float:
-        """会員の総合スキルレベルを取得（正規化レベルの合計）"""
+        """メンバーの総合スキルレベルを取得（正規化レベルの合計）"""
         df = self.member_competence[
             self.member_competence["メンバーコード"] == member_code
         ]
         return df["正規化レベル"].sum()
 
     def _get_average_skill_level(self, member_code: str) -> float:
-        """会員の平均スキルレベルを取得"""
+        """メンバーの平均スキルレベルを取得"""
         df = self.member_competence[
             self.member_competence["メンバーコード"] == member_code
         ]
@@ -343,7 +343,7 @@ class ReferencePersonFinder:
         return df["正規化レベル"].mean()
 
     def _get_competence_count(self, member_code: str) -> int:
-        """会員の保有力量数を取得"""
+        """メンバーの保有力量数を取得"""
         df = self.member_competence[
             self.member_competence["メンバーコード"] == member_code
         ]
@@ -415,7 +415,7 @@ class ReferencePersonFinder:
         return True
 
     def _get_member_name(self, member_code: str) -> str:
-        """会員名を取得"""
+        """メンバー名を取得"""
         member = self.member_master[
             self.member_master["メンバーコード"] == member_code
         ]

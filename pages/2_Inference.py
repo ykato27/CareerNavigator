@@ -41,7 +41,7 @@ st.set_page_config(
 )
 
 st.title("🎯 推論実行")
-st.markdown("**ステップ3**: 学習済みMLモデルを使用して、会員への力量推薦を実行します。")
+st.markdown("**ステップ3**: 学習済みMLモデルを使用して、メンバーへの力量推薦を実行します。")
 
 
 # =========================================================
@@ -244,22 +244,22 @@ def display_positioning_maps(
 # メンバー選択UI
 # =========================================================
 
-st.subheader("👤 推論対象会員の選択")
+st.subheader("👤 推論対象メンバーの選択")
 
-# 学習データに存在する会員のみをフィルタ（コールドスタート問題を回避）
+# 学習データに存在するメンバーのみをフィルタ（コールドスタート問題を回避）
 trained_member_codes = set(mf_model.member_codes)
 available_members = members_df[
     members_df["メンバーコード"].isin(trained_member_codes)
 ]
 
 if len(available_members) == 0:
-    st.error("❌ 推論可能な会員が存在しません。")
+    st.error("❌ 推論可能なメンバーが存在しません。")
     st.stop()
 
 st.info(
-    f"📊 推論可能な会員数: {len(available_members)} / {len(members_df)} 名\n\n"
-    f"💡 **コールドスタート問題の回避**: 学習データに含まれる会員のみが選択可能です。\n"
-    f"保有力量が未登録の会員は、データ登録後にモデルを再学習してください。"
+    f"📊 推論可能なメンバー数: {len(available_members)} / {len(members_df)} 名\n\n"
+    f"💡 **コールドスタート問題の回避**: 学習データに含まれるメンバーのみが選択可能です。\n"
+    f"保有力量が未登録のメンバーは、データ登録後にモデルを再学習してください。"
 )
 
 # メンバー選択プルダウン
@@ -268,7 +268,7 @@ member_options = dict(
 )
 
 selected_member_code = st.selectbox(
-    "推論対象会員を選択してください",
+    "推論対象メンバーを選択してください",
     options=list(member_options.keys()),
     format_func=lambda x: f"{member_options[x]} ({x})"
 )
@@ -416,12 +416,12 @@ if st.button("推薦を実行", type="primary"):
             if isinstance(e, ColdStartError):
                 st.error("❌ コールドスタート問題が発生しました")
                 st.warning(
-                    f"**会員コード `{e.member_code}` の保有力量が登録されていないため、"
+                    f"**メンバーコード `{e.member_code}` の保有力量が登録されていないため、"
                     f"ML推薦ができません。**\n\n"
                     f"**原因:**\n"
-                    f"- この会員の力量データがMLモデルの学習データに含まれていません。\n\n"
+                    f"- このメンバーの力量データがMLモデルの学習データに含まれていません。\n\n"
                     f"**対処方法:**\n"
-                    f"1. この会員の力量データ（保有力量）を登録してください\n"
+                    f"1. このメンバーの力量データ（保有力量）を登録してください\n"
                     f"2. データ登録後、「モデル学習」ページで再学習してください\n"
                     f"3. 再学習後、再度推薦を実行してください"
                 )

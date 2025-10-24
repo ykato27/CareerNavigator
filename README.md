@@ -7,7 +7,7 @@
 ```
 CareerNavigator/
 ├── data/                          # 入力データ（CSVファイル）
-│   ├── members/                   # 会員データ（複数CSVファイル対応）
+│   ├── members/                   # メンバーデータ（複数CSVファイル対応）
 │   │   ├── member_1.csv
 │   │   ├── member_2.csv
 │   │   └── ...                    # ディレクトリ内の全CSVを自動読込・結合
@@ -149,10 +149,10 @@ mv data/*category*.csv data/categories/ 2>/dev/null || true
 
 ```
 data/
-├── members/          # 会員データディレクトリ
-│   ├── member_dept_a.csv    # 部署Aの会員
-│   ├── member_dept_b.csv    # 部署Bの会員
-│   └── member_dept_c.csv    # 部署Cの会員
+├── members/          # メンバーデータディレクトリ
+│   ├── member_dept_a.csv    # 部署Aのメンバー
+│   ├── member_dept_b.csv    # 部署Bのメンバー
+│   └── member_dept_c.csv    # 部署Cのメンバー
 ├── acquired/         # 習得力量データディレクトリ
 │   ├── acquired_2024.csv    # 2024年のデータ
 │   └── acquired_2025.csv    # 2025年のデータ
@@ -196,9 +196,9 @@ uv run streamlit run streamlit_app.py
 ブラウザが自動的に開き、以下の機能が利用できます：
 
 - ✅ CSVファイルのドラッグ&ドロップアップロード
-- ✅ 既存会員・新規ユーザーへの推薦
+- ✅ 既存メンバー・新規ユーザーへの推薦
 - ✅ ルールベースとML両方の推薦を比較
-- ✅ ロールモデル（参考となる会員）の表示
+- ✅ ロールモデル（参考となるメンバー）の表示
 - ✅ 多様性メトリクスの可視化
 - ✅ 推薦結果のCSVダウンロード
 
@@ -234,7 +234,7 @@ from skillnote_recommendation import RecommendationSystem
 # 推薦システム初期化
 system = RecommendationSystem()
 
-# 特定の会員に推薦
+# 特定のメンバーに推薦
 system.print_recommendations('m48', top_n=10)
 
 # SKILLタイプのみ推薦
@@ -264,7 +264,7 @@ data = loader.load_all_data()
 # ML推薦システム初期化
 ml_recommender = MLRecommender(data)
 
-# 会員m48への推薦
+# メンバーm48への推薦
 recommendations = ml_recommender.recommend(
     member_code='m48',
     top_n=10,
@@ -394,10 +394,10 @@ deactivate
 #### Matrix Factorization (協調フィルタリング)
 
 - **手法**: NMF (Non-negative Matrix Factorization)
-- **入力**: 会員×力量マトリクス（習得=1, 未習得=0）
+- **入力**: メンバー×力量マトリクス（習得=1, 未習得=0）
 - **出力**: 未習得力量に対する予測スコア
 - **潜在因子数**: 20次元（デフォルト）
-- **特徴**: 会員の習得パターンから類似会員の習得傾向を学習
+- **特徴**: メンバーの習得パターンから類似メンバーの習得傾向を学習
 
 #### 多様性再ランキング
 
@@ -471,7 +471,7 @@ uv run skillnote-convert
 
 **原因**: 既に全ての力量を習得している可能性があります。
 
-**対処法**: 他の会員コードで試すか、フィルタを変更してください。
+**対処法**: 他のメンバーコードで試すか、フィルタを変更してください。
 
 ## 実行例
 
@@ -513,7 +513,7 @@ $ uv run skillnote-recommend
 推薦システム初期化
 ================================================================================
 
-  会員数: 228
+  メンバー数: 228
   力量数: 423
   習得記録数: 6002
   初期化完了
@@ -525,7 +525,7 @@ $ uv run skillnote-recommend
 ================================================================================
 力量推薦結果
 ================================================================================
-会員: 黒崎 国彦 (m48)
+メンバー: 黒崎 国彦 (m48)
 役職: 未設定
 職能等級: 3等級
 
@@ -561,7 +561,7 @@ uv pip install -e .
 
 - [Streamlitアプリガイド (docs/STREAMLIT_GUIDE.md)](docs/STREAMLIT_GUIDE.md) - **Webアプリケーション完全ガイド**
   - 起動方法と使い方
-  - 既存会員・新規ユーザーへの推薦
+  - 既存メンバー・新規ユーザーへの推薦
   - ロールモデル機能
   - 多様性メトリクスの見方
   - CSVダウンロード
