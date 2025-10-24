@@ -352,7 +352,27 @@ if st.session_state.data_loaded and st.session_state.model_trained and st.sessio
                     st.dataframe(df_result, use_container_width=True)
 
             except Exception as e:
-                st.error(f"❌ 推薦処理中にエラーが発生しました: {e}")
+                # ColdStartErrorを個別に処理
+                from skillnote_recommendation.ml.exceptions import ColdStartError, MLModelNotTrainedError
+
+                if isinstance(e, ColdStartError):
+                    st.error(f"❌ コールドスタート問題が発生しました")
+                    st.warning(
+                        f"**会員コード `{e.member_code}` の保有力量が登録されていないため、ML推薦ができません。**\n\n"
+                        f"**原因:**\n"
+                        f"- この会員の力量データがMLモデルの学習データに含まれていません。\n\n"
+                        f"**対処方法:**\n"
+                        f"1. この会員の力量データ（習得済み力量）を登録してください\n"
+                        f"2. データ登録後、「MLモデル学習を実行」ボタンをクリックして再学習してください\n"
+                        f"3. 再学習後、再度推薦を実行してください\n\n"
+                        f"**または:**\n"
+                        f"- ルールベース推薦（ML以外）をお試しください（新規会員でも利用可能）"
+                    )
+                elif isinstance(e, MLModelNotTrainedError):
+                    st.error("❌ MLモデルが学習されていません")
+                    st.info("「MLモデル学習を実行」ボタンをクリックしてから、推薦を実行してください。")
+                else:
+                    st.error(f"❌ 推薦処理中にエラーが発生しました: {e}")
 
 
 # =========================================================

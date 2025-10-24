@@ -9,6 +9,7 @@ from typing import List, Optional, Dict
 from skillnote_recommendation.core.models import Recommendation
 from skillnote_recommendation.ml.matrix_factorization import MatrixFactorizationModel
 from skillnote_recommendation.ml.diversity import DiversityReranker
+from skillnote_recommendation.ml.exceptions import ColdStartError, MLModelNotTrainedError
 
 
 class MLRecommender:
@@ -82,18 +83,28 @@ class MLRecommender:
     ) -> List[Recommendation]:
         """特定会員に対する推薦を生成"""
         if not self.mf_model.is_fitted:
-            raise ValueError("モデルが学習されていません。")
+            raise MLModelNotTrainedError()
+
+        # コールドスタート問題のチェック：会員が学習データに存在するか
+        if member_code not in self.mf_model.member_index:
+            raise ColdStartError(member_code)
 
         # 既習得力量を取得
         acquired = self._get_acquired_competences(member_code)
 
         # Top-K推薦
-        candidates = self.mf_model.predict_top_k(
-            member_code=member_code,
-            k=top_n * 3 if use_diversity else top_n,
-            exclude_acquired=True,
-            acquired_competences=acquired
-        )
+        try:
+            candidates = self.mf_model.predict_top_k(
+                member_code=member_code,
+                k=top_n * 3 if use_diversity else top_n,
+                exclude_acquired=True,
+                acquired_competences=acquired
+            )
+        except ValueError as e:
+            # predict_top_kからのValueErrorもColdStartErrorに変換
+            if "学習データに存在しません" in str(e):
+                raise ColdStartError(member_code) from e
+            raise
 
         # 力量情報を付加
         enriched = []
