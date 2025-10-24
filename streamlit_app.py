@@ -1,6 +1,6 @@
 """
 キャリア推薦システム Streamlitアプリ
-（メイン画面アップロード版・RecommendationSystem連携修正版）
+（メイン画面アップロード版・RecommendationSystem連携・ML学習修正版）
 """
 
 import streamlit as st
@@ -12,7 +12,7 @@ from skillnote_recommendation.core.data_loader import DataLoader
 from skillnote_recommendation.core.data_transformer import DataTransformer
 from skillnote_recommendation.core.recommendation_system import RecommendationSystem
 from skillnote_recommendation.core.role_model import RoleModelFinder
-from skillnote_recommendation.ml import MLRecommender
+from skillnote_recommendation.ml.ml_recommender import MLRecommender  # パスは実際の構成に合わせること
 
 
 # =========================================================
@@ -31,9 +31,20 @@ st.markdown("**ルールベース** と **機械学習（ML）** による力量
 # =========================================================
 # セッション初期化
 # =========================================================
-for key in ["data_loaded", "recommendation_system", "ml_recommender", "role_model_finder", "raw_data", "transformed_data"]:
+for key in [
+    "data_loaded",
+    "recommendation_system",
+    "ml_recommender",
+    "role_model_finder",
+    "raw_data",
+    "transformed_data",
+    "temp_dir"
+]:
     if key not in st.session_state:
-        st.session_state[key] = None if key != "data_loaded" else False
+        if key == "data_loaded":
+            st.session_state[key] = False
+        else:
+            st.session_state[key] = None
 
 
 # =========================================================
@@ -49,7 +60,11 @@ def save_uploaded_files(temp_dir, subdir_name, uploaded_files):
     os.makedirs(os.path.join(temp_dir, subdir_name), exist_ok=True)
     for i, file in enumerate(uploaded_files):
         df = load_csv_to_memory(file)
-        path = os.path.join(temp_dir, subdir_name, f"{os.path.splitext(file.name)[0]}_{i+1}.csv")
+        path = os.path.join(
+            temp_dir,
+            subdir_name,
+            f"{os.path.splitext(file.name)[0]}_{i+1}.csv"
+        )
         df.to_csv(path, index=False, encoding="utf-8-sig")
 
 
@@ -72,14 +87,44 @@ st.markdown("各カテゴリごとにCSVファイルをアップロードして�
 col1, col2 = st.columns(2)
 
 with col1:
-    uploaded_members = st.file_uploader("👥 メンバー", type=["csv"], accept_multiple_files=True, key="members")
-    uploaded_skills = st.file_uploader("🧠 力量（スキル）", type=["csv"], accept_multiple_files=True, key="skills")
-    uploaded_education = st.file_uploader("📘 力量（教育）", type=["csv"], accept_multiple_files=True, key="education")
+    uploaded_members = st.file_uploader(
+        "👥 メンバー",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="members"
+    )
+    uploaded_skills = st.file_uploader(
+        "🧠 力量（スキル）",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="skills"
+    )
+    uploaded_education = st.file_uploader(
+        "📘 力量（教育）",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="education"
+    )
 
 with col2:
-    uploaded_license = st.file_uploader("🎓 力量（資格）", type=["csv"], accept_multiple_files=True, key="license")
-    uploaded_categories = st.file_uploader("🗂 力量カテゴリー", type=["csv"], accept_multiple_files=True, key="categories")
-    uploaded_acquired = st.file_uploader("📊 保有力量", type=["csv"], accept_multiple_files=True, key="acquired")
+    uploaded_license = st.file_uploader(
+        "🎓 力量（資格）",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="license"
+    )
+    uploaded_categories = st.file_uploader(
+        "🗂 力量カテゴリー",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="categories"
+    )
+    uploaded_acquired = st.file_uploader(
+        "📊 保有力量",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="acquired"
+    )
 
 st.markdown("---")
 
@@ -103,15 +148,18 @@ if st.button("📥 データ読み込み", type="primary"):
                     "acquired": uploaded_acquired
                 })
 
-                # --- データ読み込み ---
+                # データ読み込み
                 loader = DataLoader(data_dir=temp_dir)
                 raw_data = loader.load_all_data()
 
-                # --- データ変換 ---
+                # データ変換
                 transformer = DataTransformer()
 
                 competence_master = transformer.create_competence_master(raw_data)
-                member_competence, valid_members = transformer.create_member_competence(raw_data, competence_master)
+                member_competence, valid_members = transformer.create_member_competence(
+                    raw_data,
+                    competence_master
+                )
                 skill_matrix = transformer.create_skill_matrix(member_competence)
                 members_clean = transformer.clean_members_data(raw_data)
 
@@ -122,23 +170,23 @@ if st.button("📥 データ読み込み", type="primary"):
                     "members_clean": members_clean
                 }
 
-                # --- 推薦システム初期化（DataFrameを直接渡す） ---
+                # 推薦システム初期化
                 rec_system = RecommendationSystem(
                     output_dir=temp_dir,
                     df_members=members_clean,
                     df_competence_master=competence_master,
                     df_member_competence=member_competence,
-                    df_similarity=None  # 類似度情報なし
+                    df_similarity=None
                 )
 
-                # --- ロールモデル検索 ---
+                # ロールモデル検索
                 role_finder = RoleModelFinder(
                     members=members_clean,
                     member_competence=member_competence,
                     competence_master=competence_master
                 )
 
-                # --- セッション保存 ---
+                # セッション保存
                 st.session_state.raw_data = raw_data
                 st.session_state.transformed_data = transformed_data
                 st.session_state.recommendation_system = rec_system
@@ -164,7 +212,12 @@ if st.session_state.data_loaded:
     if st.button("MLモデル学習を実行"):
         with st.spinner("MLモデルを学習中..."):
             try:
-                ml_recommender = MLRecommender(st.session_state.raw_data)
+                # DataFrameから学習済みのレコメンダを構築
+                ml_recommender = MLRecommender.build(
+                    member_competence=st.session_state.transformed_data["member_competence"],
+                    competence_master=st.session_state.transformed_data["competence_master"]
+                )
+
                 st.session_state.ml_recommender = ml_recommender
                 st.success("✅ MLモデル学習が完了しました。")
             except Exception as e:
@@ -177,13 +230,16 @@ if st.session_state.data_loaded:
 if not st.session_state.data_loaded:
     st.markdown("### 📋 必要なファイル一覧")
     st.markdown("""
-    1. 👥 **メンバー**（member_skillnote.csv など）  
-    2. 🧠 **力量（スキル）**（skill_skillnote.csv など）  
-    3. 📘 **力量（教育）**（education_skillnote.csv など）  
-    4. 🎓 **力量（資格）**（license_skillnote.csv など）  
-    5. 🗂 **力量カテゴリー**（competence_category_skillnote.csv など）  
-    6. 📊 **保有力量**（acquiredCompetenceLevel.csv など）
+    1. 👥 メンバー（member_skillnote.csv など）
+    2. 🧠 力量（スキル）（skill_skillnote.csv など）
+    3. 📘 力量（教育）（education_skillnote.csv など）
+    4. 🎓 力量（資格）（license_skillnote.csv など）
+    5. 🗂 力量カテゴリー（competence_category_skillnote.csv など）
+    6. 📊 保有力量（acquiredCompetenceLevel.csv など）
     """)
 else:
     st.success("✅ データが正常に読み込まれました。")
     st.markdown("次のステップとして推薦処理や分析機能を実行できます。")
+
+st.markdown("---")
+st.caption("🤖 Generated with ChatGPT（MLRecommender.build対応版）")
