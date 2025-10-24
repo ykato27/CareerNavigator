@@ -363,55 +363,53 @@ class ReferencePersonFinder:
         self,
         reference_member_code: str,
         target_member_code: str,
-        recommended_competence_code: Optional[str] = None
+        recommended_competence_code: Optional[str] = None,
+        strict: bool = False
     ) -> bool:
         """
-        参考人物が対象者より上位者かどうかを複数の基準で判定
+        参考人物が対象者より上位者かどうかを判定
 
-        判定基準:
-        1. 総合スキルレベル（合計値）が高い
-        2. 平均スキルレベル（質）が高い、または保有力量数が多い
-        3. 推薦力量を保有している場合、一定レベル以上で保有している
+        判定基準（strictモードによって変化）:
+        - strict=False（デフォルト）: 総合スキルレベルが高ければOK
+        - strict=True: 追加で平均レベルや推薦力量レベルもチェック
 
         Args:
             reference_member_code: 参考人物のコード
             target_member_code: 対象者のコード
             recommended_competence_code: 推薦力量コード（ある場合）
+            strict: 厳格モード（より高い基準を適用）
 
         Returns:
             参考人物が上位者の場合True
         """
-        # 1. 総合スキルレベルの比較（必須条件）
+        # 基本条件: 総合スキルレベルの比較
         target_total = self._get_total_skill_level(target_member_code)
         reference_total = self._get_total_skill_level(reference_member_code)
 
         if reference_total <= target_total:
             return False
 
-        # 2. 平均レベルまたは保有力量数の比較
+        # strictモードでない場合は、総合スキルレベルだけでOK
+        if not strict:
+            return True
+
+        # strictモードの追加チェック
         target_avg = self._get_average_skill_level(target_member_code)
         reference_avg = self._get_average_skill_level(reference_member_code)
-        target_count = self._get_competence_count(target_member_code)
-        reference_count = self._get_competence_count(reference_member_code)
 
-        # 平均レベルが高い、または保有力量数が多い
-        has_quality_or_breadth = (
-            reference_avg >= target_avg * 0.9  # 平均レベルがほぼ同等以上
-            or reference_count > target_count  # または保有力量数が多い
-        )
-
-        if not has_quality_or_breadth:
+        # 平均レベルが極端に低くないこと（80%以上）
+        if reference_avg < target_avg * 0.8:
             return False
 
-        # 3. 推薦力量のレベルチェック（該当する場合）
+        # 推薦力量のレベルチェック（該当する場合、緩和：2.0以上）
         if recommended_competence_code:
             ref_comp_level = self._get_competence_level(
                 reference_member_code, recommended_competence_code
             )
             if ref_comp_level is not None:
-                # 推薦力量を保有している場合、一定レベル以上であることを確認
-                # 正規化レベルが3以上（5段階評価で中級以上）を要求
-                if ref_comp_level < 3.0:
+                # 推薦力量を保有している場合、初級以上であることを確認
+                # 正規化レベルが2.0以上（5段階評価で初級～中級以上）
+                if ref_comp_level < 2.0:
                     return False
 
         return True
