@@ -91,7 +91,7 @@ class MLRecommender:
         self,
         member_code: str,
         top_n: int = 10,
-        competence_type: Optional[str] = None,
+        competence_type: Optional[List[str]] = None,
         category_filter: Optional[str] = None,
         use_diversity: bool = True,
         diversity_strategy: str = "hybrid"
@@ -131,12 +131,22 @@ class MLRecommender:
         # フィルタリング
         filtered = []
         for code, score, info in enriched:
-            if competence_type and info["力量タイプ"] != competence_type:
-                continue
+            # 力量タイプフィルタ（複数選択対応）
+            if competence_type:
+                # competence_typeがリストの場合は、いずれかに一致すればOK
+                if isinstance(competence_type, list):
+                    if info["力量タイプ"] not in competence_type:
+                        continue
+                # 文字列の場合は従来通り（後方互換性）
+                elif info["力量タイプ"] != competence_type:
+                    continue
+
+            # カテゴリフィルタ
             if category_filter:
                 cat = str(info.get("力量カテゴリー名", ""))
                 if category_filter.lower() not in cat.lower():
                     continue
+
             filtered.append((code, score))
 
         # 多様性再ランキング

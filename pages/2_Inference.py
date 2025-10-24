@@ -292,18 +292,22 @@ with col1:
     )
 
 with col2:
-    competence_type = st.selectbox(
-        "力量タイプフィルタ",
-        options=["全て", "SKILL", "EDUCATION", "LICENSE"]
+    st.markdown("**力量タイプフィルタ**")
+    selected_types = st.multiselect(
+        "推薦する力量タイプを選択してください",
+        options=["SKILL", "EDUCATION", "LICENSE"],
+        default=["SKILL", "EDUCATION", "LICENSE"],
+        help="複数選択可能。例: スキルのみ、スキルと教育、など"
     )
-    if competence_type == "全て":
-        competence_type = None
+    # 空リストの場合はNoneに変換（全てを推薦）
+    competence_type = selected_types if selected_types else None
 
 with col3:
     diversity_strategy = st.selectbox(
         "多様性戦略",
         options=["hybrid", "mmr", "category", "type"],
-        index=0
+        index=0,
+        help="推薦結果の多様性を確保する戦略を選択"
     )
 
 
