@@ -28,6 +28,35 @@ from skillnote_recommendation.utils.visualization import (
     create_positioning_plot,
     prepare_positioning_display_dataframe,
 )
+from skillnote_recommendation.core.models import Recommendation
+
+
+# =========================================================
+# ヘルパー関数
+# =========================================================
+
+def convert_hybrid_to_recommendation(hybrid_rec) -> Recommendation:
+    """
+    HybridRecommendationを標準のRecommendationオブジェクトに変換
+
+    Args:
+        hybrid_rec: HybridRecommendationオブジェクト
+
+    Returns:
+        Recommendationオブジェクト
+    """
+    return Recommendation(
+        competence_code=hybrid_rec.competence_code,
+        competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code),
+        competence_type=hybrid_rec.competence_info.get('力量タイプ', 'UNKNOWN'),
+        category=hybrid_rec.competence_info.get('カテゴリー', ''),
+        priority_score=hybrid_rec.score,
+        category_importance=0.5,  # デフォルト値
+        acquisition_ease=0.5,  # デフォルト値
+        popularity=0.5,  # デフォルト値
+        reason=', '.join(hybrid_rec.reasons) if hybrid_rec.reasons else 'グラフベース推薦',
+        reference_persons=[]
+    )
 
 
 # =========================================================
@@ -392,24 +421,7 @@ if st.button("推薦を実行", type="primary"):
                 )
 
                 # HybridRecommendationを標準のRecommendationに変換
-                from skillnote_recommendation.core.models import Recommendation
-                from skillnote_recommendation.core.reference_persons import ReferencePerson
-
-                recs = []
-                for hybrid_rec in hybrid_recs:
-                    rec = Recommendation(
-                        competence_code=hybrid_rec.competence_code,
-                        competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code),
-                        competence_type=hybrid_rec.competence_info.get('力量タイプ', 'UNKNOWN'),
-                        category=hybrid_rec.competence_info.get('カテゴリー', ''),
-                        priority_score=hybrid_rec.score,
-                        category_importance=0.5,  # デフォルト値
-                        acquisition_ease=0.5,  # デフォルト値
-                        popularity=0.5,  # デフォルト値
-                        reason=', '.join(hybrid_rec.reasons) if hybrid_rec.reasons else 'グラフベース推薦',
-                        reference_persons=[]
-                    )
-                    recs.append(rec)
+                recs = [convert_hybrid_to_recommendation(hr) for hr in hybrid_recs]
 
                 # グラフ推薦情報をセッションに保存
                 st.session_state.graph_recommendations = hybrid_recs
