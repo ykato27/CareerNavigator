@@ -635,39 +635,28 @@ with col3:
 # =========================================================
 
 st.markdown("---")
-st.subheader("🔗 グラフベース推薦（実験的機能）")
+st.subheader("🔗 ハイブリッド推薦の重み設定")
 
-use_graph_recommendation = st.checkbox(
-    "グラフベース推薦を使用する",
-    value=False,
-    help="Random Walk with Restart (RWR) とNMFを組み合わせたハイブリッド推薦を使用します。推薦パスも可視化されます。"
-)
+col_g1, col_g2 = st.columns(2)
 
-# デフォルト値を設定
-rwr_weight = 0.5
-show_paths = True
+with col_g1:
+    rwr_weight = st.slider(
+        "グラフベーススコアの重み（ハイブリッド推薦用）",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.5,
+        step=0.1,
+        help="ハイブリッド推薦で使用。0.5 = グラフとNMFを同等に評価、1.0 = グラフのみ、0.0 = NMFのみ"
+    )
 
-if use_graph_recommendation:
-    col_g1, col_g2 = st.columns(2)
+with col_g2:
+    show_paths = st.checkbox(
+        "推薦パスを表示",
+        value=True,
+        help="グラフベース推薦の推薦理由をグラフで可視化します"
+    )
 
-    with col_g1:
-        rwr_weight = st.slider(
-            "グラフベーススコアの重み",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.5,
-            step=0.1,
-            help="0.5 = グラフとNMFを同等に評価、1.0 = グラフのみ、0.0 = NMFのみ"
-        )
-
-    with col_g2:
-        show_paths = st.checkbox(
-            "推薦パスを表示",
-            value=True,
-            help="推薦理由をグラフで可視化します"
-        )
-
-    st.info("💡 グラフベース推薦は、メンバー間の類似性やカテゴリー構造を活用して、より説明可能な推薦を提供します。")
+st.info("💡 推薦実行時に、NMF推薦・グラフベース推薦・ハイブリッド推薦の3つを同時に生成し、タブで比較できます。")
 
 
 # =========================================================
@@ -677,50 +666,62 @@ if use_graph_recommendation:
 st.subheader("🚀 推論実行")
 
 if st.button("推薦を実行", type="primary"):
-    with st.spinner("推薦を生成中..."):
+    with st.spinner("3種類の推薦を生成中（NMF・グラフベース・ハイブリッド）..."):
         try:
-            # グラフベース推薦を使用する場合
-            if use_graph_recommendation:
-                from skillnote_recommendation.graph import HybridGraphRecommender
+            # 3種類の推薦を全て実行
+            from skillnote_recommendation.graph import HybridGraphRecommender
 
-                # HybridGraphRecommenderを初期化
-                if 'knowledge_graph' not in st.session_state:
-                    st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
-                    st.stop()
+            # Knowledge Graphの確認
+            if 'knowledge_graph' not in st.session_state:
+                st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
+                st.stop()
 
-                hybrid_recommender = HybridGraphRecommender(
-                    knowledge_graph=st.session_state.knowledge_graph,
-                    ml_recommender=recommender,
-                    rwr_weight=rwr_weight
-                )
+            # 1. NMF推薦のみ
+            nmf_recs = recommender.recommend(
+                member_code=selected_member_code,
+                top_n=top_n,
+                competence_type=competence_type,
+                category_filter=None,
+                use_diversity=True,
+                diversity_strategy=diversity_strategy
+            )
 
-                # ハイブリッド推薦を実行
-                hybrid_recs = hybrid_recommender.recommend(
-                    member_code=selected_member_code,
-                    top_n=top_n,
-                    competence_type=competence_type,
-                    category_filter=None,
-                    use_diversity=True
-                )
+            # 2. グラフベース推薦（RWR weight = 1.0）
+            graph_recommender = HybridGraphRecommender(
+                knowledge_graph=st.session_state.knowledge_graph,
+                ml_recommender=recommender,
+                rwr_weight=1.0  # グラフのみ
+            )
+            graph_recs = graph_recommender.recommend(
+                member_code=selected_member_code,
+                top_n=top_n,
+                competence_type=competence_type,
+                category_filter=None,
+                use_diversity=True
+            )
 
-                # HybridRecommendationを標準のRecommendationに変換
-                recs = [convert_hybrid_to_recommendation(hr) for hr in hybrid_recs]
+            # 3. ハイブリッド推薦（ユーザー指定のrwr_weight）
+            hybrid_recommender = HybridGraphRecommender(
+                knowledge_graph=st.session_state.knowledge_graph,
+                ml_recommender=recommender,
+                rwr_weight=rwr_weight
+            )
+            hybrid_recs = hybrid_recommender.recommend(
+                member_code=selected_member_code,
+                top_n=top_n,
+                competence_type=competence_type,
+                category_filter=None,
+                use_diversity=True
+            )
 
-                # グラフ推薦情報をセッションに保存
-                st.session_state.graph_recommendations = hybrid_recs
-                st.session_state.using_graph = True
+            # セッション状態に保存
+            st.session_state.nmf_recommendations = nmf_recs
+            st.session_state.graph_recommendations = graph_recs
+            st.session_state.hybrid_recommendations = hybrid_recs
+            st.session_state.last_target_member_code = selected_member_code
 
-            else:
-                # 通常のNMF推薦を実行
-                recs = recommender.recommend(
-                    member_code=selected_member_code,
-                    top_n=top_n,
-                    competence_type=competence_type,
-                    category_filter=None,
-                    use_diversity=True,
-                    diversity_strategy=diversity_strategy
-                )
-                st.session_state.using_graph = False
+            # 主要な推薦結果（ハイブリッド）を使用
+            recs = [convert_hybrid_to_recommendation(hr) for hr in hybrid_recs]
 
             # セッション状態に保存
             if not recs:
@@ -774,48 +775,154 @@ if st.button("推薦を実行", type="primary"):
                 st.session_state.last_recommendations = None
                 st.session_state.last_target_member_code = None
             else:
+                # ハイブリッド推薦をメインとして保存
                 df_result = convert_recommendations_to_dataframe(recs)
                 st.session_state.last_recommendations_df = df_result
                 st.session_state.last_recommendations = recs
-                st.session_state.last_target_member_code = selected_member_code
 
                 # リッチな成功メッセージ
                 st.markdown(f"""
                 <div class="card metric-card-green fade-in" style="text-align: left;">
                     <h2 style="margin: 0;">🎉 推薦完了！</h2>
-                    <p style="font-size: 1.2rem; margin: 0.5rem 0;">{len(df_result)}件の力量を推薦しました</p>
+                    <p style="font-size: 1.2rem; margin: 0.5rem 0;">3種類の推薦手法で{top_n}件ずつ生成しました</p>
                 </div>
                 """, unsafe_allow_html=True)
 
-                # 推薦結果の詳細表示
-                for idx, rec in enumerate(recs, 1):
-                    display_recommendation_details(rec, idx)
+                # 3つのタブで推薦結果を表示
+                st.markdown("---")
+                tab_nmf, tab_graph, tab_hybrid = st.tabs([
+                    "📊 NMF推薦（機械学習ベース）",
+                    "🔗 グラフベース推薦（RWR）",
+                    "🎯 ハイブリッド推薦（NMF + Graph）"
+                ])
 
-                # グラフベース推薦の場合、パス可視化を表示
-                if use_graph_recommendation and show_paths and st.session_state.get('using_graph'):
-                    st.markdown("---")
-                    st.markdown("### 🔗 推薦パスの可視化")
-                    st.info("グラフ構造に基づく推薦パスを表示しています。ノードをホバーすると詳細が表示されます。")
+                # タブ1: NMF推薦
+                with tab_nmf:
+                    st.markdown("""
+                    ### 📊 NMF（Non-negative Matrix Factorization）推薦
+                    **特徴**: 協調フィルタリングベースの機械学習手法。メンバー間の類似性と潜在因子から推薦を生成します。
+                    """)
 
-                    from skillnote_recommendation.graph import RecommendationPathVisualizer
+                    nmf_recs_display = st.session_state.get('nmf_recommendations', [])
+                    if nmf_recs_display:
+                        # 推薦結果の詳細表示
+                        for idx, rec in enumerate(nmf_recs_display, 1):
+                            display_recommendation_details(rec, idx)
 
-                    visualizer = RecommendationPathVisualizer()
-                    graph_recs = st.session_state.get('graph_recommendations', [])
+                        # テーブル表示
+                        st.markdown("---")
+                        st.markdown("#### 📋 一覧表示")
+                        df_nmf = convert_recommendations_to_dataframe(nmf_recs_display)
+                        st.dataframe(df_nmf, use_container_width=True)
+                    else:
+                        st.info("NMF推薦結果がありません")
 
-                    # 詳細説明ジェネレーターを初期化
-                    from skillnote_recommendation.graph.visualization_utils import (
-                        ExplanationGenerator,
-                        format_explanation_for_display,
-                        export_figure_as_html
-                    )
+                # タブ2: グラフベース推薦
+                with tab_graph:
+                    st.markdown("""
+                    ### 🔗 グラフベース推薦（Random Walk with Restart）
+                    **特徴**: 知識グラフ構造を活用した推薦。推薦パスを可視化でき、説明可能性が高いです。
+                    """)
 
-                    category_hierarchy = st.session_state.knowledge_graph.category_hierarchy if st.session_state.get('knowledge_graph') else None
-                    explainer = ExplanationGenerator(category_hierarchy=category_hierarchy)
+                    graph_recs_display = st.session_state.get('graph_recommendations', [])
+                    if graph_recs_display:
+                        # 推薦結果の詳細表示
+                        for idx, hybrid_rec in enumerate(graph_recs_display, 1):
+                            rec = convert_hybrid_to_recommendation(hybrid_rec)
 
-                    # 上位3件のみ可視化
-                    for idx, hybrid_rec in enumerate(graph_recs[:3], 1):
-                        if hybrid_rec.paths:
-                            with st.expander(f"📈 推薦 {idx}: {hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)}", expanded=(idx==1)):
+                            with st.expander(
+                                f"🎯 推薦 {idx}: {rec.competence_name} (グラフスコア: {hybrid_rec.rwr_score:.3f})"
+                            ):
+                                # スコア情報を表示
+                                col_s1, col_s2 = st.columns(2)
+                                with col_s1:
+                                    st.metric("グラフスコア（RWR）", f"{hybrid_rec.rwr_score:.3f}")
+                                with col_s2:
+                                    st.metric("NMFスコア（参考）", f"{hybrid_rec.nmf_score:.3f}")
+
+                                # 推薦理由
+                                st.markdown("### 📋 推薦理由")
+                                st.markdown(rec.reason)
+
+                                # パス可視化
+                                if show_paths and hybrid_rec.paths:
+                                    st.markdown("---")
+                                    st.markdown("### 🔗 推薦パスの可視化")
+
+                                    from skillnote_recommendation.graph import RecommendationPathVisualizer
+                                    from skillnote_recommendation.graph.visualization_utils import (
+                                        ExplanationGenerator,
+                                        format_explanation_for_display,
+                                        export_figure_as_html
+                                    )
+
+                                    visualizer = RecommendationPathVisualizer()
+                                    category_hierarchy = st.session_state.knowledge_graph.category_hierarchy if st.session_state.get('knowledge_graph') else None
+                                    explainer = ExplanationGenerator(category_hierarchy=category_hierarchy)
+
+                                    # 詳細説明を生成
+                                    explanation = explainer.generate_detailed_explanation(
+                                        paths=hybrid_rec.paths,
+                                        rwr_score=hybrid_rec.rwr_score,
+                                        nmf_score=hybrid_rec.nmf_score,
+                                        competence_info=hybrid_rec.competence_info
+                                    )
+
+                                    # グラフ可視化と詳細説明をサブタブで表示
+                                    subtab1, subtab2 = st.tabs(["📊 グラフ可視化", "📝 詳細説明"])
+
+                                    with subtab1:
+                                        member_name = members_df[
+                                            members_df["メンバーコード"] == selected_member_code
+                                        ]["メンバー名"].iloc[0]
+
+                                        fig = visualizer.visualize_recommendation_path(
+                                            paths=hybrid_rec.paths,
+                                            target_member_name=member_name,
+                                            target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)
+                                        )
+                                        st.plotly_chart(fig, use_container_width=True)
+
+                                        # エクスポートボタン
+                                        if st.button(f"📥 HTMLとしてエクスポート", key=f"export_graph_{idx}"):
+                                            try:
+                                                filename = f"graph_path_{hybrid_rec.competence_code}.html"
+                                                filepath = export_figure_as_html(fig, filename)
+                                                st.success(f"✅ エクスポート完了: {filepath}")
+                                            except Exception as e:
+                                                st.error(f"エクスポートエラー: {str(e)}")
+
+                                    with subtab2:
+                                        formatted_explanation = format_explanation_for_display(explanation)
+                                        st.markdown(formatted_explanation)
+
+                        # テーブル表示
+                        st.markdown("---")
+                        st.markdown("#### 📋 一覧表示")
+                        graph_recs_converted = [convert_hybrid_to_recommendation(hr) for hr in graph_recs_display]
+                        df_graph = convert_recommendations_to_dataframe(graph_recs_converted)
+                        st.dataframe(df_graph, use_container_width=True)
+                    else:
+                        st.info("グラフベース推薦結果がありません")
+
+                # タブ3: ハイブリッド推薦
+                with tab_hybrid:
+                    st.markdown(f"""
+                    ### 🎯 ハイブリッド推薦（NMF + Graph）
+                    **特徴**: NMFとグラフベースの両方の強みを組み合わせた推薦。
+
+                    **現在の重み設定**: グラフ {rwr_weight:.1f} / NMF {1-rwr_weight:.1f}
+                    """)
+
+                    hybrid_recs_display = st.session_state.get('hybrid_recommendations', [])
+                    if hybrid_recs_display:
+                        # 推薦結果の詳細表示
+                        for idx, hybrid_rec in enumerate(hybrid_recs_display, 1):
+                            rec = convert_hybrid_to_recommendation(hybrid_rec)
+
+                            with st.expander(
+                                f"🎯 推薦 {idx}: {rec.competence_name} (総合スコア: {hybrid_rec.score:.3f})"
+                            ):
                                 # スコア情報を表示
                                 col_s1, col_s2, col_s3 = st.columns(3)
                                 with col_s1:
@@ -825,50 +932,68 @@ if st.button("推薦を実行", type="primary"):
                                 with col_s3:
                                     st.metric("NMFスコア", f"{hybrid_rec.nmf_score:.3f}")
 
-                                # 詳細説明を生成
-                                explanation = explainer.generate_detailed_explanation(
-                                    paths=hybrid_rec.paths,
-                                    rwr_score=hybrid_rec.rwr_score,
-                                    nmf_score=hybrid_rec.nmf_score,
-                                    competence_info=hybrid_rec.competence_info
-                                )
+                                # 推薦理由
+                                st.markdown("### 📋 推薦理由")
+                                st.markdown(rec.reason)
 
-                                # タブで表示
-                                tab1, tab2 = st.tabs(["📊 グラフ可視化", "📝 詳細説明"])
+                                # パス可視化
+                                if show_paths and hybrid_rec.paths:
+                                    st.markdown("---")
+                                    st.markdown("### 🔗 推薦パスの可視化")
 
-                                with tab1:
-                                    # パスを可視化
-                                    member_name = members_df[
-                                        members_df["メンバーコード"] == selected_member_code
-                                    ]["メンバー名"].iloc[0]
-
-                                    fig = visualizer.visualize_recommendation_path(
-                                        paths=hybrid_rec.paths,
-                                        target_member_name=member_name,
-                                        target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)
+                                    from skillnote_recommendation.graph import RecommendationPathVisualizer
+                                    from skillnote_recommendation.graph.visualization_utils import (
+                                        ExplanationGenerator,
+                                        format_explanation_for_display,
+                                        export_figure_as_html
                                     )
-                                    st.plotly_chart(fig, use_container_width=True)
 
-                                    # エクスポートボタン
-                                    col_e1, col_e2 = st.columns(2)
-                                    with col_e1:
-                                        if st.button(f"📥 HTMLとしてエクスポート", key=f"export_html_{idx}"):
+                                    visualizer = RecommendationPathVisualizer()
+                                    category_hierarchy = st.session_state.knowledge_graph.category_hierarchy if st.session_state.get('knowledge_graph') else None
+                                    explainer = ExplanationGenerator(category_hierarchy=category_hierarchy)
+
+                                    # 詳細説明を生成
+                                    explanation = explainer.generate_detailed_explanation(
+                                        paths=hybrid_rec.paths,
+                                        rwr_score=hybrid_rec.rwr_score,
+                                        nmf_score=hybrid_rec.nmf_score,
+                                        competence_info=hybrid_rec.competence_info
+                                    )
+
+                                    # グラフ可視化と詳細説明をサブタブで表示
+                                    subtab1, subtab2 = st.tabs(["📊 グラフ可視化", "📝 詳細説明"])
+
+                                    with subtab1:
+                                        member_name = members_df[
+                                            members_df["メンバーコード"] == selected_member_code
+                                        ]["メンバー名"].iloc[0]
+
+                                        fig = visualizer.visualize_recommendation_path(
+                                            paths=hybrid_rec.paths,
+                                            target_member_name=member_name,
+                                            target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)
+                                        )
+                                        st.plotly_chart(fig, use_container_width=True)
+
+                                        # エクスポートボタン
+                                        if st.button(f"📥 HTMLとしてエクスポート", key=f"export_hybrid_{idx}"):
                                             try:
-                                                filename = f"recommendation_path_{hybrid_rec.competence_code}.html"
+                                                filename = f"hybrid_path_{hybrid_rec.competence_code}.html"
                                                 filepath = export_figure_as_html(fig, filename)
                                                 st.success(f"✅ エクスポート完了: {filepath}")
                                             except Exception as e:
                                                 st.error(f"エクスポートエラー: {str(e)}")
 
-                                with tab2:
-                                    # 詳細説明を表示
-                                    formatted_explanation = format_explanation_for_display(explanation)
-                                    st.markdown(formatted_explanation)
+                                    with subtab2:
+                                        formatted_explanation = format_explanation_for_display(explanation)
+                                        st.markdown(formatted_explanation)
 
-                # テーブル表示（ダウンロード用）
-                st.markdown("---")
-                st.markdown("### 📊 推薦結果一覧")
-                st.dataframe(df_result, use_container_width=True)
+                        # テーブル表示
+                        st.markdown("---")
+                        st.markdown("#### 📋 一覧表示")
+                        st.dataframe(df_result, use_container_width=True)
+                    else:
+                        st.info("ハイブリッド推薦結果がありません")
 
         except Exception as e:
             # エラー処理
