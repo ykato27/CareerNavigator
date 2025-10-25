@@ -23,7 +23,8 @@ class RandomWalkRecommender:
                  knowledge_graph: CompetenceKnowledgeGraph,
                  restart_prob: float = 0.15,
                  max_iter: int = 100,
-                 tolerance: float = 1e-6):
+                 tolerance: float = 1e-6,
+                 enable_cache: bool = True):
         """
         Args:
             knowledge_graph: ナレッジグラフ
@@ -31,12 +32,17 @@ class RandomWalkRecommender:
                          0.15 = スタート地点に15%の確率で戻る
             max_iter: 最大反復回数
             tolerance: 収束判定の閾値
+            enable_cache: PageRank結果のキャッシュを有効にするか
         """
         self.graph = knowledge_graph.G
         self.kg = knowledge_graph
         self.restart_prob = restart_prob
         self.max_iter = max_iter
         self.tolerance = tolerance
+        self.enable_cache = enable_cache
+
+        # Plan 3: PageRank結果のキャッシュ
+        self._pagerank_cache: Dict[str, Dict[str, float]] = {}
 
     def recommend(self,
                   member_code: str,
@@ -103,7 +109,7 @@ class RandomWalkRecommender:
 
     def _random_walk_with_restart(self, start_node: str) -> Dict[str, float]:
         """
-        RWRアルゴリズムの実装（NetworkX PageRank最適化版）
+        RWRアルゴリズムの実装（NetworkX PageRank最適化版 + キャッシング）
 
         Args:
             start_node: 開始ノード（メンバーノード）
@@ -111,6 +117,11 @@ class RandomWalkRecommender:
         Returns:
             {ノードID: 訪問確率スコア}
         """
+        # Plan 3: キャッシュチェック
+        if self.enable_cache and start_node in self._pagerank_cache:
+            print(f"    キャッシュヒット: {start_node}")
+            return self._pagerank_cache[start_node]
+
         # NetworkXのPersonalized PageRankを使用（高速化）
         # alpha = 1 - restart_prob (PageRankのダンピング係数)
         # personalization = {start_node: 1.0} (RWRの開始ノード)
@@ -129,6 +140,10 @@ class RandomWalkRecommender:
             if score > 1e-10
         }
 
+        # Plan 3: キャッシュに保存
+        if self.enable_cache:
+            self._pagerank_cache[start_node] = filtered_scores
+
         print(f"    完了: NetworkX PageRank使用（高速化版）")
 
         return filtered_scores
@@ -136,13 +151,25 @@ class RandomWalkRecommender:
     # _build_transition_matrix メソッドは削除
     # NetworkXのPageRankが内部で効率的に遷移行列を処理するため不要になりました
 
+    def clear_cache(self):
+        """PageRankキャッシュをクリア"""
+        self._pagerank_cache.clear()
+        print("PageRankキャッシュをクリアしました")
+
+    def get_cache_stats(self) -> Dict[str, int]:
+        """キャッシュ統計を取得"""
+        return {
+            'cached_members': len(self._pagerank_cache),
+            'total_nodes': len(self.graph.nodes())
+        }
+
     def _extract_paths(self,
                        source: str,
                        target: str,
                        max_paths: int = 3,
                        max_length: int = 5) -> List[List[str]]:
         """
-        推薦パスを抽出（重要！可視化に使用）
+        推薦パスを抽出（Plan 4: k-shortest paths最適化版）
 
         Args:
             source: 開始ノード（メンバー）
@@ -154,27 +181,26 @@ class RandomWalkRecommender:
             [[node1, node2, node3], ...] のパスリスト
         """
         try:
-            # 単純パス列挙（長さ制限付き）
-            all_paths = nx.all_simple_paths(
+            # Plan 4: k-shortest paths アルゴリズム（短い順に生成）
+            # all_simple_pathsよりも効率的（全パス列挙を避ける）
+            path_generator = nx.shortest_simple_paths(
                 self.graph,
                 source,
                 target,
-                cutoff=max_length
+                weight=None  # ホップ数で最短（重み無視）
             )
 
-            # パスをスコアリング（エッジ重みの積）
-            scored_paths = []
-            for path in all_paths:
-                score = self._score_path(path)
-                scored_paths.append((path, score))
+            # 最初のmax_paths個のパスのみ取得（長さ制限付き）
+            paths = []
+            for path in path_generator:
+                if len(path) - 1 <= max_length:  # パス長チェック
+                    paths.append(path)
+                    if len(paths) >= max_paths:
+                        break
 
-            # スコア順にソート
-            scored_paths.sort(key=lambda x: x[1], reverse=True)
+            return paths
 
-            # Top-N パスを返す
-            return [path for path, score in scored_paths[:max_paths]]
-
-        except nx.NetworkXNoPath:
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
             return []
 
     def _score_path(self, path: List[str]) -> float:
