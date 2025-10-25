@@ -398,13 +398,16 @@ if st.button("推薦を実行", type="primary"):
                 recs = []
                 for hybrid_rec in hybrid_recs:
                     rec = Recommendation(
-                        力量コード=hybrid_rec.competence_code,
-                        力量名=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code),
-                        力量タイプ=hybrid_rec.competence_info.get('力量タイプ', 'UNKNOWN'),
-                        カテゴリー=hybrid_rec.competence_info.get('カテゴリー', None),
-                        概要=hybrid_rec.competence_info.get('概要', None),
-                        スコア=hybrid_rec.score,
-                        参考人物=[]  # 参考人物は後で追加可能
+                        competence_code=hybrid_rec.competence_code,
+                        competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code),
+                        competence_type=hybrid_rec.competence_info.get('力量タイプ', 'UNKNOWN'),
+                        category=hybrid_rec.competence_info.get('カテゴリー', ''),
+                        priority_score=hybrid_rec.score,
+                        category_importance=0.5,  # デフォルト値
+                        acquisition_ease=0.5,  # デフォルト値
+                        popularity=0.5,  # デフォルト値
+                        reason=', '.join(hybrid_rec.reasons) if hybrid_rec.reasons else 'グラフベース推薦',
+                        reference_persons=[]
                     )
                     recs.append(rec)
 
