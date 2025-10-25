@@ -69,8 +69,167 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🎯 推論実行")
-st.markdown("**ステップ3**: 学習済みMLモデルを使用して、メンバーへの力量推薦を実行します。")
+# カスタムCSSでリッチなUIを実現
+st.markdown("""
+<style>
+    /* グローバルスタイル */
+    .main {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    }
+
+    /* カードスタイル */
+    .card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin: 1rem 0;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    /* グラデーションヘッダー */
+    .gradient-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    /* メトリクスカード */
+    .metric-card {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 10px;
+        text-align: center;
+        margin: 0.5rem 0;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .metric-card-blue {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+
+    .metric-card-green {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    }
+
+    .metric-card-orange {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+    }
+
+    .metric-card-purple {
+        background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+    }
+
+    /* バッジ */
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: bold;
+        margin: 0.25rem;
+    }
+
+    .badge-success {
+        background: #28a745;
+        color: white;
+    }
+
+    .badge-info {
+        background: #17a2b8;
+        color: white;
+    }
+
+    .badge-warning {
+        background: #ffc107;
+        color: black;
+    }
+
+    .badge-danger {
+        background: #dc3545;
+        color: white;
+    }
+
+    /* アニメーション */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-in {
+        animation: fadeIn 0.6s ease-out;
+    }
+
+    /* タイトル装飾 */
+    .title-icon {
+        font-size: 2.5rem;
+        margin-right: 1rem;
+        vertical-align: middle;
+    }
+
+    /* プログレスバー */
+    .progress-bar {
+        background: #e9ecef;
+        border-radius: 10px;
+        height: 20px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        transition: width 0.6s ease;
+    }
+
+    /* ボタンホバー効果 */
+    .stButton>button {
+        border-radius: 10px;
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }
+
+    .stButton>button:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    /* タブスタイル */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 10px 10px 0 0;
+        padding: 10px 20px;
+        font-weight: bold;
+    }
+
+    /* セクション区切り */
+    .section-divider {
+        height: 3px;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+        margin: 2rem 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# リッチなヘッダー
+st.markdown("""
+<div class="gradient-header fade-in">
+    <h1><span class="title-icon">🎯</span>推論実行</h1>
+    <p style="font-size: 1.1rem; margin: 0;">学習済みMLモデルを使用して、メンバーへの力量推薦を実行します</p>
+</div>
+""", unsafe_allow_html=True)
 
 
 # =========================================================
@@ -203,12 +362,21 @@ def display_positioning_maps(
         target_code: 対象メンバーコード
         reference_codes: 参考人物コードのリスト
     """
-    st.markdown("---")
-    st.subheader("🗺️ メンバーポジショニングマップ")
-    st.markdown(
-        "あなたと参考人物が、全メンバーの中でどの位置にいるかを可視化します。\n"
-        "**赤色**があなた、**青色**が参考人物、**灰色**がその他のメンバーです。"
-    )
+    # リッチなセクション区切り
+    st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+
+    # カードベースのヘッダー
+    st.markdown("""
+    <div class="card fade-in">
+        <h2>🗺️ メンバーポジショニングマップ</h2>
+        <p>あなたと参考人物が、全メンバーの中でどの位置にいるかを可視化します</p>
+        <div>
+            <span class="badge badge-danger">あなた</span>
+            <span class="badge badge-info">参考人物</span>
+            <span class="badge">その他のメンバー</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # タブを作成
     tab1, tab2, tab3, tab4 = st.tabs([
@@ -496,7 +664,13 @@ if st.button("推薦を実行", type="primary"):
                 st.session_state.last_recommendations = recs
                 st.session_state.last_target_member_code = selected_member_code
 
-                st.success(f"{len(df_result)}件の推薦が生成されました。")
+                # リッチな成功メッセージ
+                st.markdown(f"""
+                <div class="card metric-card-green fade-in" style="text-align: left;">
+                    <h2 style="margin: 0;">🎉 推薦完了！</h2>
+                    <p style="font-size: 1.2rem; margin: 0.5rem 0;">{len(df_result)}件の力量を推薦しました</p>
+                </div>
+                """, unsafe_allow_html=True)
 
                 # 推薦結果の詳細表示
                 for idx, rec in enumerate(recs, 1):
@@ -615,8 +789,16 @@ if st.button("推薦を実行", type="primary"):
 # =========================================================
 
 if st.session_state.get("last_recommendations_df") is not None:
-    st.markdown("---")
-    st.subheader("💾 推薦結果のダウンロード")
+    # セクション区切り
+    st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+
+    # CSVダウンロード（カードスタイル）
+    st.markdown("""
+    <div class="card fade-in">
+        <h2>💾 推薦結果のダウンロード</h2>
+        <p>推薦結果をCSV形式でダウンロードして、さらなる分析や共有に活用できます</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     csv_buffer = StringIO()
     st.session_state.last_recommendations_df.to_csv(
@@ -654,9 +836,14 @@ if st.session_state.get("last_recommendations_df") is not None:
         )
 
         # キャリアパス推薦
-        st.markdown("---")
-        st.subheader("🎯 キャリアパス推薦")
-        st.markdown("目標とするメンバーを選択して、そのメンバーに近づくための学習パスを確認できます。")
+        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class="card fade-in">
+            <h2>🎯 キャリアパス推薦</h2>
+            <p>目標とするメンバーを選択して、そのメンバーに近づくための学習パスを確認できます</p>
+        </div>
+        """, unsafe_allow_html=True)
 
         # 目標メンバー選択
         members_df = td["members_clean"]
@@ -751,27 +938,29 @@ if st.session_state.get("last_recommendations_df") is not None:
                         gauge_fig = visualizer.create_progress_gauge(career_path.estimated_completion_rate)
                         st.plotly_chart(gauge_fig, use_container_width=True)
 
-                        # 詳細情報
+                        # 詳細情報（リッチなメトリクスカード）
                         col_a, col_b, col_c = st.columns(3)
                         with col_a:
-                            st.metric(
-                                "共通力量",
-                                f"{len(career_path.common_competences)}個",
-                                delta=None
-                            )
+                            st.markdown(f"""
+                            <div class="metric-card metric-card-green fade-in">
+                                <h3 style="margin: 0;">✅ 共通力量</h3>
+                                <h1 style="margin: 0.5rem 0;">{len(career_path.common_competences)}<span style="font-size: 1.5rem;">個</span></h1>
+                            </div>
+                            """, unsafe_allow_html=True)
                         with col_b:
-                            st.metric(
-                                "不足力量",
-                                f"{len(career_path.missing_competences)}個",
-                                delta=f"-{len(career_path.missing_competences)}",
-                                delta_color="inverse"
-                            )
+                            st.markdown(f"""
+                            <div class="metric-card metric-card-orange fade-in">
+                                <h3 style="margin: 0;">📚 不足力量</h3>
+                                <h1 style="margin: 0.5rem 0;">{len(career_path.missing_competences)}<span style="font-size: 1.5rem;">個</span></h1>
+                            </div>
+                            """, unsafe_allow_html=True)
                         with col_c:
-                            st.metric(
-                                "ギャップスコア",
-                                f"{career_path.gap_score:.2f}",
-                                delta=None
-                            )
+                            st.markdown(f"""
+                            <div class="metric-card metric-card-blue fade-in">
+                                <h3 style="margin: 0;">📊 ギャップスコア</h3>
+                                <h1 style="margin: 0.5rem 0;">{career_path.gap_score:.2f}</h1>
+                            </div>
+                            """, unsafe_allow_html=True)
 
                     with tab4:
                         # カテゴリー別分析を表示
