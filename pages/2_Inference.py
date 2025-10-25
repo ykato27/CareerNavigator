@@ -652,3 +652,133 @@ if st.session_state.get("last_recommendations_df") is not None:
             st.session_state.last_target_member_code,
             reference_codes
         )
+
+        # キャリアパス推薦
+        st.markdown("---")
+        st.subheader("🎯 キャリアパス推薦")
+        st.markdown("目標とするメンバーを選択して、そのメンバーに近づくための学習パスを確認できます。")
+
+        # 目標メンバー選択
+        members_df = td["members_clean"]
+        target_member_options = members_df["メンバー名"].tolist()
+
+        # 現在のメンバーを除外
+        current_member_name = members_df[
+            members_df["メンバーコード"] == st.session_state.last_target_member_code
+        ]["メンバー名"].iloc[0] if len(members_df[
+            members_df["メンバーコード"] == st.session_state.last_target_member_code
+        ]) > 0 else None
+
+        if current_member_name in target_member_options:
+            target_member_options.remove(current_member_name)
+
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            target_member_name = st.selectbox(
+                "目標メンバーを選択",
+                options=target_member_options,
+                key="career_path_target_member"
+            )
+
+        with col2:
+            analyze_button = st.button(
+                "📊 分析実行",
+                type="primary",
+                key="analyze_career_path"
+            )
+
+        if analyze_button and target_member_name:
+            with st.spinner("キャリアパスを分析中..."):
+                try:
+                    from skillnote_recommendation.graph import (
+                        CareerGapAnalyzer,
+                        LearningPathGenerator,
+                        CareerPathVisualizer,
+                        format_career_path_summary
+                    )
+
+                    # 目標メンバーコードを取得
+                    target_member_code = members_df[
+                        members_df["メンバー名"] == target_member_name
+                    ]["メンバーコード"].iloc[0]
+
+                    # ギャップ分析
+                    gap_analyzer = CareerGapAnalyzer(
+                        knowledge_graph=st.session_state.knowledge_graph,
+                        member_competence_df=td["member_competence"],
+                        competence_master_df=td["competence_master"]
+                    )
+
+                    gap_analysis = gap_analyzer.analyze_gap(
+                        source_member_code=st.session_state.last_target_member_code,
+                        target_member_code=target_member_code
+                    )
+
+                    # 学習パス生成
+                    path_generator = LearningPathGenerator(
+                        knowledge_graph=st.session_state.knowledge_graph,
+                        category_hierarchy=st.session_state.knowledge_graph.category_hierarchy
+                    )
+
+                    career_path = path_generator.generate_learning_path(
+                        gap_analysis=gap_analysis,
+                        max_per_phase=5
+                    )
+
+                    # 可視化
+                    visualizer = CareerPathVisualizer()
+
+                    # タブで表示
+                    tab1, tab2, tab3, tab4 = st.tabs([
+                        "📊 サマリー",
+                        "📅 ロードマップ",
+                        "🎯 到達度",
+                        "📈 カテゴリー分析"
+                    ])
+
+                    with tab1:
+                        # サマリーを表示
+                        summary = format_career_path_summary(career_path, target_member_name)
+                        st.markdown(summary)
+
+                    with tab2:
+                        # ロードマップを表示
+                        roadmap_fig = visualizer.create_roadmap(career_path, target_member_name)
+                        st.plotly_chart(roadmap_fig, use_container_width=True)
+
+                    with tab3:
+                        # 到達度ゲージを表示
+                        gauge_fig = visualizer.create_progress_gauge(career_path.estimated_completion_rate)
+                        st.plotly_chart(gauge_fig, use_container_width=True)
+
+                        # 詳細情報
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            st.metric(
+                                "共通力量",
+                                f"{len(career_path.common_competences)}個",
+                                delta=None
+                            )
+                        with col_b:
+                            st.metric(
+                                "不足力量",
+                                f"{len(career_path.missing_competences)}個",
+                                delta=f"-{len(career_path.missing_competences)}",
+                                delta_color="inverse"
+                            )
+                        with col_c:
+                            st.metric(
+                                "ギャップスコア",
+                                f"{career_path.gap_score:.2f}",
+                                delta=None
+                            )
+
+                    with tab4:
+                        # カテゴリー別分析を表示
+                        category_fig = visualizer.create_category_breakdown(career_path)
+                        st.plotly_chart(category_fig, use_container_width=True)
+
+                except Exception as e:
+                    st.error(f"❌ キャリアパス分析エラー: {str(e)}")
+                    import traceback
+                    st.text(traceback.format_exc())
