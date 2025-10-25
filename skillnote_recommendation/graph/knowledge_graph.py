@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Set, Optional
 from sklearn.metrics.pairwise import cosine_similarity
+from .category_hierarchy import CategoryHierarchy
 
 
 class CompetenceKnowledgeGraph:
@@ -24,12 +25,14 @@ class CompetenceKnowledgeGraph:
         - acquired: メンバー → 力量（習得関係）
         - belongs_to: 力量 → カテゴリー（所属関係）
         - similar: メンバー → メンバー（類似関係）
+        - parent_of: カテゴリー → カテゴリー（親子関係）NEW!
     """
 
     def __init__(self,
                  member_competence: pd.DataFrame,
                  member_master: pd.DataFrame,
-                 competence_master: pd.DataFrame):
+                 competence_master: pd.DataFrame,
+                 use_category_hierarchy: bool = True):
         """
         Args:
             member_competence: メンバー保有力量データ
@@ -39,11 +42,19 @@ class CompetenceKnowledgeGraph:
             competence_master: 力量マスタ
                 必須列: 力量コード, 力量名, 力量タイプ
                 任意列: 力量カテゴリー名
+            use_category_hierarchy: カテゴリー階層を使用するか
         """
         self.G = nx.Graph()
         self.member_competence_df = member_competence
         self.member_master_df = member_master
         self.competence_master_df = competence_master
+        self.use_category_hierarchy = use_category_hierarchy
+
+        # カテゴリー階層を構築
+        if use_category_hierarchy:
+            self.category_hierarchy = CategoryHierarchy(competence_master)
+        else:
+            self.category_hierarchy = None
 
         # グラフ構築
         print("\n" + "=" * 80)
@@ -57,28 +68,35 @@ class CompetenceKnowledgeGraph:
 
     def _build_graph(self):
         """グラフ構築のメインロジック"""
+        total_steps = 7 if self.use_category_hierarchy else 6
+
         # 1. メンバーノード追加
-        print("\n[1/6] メンバーノードを追加中...")
+        print(f"\n[1/{total_steps}] メンバーノードを追加中...")
         self._add_member_nodes()
 
         # 2. 力量ノード追加
-        print("[2/6] 力量ノードを追加中...")
+        print(f"[2/{total_steps}] 力量ノードを追加中...")
         self._add_competence_nodes()
 
         # 3. カテゴリーノード追加
-        print("[3/6] カテゴリーノードを追加中...")
+        print(f"[3/{total_steps}] カテゴリーノードを追加中...")
         self._add_category_nodes()
 
         # 4. メンバー-力量エッジ（習得関係）
-        print("[4/6] メンバー-力量エッジを追加中...")
+        print(f"[4/{total_steps}] メンバー-力量エッジを追加中...")
         self._add_member_competence_edges()
 
         # 5. 力量-カテゴリーエッジ（所属関係）
-        print("[5/6] 力量-カテゴリーエッジを追加中...")
+        print(f"[5/{total_steps}] 力量-カテゴリーエッジを追加中...")
         self._add_competence_category_edges()
 
-        # 6. メンバー間類似度エッジ
-        print("[6/6] メンバー間類似度エッジを追加中...")
+        # 6. カテゴリー階層エッジ（親子関係）NEW!
+        if self.use_category_hierarchy:
+            print(f"[6/{total_steps}] カテゴリー階層エッジを追加中...")
+            self._add_category_hierarchy_edges()
+
+        # 7. メンバー間類似度エッジ
+        print(f"[{total_steps}/{total_steps}] メンバー間類似度エッジを追加中...")
         self._add_member_similarity_edges()
 
     def _add_member_nodes(self):
@@ -163,6 +181,34 @@ class CompetenceKnowledgeGraph:
                     )
                     edge_count += 1
         print(f"  追加: {edge_count}本の力量-カテゴリーエッジ")
+
+    def _add_category_hierarchy_edges(self):
+        """カテゴリー階層エッジを追加（親子関係）"""
+        if self.category_hierarchy is None:
+            return
+
+        edge_count = 0
+
+        # 全てのカテゴリーに対して親子関係のエッジを追加
+        for category in self.category_hierarchy.hierarchy.keys():
+            parent = self.category_hierarchy.get_parent(category)
+
+            if parent is not None:
+                category_node = f"category_{category}"
+                parent_node = f"category_{parent}"
+
+                # 両方のノードが存在する場合のみエッジを追加
+                if self.G.has_node(category_node) and self.G.has_node(parent_node):
+                    self.G.add_edge(
+                        parent_node,
+                        category_node,
+                        edge_type="parent_of",
+                        weight=1.0,
+                        relation="parent-child"
+                    )
+                    edge_count += 1
+
+        print(f"  追加: {edge_count}本のカテゴリー階層エッジ")
 
     def _add_member_similarity_edges(self, threshold: float = 0.3, top_k: int = 5):
         """メンバー間の類似度エッジを追加
