@@ -117,7 +117,7 @@ class HybridGraphRecommender:
             category_filter=category_filter,
             use_diversity=use_diversity
         )
-        nmf_dict = {rec.competence_code: rec.score for rec in nmf_results}
+        nmf_dict = {rec.competence_code: rec.priority_score for rec in nmf_results}
 
         # 3. スコアを正規化して融合
         print("\n[3/4] スコア融合...")
@@ -224,7 +224,7 @@ class HybridGraphRecommender:
                 '力量名': rec.competence_name,
                 '力量タイプ': rec.competence_type,
                 'カテゴリー': rec.category,
-                '概要': rec.description,
+                '概要': None,  # Recommendationクラスにdescriptionフィールドはない
             }
             for rec in nmf_results
         }
