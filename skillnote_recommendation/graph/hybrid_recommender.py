@@ -117,7 +117,7 @@ class HybridGraphRecommender:
             category_filter=category_filter,
             use_diversity=use_diversity
         )
-        nmf_dict = {rec.力量コード: rec.スコア for rec in nmf_results}
+        nmf_dict = {rec.competence_code: rec.score for rec in nmf_results}
 
         # 3. スコアを正規化して融合
         print("\n[3/4] スコア融合...")
@@ -220,11 +220,11 @@ class HybridGraphRecommender:
         """
         # NMF結果から力量情報を取得
         competence_info_map = {
-            rec.力量コード: {
-                '力量名': rec.力量名,
-                '力量タイプ': rec.力量タイプ,
-                'カテゴリー': rec.カテゴリー,
-                '概要': rec.概要,
+            rec.competence_code: {
+                '力量名': rec.competence_name,
+                '力量タイプ': rec.competence_type,
+                'カテゴリー': rec.category,
+                '概要': rec.description,
             }
             for rec in nmf_results
         }
