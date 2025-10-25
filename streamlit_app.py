@@ -186,10 +186,21 @@ if all_uploaded:
                 # DataTransformerで変換済みデータを構築
                 transformed_data = build_transformed_data(raw_data)
 
+                # Knowledge Graphを構築
+                from skillnote_recommendation.graph import CompetenceKnowledgeGraph
+
+                with st.spinner("Knowledge Graphを構築中..."):
+                    knowledge_graph = CompetenceKnowledgeGraph(
+                        member_competence=transformed_data['member_competence'],
+                        member_master=transformed_data['members_clean'],
+                        competence_master=transformed_data['competence_master']
+                    )
+
                 # セッションに保存
                 st.session_state.temp_dir = temp_dir
                 st.session_state.raw_data = raw_data
                 st.session_state.transformed_data = transformed_data
+                st.session_state.knowledge_graph = knowledge_graph
                 st.session_state.data_loaded = True
 
                 # モデル学習状態をリセット

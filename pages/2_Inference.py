@@ -318,6 +318,45 @@ with col3:
         help="推薦結果の多様性を確保する戦略を選択"
     )
 
+# =========================================================
+# グラフベース推薦設定
+# =========================================================
+
+st.markdown("---")
+st.subheader("🔗 グラフベース推薦（実験的機能）")
+
+use_graph_recommendation = st.checkbox(
+    "グラフベース推薦を使用する",
+    value=False,
+    help="Random Walk with Restart (RWR) とNMFを組み合わせたハイブリッド推薦を使用します。推薦パスも可視化されます。"
+)
+
+# デフォルト値を設定
+rwr_weight = 0.5
+show_paths = True
+
+if use_graph_recommendation:
+    col_g1, col_g2 = st.columns(2)
+
+    with col_g1:
+        rwr_weight = st.slider(
+            "グラフベーススコアの重み",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.5,
+            step=0.1,
+            help="0.5 = グラフとNMFを同等に評価、1.0 = グラフのみ、0.0 = NMFのみ"
+        )
+
+    with col_g2:
+        show_paths = st.checkbox(
+            "推薦パスを表示",
+            value=True,
+            help="推薦理由をグラフで可視化します"
+        )
+
+    st.info("💡 グラフベース推薦は、メンバー間の類似性やカテゴリー構造を活用して、より説明可能な推薦を提供します。")
+
 
 # =========================================================
 # 推論実行
@@ -328,15 +367,62 @@ st.subheader("🚀 推論実行")
 if st.button("推薦を実行", type="primary"):
     with st.spinner("推薦を生成中..."):
         try:
-            # 推薦を実行
-            recs = recommender.recommend(
-                member_code=selected_member_code,
-                top_n=top_n,
-                competence_type=competence_type,
-                category_filter=None,
-                use_diversity=True,
-                diversity_strategy=diversity_strategy
-            )
+            # グラフベース推薦を使用する場合
+            if use_graph_recommendation:
+                from skillnote_recommendation.graph import HybridGraphRecommender
+
+                # HybridGraphRecommenderを初期化
+                if 'knowledge_graph' not in st.session_state:
+                    st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
+                    st.stop()
+
+                hybrid_recommender = HybridGraphRecommender(
+                    knowledge_graph=st.session_state.knowledge_graph,
+                    ml_recommender=recommender,
+                    rwr_weight=rwr_weight
+                )
+
+                # ハイブリッド推薦を実行
+                hybrid_recs = hybrid_recommender.recommend(
+                    member_code=selected_member_code,
+                    top_n=top_n,
+                    competence_type=competence_type,
+                    category_filter=None,
+                    use_diversity=True
+                )
+
+                # HybridRecommendationを標準のRecommendationに変換
+                from skillnote_recommendation.core.models import Recommendation
+                from skillnote_recommendation.core.reference_persons import ReferencePerson
+
+                recs = []
+                for hybrid_rec in hybrid_recs:
+                    rec = Recommendation(
+                        力量コード=hybrid_rec.competence_code,
+                        力量名=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code),
+                        力量タイプ=hybrid_rec.competence_info.get('力量タイプ', 'UNKNOWN'),
+                        カテゴリー=hybrid_rec.competence_info.get('カテゴリー', None),
+                        概要=hybrid_rec.competence_info.get('概要', None),
+                        スコア=hybrid_rec.score,
+                        参考人物=[]  # 参考人物は後で追加可能
+                    )
+                    recs.append(rec)
+
+                # グラフ推薦情報をセッションに保存
+                st.session_state.graph_recommendations = hybrid_recs
+                st.session_state.using_graph = True
+
+            else:
+                # 通常のNMF推薦を実行
+                recs = recommender.recommend(
+                    member_code=selected_member_code,
+                    top_n=top_n,
+                    competence_type=competence_type,
+                    category_filter=None,
+                    use_diversity=True,
+                    diversity_strategy=diversity_strategy
+                )
+                st.session_state.using_graph = False
 
             # セッション状態に保存
             if not recs:
@@ -400,6 +486,47 @@ if st.button("推薦を実行", type="primary"):
                 # 推薦結果の詳細表示
                 for idx, rec in enumerate(recs, 1):
                     display_recommendation_details(rec, idx)
+
+                # グラフベース推薦の場合、パス可視化を表示
+                if use_graph_recommendation and show_paths and st.session_state.get('using_graph'):
+                    st.markdown("---")
+                    st.markdown("### 🔗 推薦パスの可視化")
+                    st.info("グラフ構造に基づく推薦パスを表示しています。ノードをホバーすると詳細が表示されます。")
+
+                    from skillnote_recommendation.graph import RecommendationPathVisualizer
+
+                    visualizer = RecommendationPathVisualizer()
+                    graph_recs = st.session_state.get('graph_recommendations', [])
+
+                    # 上位3件のみ可視化
+                    for idx, hybrid_rec in enumerate(graph_recs[:3], 1):
+                        if hybrid_rec.paths:
+                            with st.expander(f"📈 推薦 {idx}: {hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)}", expanded=(idx==1)):
+                                # スコア情報を表示
+                                col_s1, col_s2, col_s3 = st.columns(3)
+                                with col_s1:
+                                    st.metric("総合スコア", f"{hybrid_rec.score:.3f}")
+                                with col_s2:
+                                    st.metric("グラフスコア", f"{hybrid_rec.rwr_score:.3f}")
+                                with col_s3:
+                                    st.metric("NMFスコア", f"{hybrid_rec.nmf_score:.3f}")
+
+                                # 推薦理由を表示
+                                st.markdown("**推薦理由:**")
+                                for reason in hybrid_rec.reasons:
+                                    st.write(f"- {reason}")
+
+                                # パスを可視化
+                                member_name = members_df[
+                                    members_df["メンバーコード"] == selected_member_code
+                                ]["メンバー名"].iloc[0]
+
+                                fig = visualizer.visualize_recommendation_path(
+                                    paths=hybrid_rec.paths,
+                                    target_member_name=member_name,
+                                    target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
 
                 # テーブル表示（ダウンロード用）
                 st.markdown("---")
