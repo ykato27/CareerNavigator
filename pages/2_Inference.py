@@ -677,47 +677,50 @@ if st.button("推薦を実行", type="primary"):
                 st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
                 st.stop()
 
+            # スレッド内で使用する値を事前に取得（session_stateにアクセスできないため）
+            knowledge_graph = st.session_state.knowledge_graph
+
             # 並列実行開始時刻を記録
             start_time = time.time()
 
-            # 各推薦処理を関数として定義
-            def run_nmf_recommendation():
+            # 各推薦処理を関数として定義（引数として必要な値を受け取る）
+            def run_nmf_recommendation(rec, member_code, n, comp_type, div_strategy):
                 """NMF推薦を実行"""
-                return recommender.recommend(
-                    member_code=selected_member_code,
-                    top_n=top_n,
-                    competence_type=competence_type,
+                return rec.recommend(
+                    member_code=member_code,
+                    top_n=n,
+                    competence_type=comp_type,
                     category_filter=None,
                     use_diversity=True,
-                    diversity_strategy=diversity_strategy
+                    diversity_strategy=div_strategy
                 )
 
-            def run_graph_recommendation():
+            def run_graph_recommendation(kg, rec, member_code, n, comp_type):
                 """グラフベース推薦を実行（RWR weight = 1.0）"""
                 graph_recommender = HybridGraphRecommender(
-                    knowledge_graph=st.session_state.knowledge_graph,
-                    ml_recommender=recommender,
+                    knowledge_graph=kg,
+                    ml_recommender=rec,
                     rwr_weight=1.0  # グラフのみ
                 )
                 return graph_recommender.recommend(
-                    member_code=selected_member_code,
-                    top_n=top_n,
-                    competence_type=competence_type,
+                    member_code=member_code,
+                    top_n=n,
+                    competence_type=comp_type,
                     category_filter=None,
                     use_diversity=True
                 )
 
-            def run_hybrid_recommendation():
+            def run_hybrid_recommendation(kg, rec, member_code, n, comp_type, weight):
                 """ハイブリッド推薦を実行（ユーザー指定のrwr_weight）"""
                 hybrid_recommender = HybridGraphRecommender(
-                    knowledge_graph=st.session_state.knowledge_graph,
-                    ml_recommender=recommender,
-                    rwr_weight=rwr_weight
+                    knowledge_graph=kg,
+                    ml_recommender=rec,
+                    rwr_weight=weight
                 )
                 return hybrid_recommender.recommend(
-                    member_code=selected_member_code,
-                    top_n=top_n,
-                    competence_type=competence_type,
+                    member_code=member_code,
+                    top_n=n,
+                    competence_type=comp_type,
                     category_filter=None,
                     use_diversity=True
                 )
@@ -728,11 +731,11 @@ if st.button("推薦を実行", type="primary"):
             hybrid_recs = None
 
             with ThreadPoolExecutor(max_workers=3) as executor:
-                # 3つの推薦タスクを同時に投入
+                # 3つの推薦タスクを同時に投入（必要な引数を全て渡す）
                 future_to_name = {
-                    executor.submit(run_nmf_recommendation): 'nmf',
-                    executor.submit(run_graph_recommendation): 'graph',
-                    executor.submit(run_hybrid_recommendation): 'hybrid'
+                    executor.submit(run_nmf_recommendation, recommender, selected_member_code, top_n, competence_type, diversity_strategy): 'nmf',
+                    executor.submit(run_graph_recommendation, knowledge_graph, recommender, selected_member_code, top_n, competence_type): 'graph',
+                    executor.submit(run_hybrid_recommendation, knowledge_graph, recommender, selected_member_code, top_n, competence_type, rwr_weight): 'hybrid'
                 }
 
                 # 結果を取得
