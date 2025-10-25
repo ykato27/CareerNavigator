@@ -498,6 +498,16 @@ if st.button("推薦を実行", type="primary"):
                     visualizer = RecommendationPathVisualizer()
                     graph_recs = st.session_state.get('graph_recommendations', [])
 
+                    # 詳細説明ジェネレーターを初期化
+                    from skillnote_recommendation.graph.visualization_utils import (
+                        ExplanationGenerator,
+                        format_explanation_for_display,
+                        export_figure_as_html
+                    )
+
+                    category_hierarchy = st.session_state.knowledge_graph.category_hierarchy if st.session_state.get('knowledge_graph') else None
+                    explainer = ExplanationGenerator(category_hierarchy=category_hierarchy)
+
                     # 上位3件のみ可視化
                     for idx, hybrid_rec in enumerate(graph_recs[:3], 1):
                         if hybrid_rec.paths:
@@ -511,22 +521,45 @@ if st.button("推薦を実行", type="primary"):
                                 with col_s3:
                                     st.metric("NMFスコア", f"{hybrid_rec.nmf_score:.3f}")
 
-                                # 推薦理由を表示
-                                st.markdown("**推薦理由:**")
-                                for reason in hybrid_rec.reasons:
-                                    st.write(f"- {reason}")
-
-                                # パスを可視化
-                                member_name = members_df[
-                                    members_df["メンバーコード"] == selected_member_code
-                                ]["メンバー名"].iloc[0]
-
-                                fig = visualizer.visualize_recommendation_path(
+                                # 詳細説明を生成
+                                explanation = explainer.generate_detailed_explanation(
                                     paths=hybrid_rec.paths,
-                                    target_member_name=member_name,
-                                    target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)
+                                    rwr_score=hybrid_rec.rwr_score,
+                                    nmf_score=hybrid_rec.nmf_score,
+                                    competence_info=hybrid_rec.competence_info
                                 )
-                                st.plotly_chart(fig, use_container_width=True)
+
+                                # タブで表示
+                                tab1, tab2 = st.tabs(["📊 グラフ可視化", "📝 詳細説明"])
+
+                                with tab1:
+                                    # パスを可視化
+                                    member_name = members_df[
+                                        members_df["メンバーコード"] == selected_member_code
+                                    ]["メンバー名"].iloc[0]
+
+                                    fig = visualizer.visualize_recommendation_path(
+                                        paths=hybrid_rec.paths,
+                                        target_member_name=member_name,
+                                        target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)
+                                    )
+                                    st.plotly_chart(fig, use_container_width=True)
+
+                                    # エクスポートボタン
+                                    col_e1, col_e2 = st.columns(2)
+                                    with col_e1:
+                                        if st.button(f"📥 HTMLとしてエクスポート", key=f"export_html_{idx}"):
+                                            try:
+                                                filename = f"recommendation_path_{hybrid_rec.competence_code}.html"
+                                                filepath = export_figure_as_html(fig, filename)
+                                                st.success(f"✅ エクスポート完了: {filepath}")
+                                            except Exception as e:
+                                                st.error(f"エクスポートエラー: {str(e)}")
+
+                                with tab2:
+                                    # 詳細説明を表示
+                                    formatted_explanation = format_explanation_for_display(explanation)
+                                    st.markdown(formatted_explanation)
 
                 # テーブル表示（ダウンロード用）
                 st.markdown("---")
