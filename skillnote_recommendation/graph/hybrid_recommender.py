@@ -16,6 +16,17 @@ from ..ml.ml_recommender import MLRecommender
 from ..core.models import Recommendation
 
 
+# デフォルト設定値
+DEFAULT_RWR_WEIGHT = 0.5
+DEFAULT_RESTART_PROB = 0.15
+CANDIDATE_MULTIPLIER = 3  # 候補を多めに取得する倍率
+HYBRID_BOOST_FACTOR = 1.1  # 両方で推薦された場合のブースト
+RWR_SCORE_THRESHOLD_HIGH = 0.5  # 推薦理由生成の閾値（高）
+RWR_SCORE_THRESHOLD_LOW = 0.3  # 推薦理由生成の閾値（低）
+NMF_SCORE_THRESHOLD_HIGH = 0.5
+NMF_SCORE_THRESHOLD_LOW = 0.3
+
+
 @dataclass
 class HybridRecommendation:
     """ハイブリッド推薦結果
@@ -54,8 +65,8 @@ class HybridGraphRecommender:
     def __init__(self,
                  knowledge_graph: CompetenceKnowledgeGraph,
                  ml_recommender: MLRecommender,
-                 rwr_weight: float = 0.5,
-                 restart_prob: float = 0.15,
+                 rwr_weight: float = DEFAULT_RWR_WEIGHT,
+                 restart_prob: float = DEFAULT_RESTART_PROB,
                  enable_cache: bool = True):
         """
         Args:
@@ -107,7 +118,7 @@ class HybridGraphRecommender:
         print("\n[1/4] RWR推薦...")
         rwr_results = self.rwr.recommend(
             member_code=member_code,
-            top_n=top_n * 3,  # 多めに取得してフィルタ
+            top_n=top_n * CANDIDATE_MULTIPLIER,  # 多めに取得してフィルタ
             return_paths=True
         )
         rwr_dict = {comp: (score, paths) for comp, score, paths in rwr_results}
@@ -116,7 +127,7 @@ class HybridGraphRecommender:
         print("\n[2/4] NMF推薦...")
         nmf_results = self.ml_recommender.recommend(
             member_code=member_code,
-            top_n=top_n * 3,
+            top_n=top_n * CANDIDATE_MULTIPLIER,
             competence_type=competence_type,
             category_filter=category_filter,
             use_diversity=use_diversity
@@ -175,7 +186,7 @@ class HybridGraphRecommender:
 
             # 両方で推薦された場合はブーストを与える
             if comp_code in rwr_dict and comp_code in nmf_dict:
-                hybrid_score *= 1.1  # 10%ブースト
+                hybrid_score *= HYBRID_BOOST_FACTOR
 
             hybrid_scores[comp_code] = {
                 'score': hybrid_score,
@@ -313,7 +324,7 @@ class HybridGraphRecommender:
         reasons = []
 
         # RWRスコアが高い場合
-        if data['rwr_score'] > 0.5:
+        if data['rwr_score'] > RWR_SCORE_THRESHOLD_HIGH:
             # パスから理由を生成
             paths = data['paths']
             if paths:
@@ -321,11 +332,11 @@ class HybridGraphRecommender:
                 reasons.extend(path_reasons)
 
         # NMFスコアが高い場合
-        if data['nmf_score'] > 0.5:
+        if data['nmf_score'] > NMF_SCORE_THRESHOLD_HIGH:
             reasons.append("類似メンバーの習得パターンから推薦")
 
         # 両方高い場合
-        if data['rwr_score'] > 0.3 and data['nmf_score'] > 0.3:
+        if data['rwr_score'] > RWR_SCORE_THRESHOLD_LOW and data['nmf_score'] > NMF_SCORE_THRESHOLD_LOW:
             reasons.append("グラフ構造と協調フィルタリングの両方で高評価")
 
         return reasons if reasons else ["推薦システムによる提案"]

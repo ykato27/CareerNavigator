@@ -12,6 +12,15 @@ from typing import Dict, List, Tuple, Set, Optional
 from .knowledge_graph import CompetenceKnowledgeGraph
 
 
+# デフォルト設定値
+DEFAULT_RESTART_PROB = 0.15
+DEFAULT_MAX_ITER = 100
+DEFAULT_TOLERANCE = 1e-6
+DEFAULT_MAX_PATHS = 3
+DEFAULT_MAX_PATH_LENGTH = 5
+MIN_SCORE_THRESHOLD = 1e-10
+
+
 class RandomWalkRecommender:
     """RWRベースの推薦エンジン
 
@@ -21,9 +30,9 @@ class RandomWalkRecommender:
 
     def __init__(self,
                  knowledge_graph: CompetenceKnowledgeGraph,
-                 restart_prob: float = 0.15,
-                 max_iter: int = 100,
-                 tolerance: float = 1e-6,
+                 restart_prob: float = DEFAULT_RESTART_PROB,
+                 max_iter: int = DEFAULT_MAX_ITER,
+                 tolerance: float = DEFAULT_TOLERANCE,
                  enable_cache: bool = True):
         """
         Args:
@@ -137,7 +146,7 @@ class RandomWalkRecommender:
         # 非常に小さいスコアは除外
         filtered_scores = {
             node: score for node, score in scores.items()
-            if score > 1e-10
+            if score > MIN_SCORE_THRESHOLD
         }
 
         # Plan 3: キャッシュに保存
@@ -166,8 +175,8 @@ class RandomWalkRecommender:
     def _extract_paths(self,
                        source: str,
                        target: str,
-                       max_paths: int = 3,
-                       max_length: int = 5) -> List[List[str]]:
+                       max_paths: int = DEFAULT_MAX_PATHS,
+                       max_length: int = DEFAULT_MAX_PATH_LENGTH) -> List[List[str]]:
         """
         推薦パスを抽出（Plan 4: k-shortest paths最適化版）
 
@@ -202,35 +211,6 @@ class RandomWalkRecommender:
 
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             return []
-
-    def _score_path(self, path: List[str]) -> float:
-        """
-        パスのスコア計算
-
-        エッジ重みの積と、パスの長さを考慮してスコアを計算
-
-        Args:
-            path: ノードのリスト
-
-        Returns:
-            パススコア
-        """
-        if len(path) < 2:
-            return 0.0
-
-        score = 1.0
-
-        # エッジ重みの積
-        for i in range(len(path) - 1):
-            edge_data = self.graph[path[i]][path[i+1]]
-            weight = edge_data.get('weight', 1.0)
-            score *= weight
-
-        # 短いパスを優先（ペナルティ）
-        length_penalty = 0.9 ** (len(path) - 2)
-        score *= length_penalty
-
-        return score
 
     def explain_recommendation(self,
                                member_code: str,
