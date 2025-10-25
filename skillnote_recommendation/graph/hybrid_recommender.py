@@ -55,19 +55,22 @@ class HybridGraphRecommender:
                  knowledge_graph: CompetenceKnowledgeGraph,
                  ml_recommender: MLRecommender,
                  rwr_weight: float = 0.5,
-                 restart_prob: float = 0.15):
+                 restart_prob: float = 0.15,
+                 enable_cache: bool = True):
         """
         Args:
             knowledge_graph: ナレッジグラフ
             ml_recommender: NMFベースのML推薦エンジン
             rwr_weight: RWRスコアの重み（0-1）、残りがNMFの重み
             restart_prob: RWRの再スタート確率
+            enable_cache: RWRのPageRankキャッシュを有効にするか
         """
         self.kg = knowledge_graph
         self.ml_recommender = ml_recommender
         self.rwr = RandomWalkRecommender(
             knowledge_graph=knowledge_graph,
-            restart_prob=restart_prob
+            restart_prob=restart_prob,
+            enable_cache=enable_cache
         )
         self.rwr_weight = rwr_weight
         self.nmf_weight = 1.0 - rwr_weight
@@ -75,6 +78,7 @@ class HybridGraphRecommender:
         print(f"\nHybrid Graph Recommender 初期化完了")
         print(f"  RWR重み: {self.rwr_weight:.2f}")
         print(f"  NMF重み: {self.nmf_weight:.2f}")
+        print(f"  キャッシュ: {'有効' if enable_cache else '無効'}")
 
     def recommend(self,
                   member_code: str,
