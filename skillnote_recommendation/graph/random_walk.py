@@ -103,7 +103,7 @@ class RandomWalkRecommender:
 
     def _random_walk_with_restart(self, start_node: str) -> Dict[str, float]:
         """
-        RWRアルゴリズムの実装
+        RWRアルゴリズムの実装（NetworkX PageRank最適化版）
 
         Args:
             start_node: 開始ノード（メンバーノード）
@@ -111,103 +111,30 @@ class RandomWalkRecommender:
         Returns:
             {ノードID: 訪問確率スコア}
         """
-        # ノードリストとインデックスマッピング
-        nodes = list(self.graph.nodes())
-        n_nodes = len(nodes)
-        node_to_idx = {node: i for i, node in enumerate(nodes)}
-        idx_to_node = {i: node for i, node in enumerate(nodes)}
+        # NetworkXのPersonalized PageRankを使用（高速化）
+        # alpha = 1 - restart_prob (PageRankのダンピング係数)
+        # personalization = {start_node: 1.0} (RWRの開始ノード)
+        scores = nx.pagerank(
+            self.graph,
+            alpha=1 - self.restart_prob,
+            personalization={start_node: 1.0},
+            max_iter=self.max_iter,
+            tol=self.tolerance,
+            weight='weight'  # エッジ重みを考慮
+        )
 
-        # 遷移行列を構築
-        transition_matrix = self._build_transition_matrix(nodes, node_to_idx)
+        # 非常に小さいスコアは除外
+        filtered_scores = {
+            node: score for node, score in scores.items()
+            if score > 1e-10
+        }
 
-        # 初期ベクトル（スタートノードのみ1）
-        start_vector = np.zeros(n_nodes)
-        start_idx = node_to_idx[start_node]
-        start_vector[start_idx] = 1.0
+        print(f"    完了: NetworkX PageRank使用（高速化版）")
 
-        # RWR反復計算
-        current_vector = start_vector.copy()
+        return filtered_scores
 
-        for iteration in range(self.max_iter):
-            # 次のステップの確率ベクトルを計算
-            # RWRの式: r(t+1) = (1-c) * P^T * r(t) + c * r(0)
-            # c = restart_prob, P = 遷移行列, r(0) = 初期ベクトル
-            next_vector = (
-                (1 - self.restart_prob) * (transition_matrix.T @ current_vector) +
-                self.restart_prob * start_vector
-            )
-
-            # 収束判定
-            diff = np.linalg.norm(next_vector - current_vector, ord=1)
-            if diff < self.tolerance:
-                print(f"    収束: {iteration + 1}回反復")
-                break
-
-            current_vector = next_vector
-
-        else:
-            print(f"    警告: 最大反復回数 {self.max_iter} に達しました")
-
-        # スコア辞書に変換
-        scores = {}
-        for i in range(n_nodes):
-            if current_vector[i] > 1e-10:  # 非常に小さいスコアは除外
-                scores[idx_to_node[i]] = float(current_vector[i])
-
-        return scores
-
-    def _build_transition_matrix(self,
-                                  nodes: List[str],
-                                  node_to_idx: Dict[str, int]) -> np.ndarray:
-        """
-        重み付き遷移行列を構築
-
-        Args:
-            nodes: ノードリスト
-            node_to_idx: ノードID → インデックスのマッピング
-
-        Returns:
-            遷移行列 (n_nodes × n_nodes)
-        """
-        n = len(nodes)
-        matrix = np.zeros((n, n))
-
-        for node in nodes:
-            i = node_to_idx[node]
-            neighbors = list(self.graph.neighbors(node))
-
-            if len(neighbors) == 0:
-                # 孤立ノードの場合、自己ループ
-                matrix[i][i] = 1.0
-                continue
-
-            # 重み付きで正規化
-            # エッジタイプによって重みを調整することも可能
-            total_weight = 0.0
-            neighbor_weights = []
-
-            for neighbor in neighbors:
-                edge_data = self.graph[node][neighbor]
-                weight = edge_data.get('weight', 1.0)
-
-                # エッジタイプによる重み調整（オプション）
-                edge_type = edge_data.get('edge_type', 'unknown')
-                if edge_type == 'acquired':
-                    weight *= 1.5  # 習得関係を強調
-                elif edge_type == 'belongs_to':
-                    weight *= 1.0  # カテゴリー関係は標準
-                elif edge_type == 'similar':
-                    weight *= 1.2  # 類似関係をやや強調
-
-                neighbor_weights.append((neighbor, weight))
-                total_weight += weight
-
-            # 正規化して遷移確率を設定
-            for neighbor, weight in neighbor_weights:
-                j = node_to_idx[neighbor]
-                matrix[i][j] = weight / total_weight
-
-        return matrix
+    # _build_transition_matrix メソッドは削除
+    # NetworkXのPageRankが内部で効率的に遷移行列を処理するため不要になりました
 
     def _extract_paths(self,
                        source: str,
