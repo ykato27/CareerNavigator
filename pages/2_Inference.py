@@ -666,9 +666,10 @@ st.info("💡 推薦実行時に、NMF推薦・グラフベース推薦・ハイ
 st.subheader("🚀 推論実行")
 
 if st.button("推薦を実行", type="primary"):
-    with st.spinner("3種類の推薦を生成中（NMF・グラフベース・ハイブリッド）..."):
+    with st.spinner("3種類の推薦を並列生成中（NMF・グラフベース・ハイブリッド）..."):
         try:
-            # 3種類の推薦を全て実行
+            import time
+            from concurrent.futures import ThreadPoolExecutor, as_completed
             from skillnote_recommendation.graph import HybridGraphRecommender
 
             # Knowledge Graphの確認
@@ -676,52 +677,91 @@ if st.button("推薦を実行", type="primary"):
                 st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
                 st.stop()
 
-            # 1. NMF推薦のみ
-            nmf_recs = recommender.recommend(
-                member_code=selected_member_code,
-                top_n=top_n,
-                competence_type=competence_type,
-                category_filter=None,
-                use_diversity=True,
-                diversity_strategy=diversity_strategy
-            )
+            # 並列実行開始時刻を記録
+            start_time = time.time()
 
-            # 2. グラフベース推薦（RWR weight = 1.0）
-            graph_recommender = HybridGraphRecommender(
-                knowledge_graph=st.session_state.knowledge_graph,
-                ml_recommender=recommender,
-                rwr_weight=1.0  # グラフのみ
-            )
-            graph_recs = graph_recommender.recommend(
-                member_code=selected_member_code,
-                top_n=top_n,
-                competence_type=competence_type,
-                category_filter=None,
-                use_diversity=True
-            )
+            # 各推薦処理を関数として定義
+            def run_nmf_recommendation():
+                """NMF推薦を実行"""
+                return recommender.recommend(
+                    member_code=selected_member_code,
+                    top_n=top_n,
+                    competence_type=competence_type,
+                    category_filter=None,
+                    use_diversity=True,
+                    diversity_strategy=diversity_strategy
+                )
 
-            # 3. ハイブリッド推薦（ユーザー指定のrwr_weight）
-            hybrid_recommender = HybridGraphRecommender(
-                knowledge_graph=st.session_state.knowledge_graph,
-                ml_recommender=recommender,
-                rwr_weight=rwr_weight
-            )
-            hybrid_recs = hybrid_recommender.recommend(
-                member_code=selected_member_code,
-                top_n=top_n,
-                competence_type=competence_type,
-                category_filter=None,
-                use_diversity=True
-            )
+            def run_graph_recommendation():
+                """グラフベース推薦を実行（RWR weight = 1.0）"""
+                graph_recommender = HybridGraphRecommender(
+                    knowledge_graph=st.session_state.knowledge_graph,
+                    ml_recommender=recommender,
+                    rwr_weight=1.0  # グラフのみ
+                )
+                return graph_recommender.recommend(
+                    member_code=selected_member_code,
+                    top_n=top_n,
+                    competence_type=competence_type,
+                    category_filter=None,
+                    use_diversity=True
+                )
+
+            def run_hybrid_recommendation():
+                """ハイブリッド推薦を実行（ユーザー指定のrwr_weight）"""
+                hybrid_recommender = HybridGraphRecommender(
+                    knowledge_graph=st.session_state.knowledge_graph,
+                    ml_recommender=recommender,
+                    rwr_weight=rwr_weight
+                )
+                return hybrid_recommender.recommend(
+                    member_code=selected_member_code,
+                    top_n=top_n,
+                    competence_type=competence_type,
+                    category_filter=None,
+                    use_diversity=True
+                )
+
+            # ThreadPoolExecutorで3つの推薦を並列実行
+            nmf_recs = None
+            graph_recs = None
+            hybrid_recs = None
+
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                # 3つの推薦タスクを同時に投入
+                future_to_name = {
+                    executor.submit(run_nmf_recommendation): 'nmf',
+                    executor.submit(run_graph_recommendation): 'graph',
+                    executor.submit(run_hybrid_recommendation): 'hybrid'
+                }
+
+                # 結果を取得
+                for future in as_completed(future_to_name):
+                    rec_type = future_to_name[future]
+                    try:
+                        result = future.result()
+                        if rec_type == 'nmf':
+                            nmf_recs = result
+                        elif rec_type == 'graph':
+                            graph_recs = result
+                        elif rec_type == 'hybrid':
+                            hybrid_recs = result
+                    except Exception as e:
+                        st.error(f"❌ {rec_type}推薦でエラーが発生しました: {str(e)}")
+                        raise e
+
+            # 実行時間を計測
+            elapsed_time = time.time() - start_time
 
             # セッション状態に保存
             st.session_state.nmf_recommendations = nmf_recs
             st.session_state.graph_recommendations = graph_recs
             st.session_state.hybrid_recommendations = hybrid_recs
             st.session_state.last_target_member_code = selected_member_code
+            st.session_state.last_execution_time = elapsed_time
 
             # 主要な推薦結果（ハイブリッド）を使用
-            recs = [convert_hybrid_to_recommendation(hr) for hr in hybrid_recs]
+            recs = [convert_hybrid_to_recommendation(hr) for hr in hybrid_recs] if hybrid_recs else []
 
             # セッション状態に保存
             if not recs:
@@ -780,11 +820,12 @@ if st.button("推薦を実行", type="primary"):
                 st.session_state.last_recommendations_df = df_result
                 st.session_state.last_recommendations = recs
 
-                # リッチな成功メッセージ
+                # リッチな成功メッセージ（実行時間を表示）
                 st.markdown(f"""
                 <div class="card metric-card-green fade-in" style="text-align: left;">
                     <h2 style="margin: 0;">🎉 推薦完了！</h2>
                     <p style="font-size: 1.2rem; margin: 0.5rem 0;">3種類の推薦手法で{top_n}件ずつ生成しました</p>
+                    <p style="font-size: 0.9rem; margin: 0; opacity: 0.9;">⚡ 並列実行時間: {elapsed_time:.2f}秒</p>
                 </div>
                 """, unsafe_allow_html=True)
 
