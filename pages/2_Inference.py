@@ -77,6 +77,121 @@ st.markdown("""
         background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     }
 
+    /* サイドバースタイル */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+    }
+
+    [data-testid="stSidebar"] > div:first-child {
+        background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+    }
+
+    /* サイドバーテキストの色 */
+    [data-testid="stSidebar"] label {
+        color: white !important;
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    [data-testid="stSidebar"] .stMarkdown {
+        color: white;
+    }
+
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 {
+        color: white !important;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    /* サイドバーの入力要素 */
+    [data-testid="stSidebar"] .stSelectbox > div > div,
+    [data-testid="stSidebar"] .stMultiSelect > div > div {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 10px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        transition: all 0.3s ease;
+    }
+
+    [data-testid="stSidebar"] .stSelectbox > div > div:hover,
+    [data-testid="stSidebar"] .stMultiSelect > div > div:hover {
+        border-color: rgba(255, 255, 255, 0.8);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    /* スライダー */
+    [data-testid="stSidebar"] .stSlider {
+        padding: 1rem 0;
+    }
+
+    [data-testid="stSidebar"] .stSlider > div > div > div {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 10px;
+    }
+
+    [data-testid="stSidebar"] .stSlider > div > div > div > div {
+        background: white;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+    }
+
+    /* チェックボックス */
+    [data-testid="stSidebar"] .stCheckbox {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 0.75rem;
+        border-radius: 10px;
+        margin: 0.5rem 0;
+        transition: all 0.3s ease;
+    }
+
+    [data-testid="stSidebar"] .stCheckbox:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    [data-testid="stSidebar"] .stCheckbox label {
+        font-size: 0.9rem;
+    }
+
+    /* サイドバー内のinfo/warning/error */
+    [data-testid="stSidebar"] .stAlert {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 10px;
+        border-left: 4px solid #ffc107;
+        margin: 1rem 0;
+    }
+
+    /* サイドバーセクション区切り */
+    [data-testid="stSidebar"] hr {
+        border: none;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+        margin: 1.5rem 0;
+    }
+
+    /* サイドバー内のボタン */
+    [data-testid="stSidebar"] .stButton > button {
+        background: white;
+        color: #667eea;
+        border: none;
+        border-radius: 10px;
+        font-weight: bold;
+        padding: 0.5rem 1rem;
+        width: 100%;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background: #f0f0f0;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* サイドバーキャプション */
+    [data-testid="stSidebar"] .stCaption {
+        color: rgba(255, 255, 255, 0.8) !important;
+        font-size: 0.85rem;
+    }
+
     /* カードスタイル */
     .card {
         background: white;
