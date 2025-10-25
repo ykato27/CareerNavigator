@@ -8,6 +8,7 @@ from .knowledge_graph import CompetenceKnowledgeGraph
 from .random_walk import RandomWalkRecommender
 from .hybrid_recommender import HybridGraphRecommender, HybridRecommendation
 from .path_visualizer import RecommendationPathVisualizer, visualize_multiple_recommendations
+from .category_hierarchy import CategoryHierarchy
 
 __all__ = [
     'CompetenceKnowledgeGraph',
@@ -16,4 +17,5 @@ __all__ = [
     'HybridRecommendation',
     'RecommendationPathVisualizer',
     'visualize_multiple_recommendations',
+    'CategoryHierarchy',
 ]
