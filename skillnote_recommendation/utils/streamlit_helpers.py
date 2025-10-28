@@ -148,7 +148,7 @@ def show_metric_cards(metrics: Dict[str, Any], columns: int = 3) -> None:
 
     Example:
         >>> show_metric_cards({
-        ...     "会員数": 100,
+        ...     "メンバー数": 100,
         ...     "力量数": 50,
         ...     "保有力量レコード数": 500
         ... })

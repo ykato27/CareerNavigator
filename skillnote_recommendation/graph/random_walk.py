@@ -6,11 +6,15 @@ Random Walk with Restart (RWR) アルゴリズム
 新しい力量を発見する。
 """
 
+import logging
 import numpy as np
 import networkx as nx
 from typing import Dict, List, Tuple, Set, Optional
 from .knowledge_graph import CompetenceKnowledgeGraph
 from ..config_loader import get_config
+
+
+logger = logging.getLogger(__name__)
 
 
 class RandomWalkRecommender:
@@ -69,16 +73,16 @@ class RandomWalkRecommender:
         if not self.graph.has_node(member_node):
             raise ValueError(f"メンバー {member_code} がグラフに存在しません")
 
-        print(f"\n{'='*80}")
-        print(f"RWR推薦: {member_code}")
-        print(f"{'='*80}")
+        logger.info("\n%s", "=" * 80)
+        logger.info("RWR推薦: %s", member_code)
+        logger.info("%s", "=" * 80)
 
         # 1. RWRスコアを計算
-        print("  [1/3] RWRスコア計算中...")
+        logger.info("  [1/3] RWRスコア計算中...")
         scores = self._random_walk_with_restart(member_node)
 
         # 2. 力量ノードのみ抽出してソート
-        print("  [2/3] 力量スコア抽出中...")
+        logger.info("  [2/3] 力量スコア抽出中...")
         competence_scores = []
         acquired_competences = self.kg.get_member_acquired_competences(member_code)
 
@@ -93,7 +97,7 @@ class RandomWalkRecommender:
         competence_scores.sort(key=lambda x: x[1], reverse=True)
 
         # 3. Top-N推薦と推薦パスを抽出
-        print(f"  [3/3] Top-{top_n}推薦とパス抽出中...")
+        logger.info("  [3/3] Top-%d推薦とパス抽出中...", top_n)
         recommendations = []
 
         for comp_code, score in competence_scores[:top_n]:
@@ -107,7 +111,7 @@ class RandomWalkRecommender:
                 )
             recommendations.append((comp_code, score, paths))
 
-        print(f"  完了: {len(recommendations)}件の推薦を生成")
+        logger.info("  完了: %d件の推薦を生成", len(recommendations))
 
         return recommendations
 
@@ -123,7 +127,7 @@ class RandomWalkRecommender:
         """
         # Plan 3: キャッシュチェック
         if self.enable_cache and start_node in self._pagerank_cache:
-            print(f"    キャッシュヒット: {start_node}")
+            logger.debug("    キャッシュヒット: %s", start_node)
             return self._pagerank_cache[start_node]
 
         # NetworkXのPersonalized PageRankを使用（高速化）
@@ -149,7 +153,7 @@ class RandomWalkRecommender:
         if self.enable_cache:
             self._pagerank_cache[start_node] = filtered_scores
 
-        print(f"    完了: NetworkX PageRank使用（高速化版）")
+        logger.info("    完了: NetworkX PageRank使用（高速化版）")
 
         return filtered_scores
 
@@ -159,7 +163,7 @@ class RandomWalkRecommender:
     def clear_cache(self):
         """PageRankキャッシュをクリア"""
         self._pagerank_cache.clear()
-        print("PageRankキャッシュをクリアしました")
+        logger.info("PageRankキャッシュをクリアしました")
 
     def get_cache_stats(self) -> Dict[str, int]:
         """キャッシュ統計を取得"""

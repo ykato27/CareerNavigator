@@ -5,6 +5,7 @@ Random Walk with Restartとmatrix factorization (NMF)を組み合わせた
 ハイブリッド推薦システム
 """
 
+import logging
 from typing import List, Dict, Tuple, Optional
 import numpy as np
 import pandas as pd
@@ -15,6 +16,9 @@ from .random_walk import RandomWalkRecommender
 from ..ml.ml_recommender import MLRecommender
 from ..core.models import Recommendation
 from ..config_loader import get_config
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -79,10 +83,10 @@ class HybridGraphRecommender:
             enable_cache=enable_cache
         )
 
-        print(f"\nHybrid Graph Recommender 初期化完了")
-        print(f"  RWR重み: {self.rwr_weight:.2f}")
-        print(f"  NMF重み: {self.nmf_weight:.2f}")
-        print(f"  キャッシュ: {'有効' if enable_cache else '無効'}")
+        logger.info("\nHybrid Graph Recommender 初期化完了")
+        logger.info("  RWR重み: %.2f", self.rwr_weight)
+        logger.info("  NMF重み: %.2f", self.nmf_weight)
+        logger.info("  キャッシュ: %s", '有効' if enable_cache else '無効')
 
     def recommend(self,
                   member_code: str,
@@ -103,12 +107,12 @@ class HybridGraphRecommender:
         Returns:
             ハイブリッド推薦結果のリスト
         """
-        print(f"\n{'='*80}")
-        print(f"Hybrid推薦開始: {member_code}")
-        print(f"{'='*80}")
+        logger.info("\n%s", "=" * 80)
+        logger.info("Hybrid推薦開始: %s", member_code)
+        logger.info("%s", "=" * 80)
 
         # 1. RWRで推薦（パス付き）
-        print("\n[1/4] RWR推薦...")
+        logger.info("\n[1/4] RWR推薦...")
         rwr_results = self.rwr.recommend(
             member_code=member_code,
             top_n=top_n * CANDIDATE_MULTIPLIER,  # 多めに取得してフィルタ
@@ -117,7 +121,7 @@ class HybridGraphRecommender:
         rwr_dict = {comp: (score, paths) for comp, score, paths in rwr_results}
 
         # 2. NMFで推薦
-        print("\n[2/4] NMF推薦...")
+        logger.info("\n[2/4] NMF推薦...")
         nmf_results = self.ml_recommender.recommend(
             member_code=member_code,
             top_n=top_n * CANDIDATE_MULTIPLIER,
@@ -128,11 +132,11 @@ class HybridGraphRecommender:
         nmf_dict = {rec.competence_code: rec.priority_score for rec in nmf_results}
 
         # 3. スコアを正規化して融合
-        print("\n[3/4] スコア融合...")
+        logger.info("\n[3/4] スコア融合...")
         hybrid_scores = self._fuse_scores(rwr_dict, nmf_dict)
 
         # 4. フィルタリングとTop-N選択
-        print(f"\n[4/4] Top-{top_n}選択...")
+        logger.info("\n[4/4] Top-%d選択...", top_n)
         recommendations = self._select_top_n(
             hybrid_scores=hybrid_scores,
             nmf_results=nmf_results,
@@ -141,7 +145,7 @@ class HybridGraphRecommender:
             category_filter=category_filter
         )
 
-        print(f"\n完了: {len(recommendations)}件の推薦を生成")
+        logger.info("\n完了: %d件の推薦を生成", len(recommendations))
         return recommendations
 
     def _fuse_scores(self,

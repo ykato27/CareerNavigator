@@ -1,7 +1,7 @@
 """
 Matrix Factorizationベースの推薦モデル
 
-NMF (Non-negative Matrix Factorization)を使用して会員×力量マトリクスを
+NMF (Non-negative Matrix Factorization)を使用してメンバー×力量マトリクスを
 潜在因子に分解し、未習得力量のスコアを予測する
 """
 
@@ -40,11 +40,11 @@ class MatrixFactorizationModel:
         )
 
         # 学習後のデータ
-        self.W = None  # 会員因子行列
+        self.W = None  # メンバー因子行列
         self.H = None  # 力量因子行列
-        self.member_codes = None  # 会員コードのリスト
+        self.member_codes = None  # メンバーコードのリスト
         self.competence_codes = None  # 力量コードのリスト
-        self.member_index = None  # 会員コード → インデックス
+        self.member_index = None  # メンバーコード → インデックス
         self.competence_index = None  # 力量コード → インデックス
         self.is_fitted = False
 
@@ -53,12 +53,12 @@ class MatrixFactorizationModel:
         モデルを学習
 
         Args:
-            skill_matrix: 会員×力量マトリクス (index=会員コード, columns=力量コード)
+            skill_matrix: メンバー×力量マトリクス (index=メンバーコード, columns=力量コード)
 
         Returns:
             self
         """
-        # 会員・力量のコードを保存
+        # メンバー・力量のコードを保存
         self.member_codes = skill_matrix.index.tolist()
         self.competence_codes = skill_matrix.columns.tolist()
 
@@ -67,7 +67,7 @@ class MatrixFactorizationModel:
         self.competence_index = {code: idx for idx, code in enumerate(self.competence_codes)}
 
         # NMFで分解
-        # W: 会員 × 潜在因子 (n_members × n_components)
+        # W: メンバー × 潜在因子 (n_members × n_components)
         # H: 潜在因子 × 力量 (n_components × n_competences)
         self.W = self.model.fit_transform(skill_matrix.values)
         self.H = self.model.components_
@@ -78,25 +78,25 @@ class MatrixFactorizationModel:
 
     def predict(self, member_code: str, competence_codes: Optional[List[str]] = None) -> pd.Series:
         """
-        特定会員に対する力量のスコアを予測
+        特定メンバーに対する力量のスコアを予測
 
         Args:
-            member_code: 会員コード
+            member_code: メンバーコード
             competence_codes: 予測対象の力量コードリスト（Noneの場合は全力量）
 
         Returns:
             力量コードをインデックスとするスコアのSeries
 
         Raises:
-            ValueError: モデルが未学習、または会員コードが不明な場合
+            ValueError: モデルが未学習、またはメンバーコードが不明な場合
         """
         if not self.is_fitted:
             raise ValueError("モデルが学習されていません。先にfit()を呼んでください。")
 
         if member_code not in self.member_index:
-            raise ValueError(f"会員コード '{member_code}' は学習データに存在しません。")
+            raise ValueError(f"メンバーコード '{member_code}' は学習データに存在しません。")
 
-        # 会員のインデックスを取得
+        # メンバーのインデックスを取得
         member_idx = self.member_index[member_code]
 
         # 全力量のスコアを予測: W[member_idx] × H
@@ -120,10 +120,10 @@ class MatrixFactorizationModel:
                       exclude_acquired: bool = True,
                       acquired_competences: Optional[List[str]] = None) -> List[Tuple[str, float]]:
         """
-        特定会員に対するTop-K推薦を生成
+        特定メンバーに対するTop-K推薦を生成
 
         Args:
-            member_code: 会員コード
+            member_code: メンバーコード
             k: 推薦数
             exclude_acquired: 既習得力量を除外するか
             acquired_competences: 既習得力量のリスト（exclude_acquiredがTrueの場合必須）
@@ -147,10 +147,10 @@ class MatrixFactorizationModel:
 
     def get_member_factors(self, member_code: str) -> np.ndarray:
         """
-        会員の潜在因子ベクトルを取得
+        メンバーの潜在因子ベクトルを取得
 
         Args:
-            member_code: 会員コード
+            member_code: メンバーコード
 
         Returns:
             潜在因子ベクトル (n_components,)
@@ -159,7 +159,7 @@ class MatrixFactorizationModel:
             raise ValueError("モデルが学習されていません。")
 
         if member_code not in self.member_index:
-            raise ValueError(f"会員コード '{member_code}' は学習データに存在しません。")
+            raise ValueError(f"メンバーコード '{member_code}' は学習データに存在しません。")
 
         member_idx = self.member_index[member_code]
         return self.W[member_idx]

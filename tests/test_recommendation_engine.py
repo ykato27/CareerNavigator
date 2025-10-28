@@ -65,13 +65,13 @@ class TestEngineInitialization:
         assert engine.popularity_weight == 0.2
 
 
-# ==================== 会員力量取得テスト ====================
+# ==================== メンバー力量取得テスト ====================
 
 class TestGetMemberCompetences:
-    """会員保有力量取得のテスト"""
+    """メンバー保有力量取得のテスト"""
 
     def test_get_member_competences(self, sample_engine):
-        """会員の保有力量が取得できる"""
+        """メンバーの保有力量が取得できる"""
         # m001は3つの力量を保有
         competences = sample_engine.get_member_competences('m001')
 
@@ -79,13 +79,13 @@ class TestGetMemberCompetences:
         assert 'm001' in competences['メンバーコード'].values
 
     def test_get_member_competences_empty(self, sample_engine):
-        """力量未保有会員で空データを返す"""
+        """力量未保有メンバーで空データを返す"""
         competences = sample_engine.get_member_competences('m999')
 
         assert len(competences) == 0
 
     def test_get_member_competences_multiple(self, sample_engine):
-        """複数の力量を保有する会員"""
+        """複数の力量を保有するメンバー"""
         competences = sample_engine.get_member_competences('m001')
 
         # 力量コードを確認
@@ -397,8 +397,8 @@ class TestRecommend:
         assert recommendations == []
 
     def test_recommend_all_acquired(self):
-        """全力量を習得済みの会員は空リスト"""
-        # 全ての力量を習得している会員データを作成
+        """全力量を習得済みのメンバーは空リスト"""
+        # 全ての力量を習得しているメンバーデータを作成
         df_members = pd.DataFrame({'メンバーコード': ['m001']})
         df_competence_master = pd.DataFrame({
             '力量コード': ['s001'],

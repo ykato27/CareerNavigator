@@ -12,7 +12,7 @@ from skillnote_recommendation.ml.matrix_factorization import MatrixFactorization
 
 @pytest.fixture
 def sample_skill_matrix():
-    """サンプル会員×力量マトリクス"""
+    """サンプルメンバー×力量マトリクス"""
     return pd.DataFrame(
         {
             's001': [3, 0, 2, 0, 1],
@@ -73,11 +73,11 @@ class TestModelFitting:
         assert model.is_fitted
         assert model.W is not None
         assert model.H is not None
-        assert model.W.shape == (5, 2)  # 5会員 × 2因子
+        assert model.W.shape == (5, 2)  # 5メンバー × 2因子
         assert model.H.shape == (2, 5)  # 2因子 × 5力量
 
     def test_fit_preserves_codes(self, sample_skill_matrix):
-        """学習後に会員・力量コードが保存される"""
+        """学習後にメンバー・力量コードが保存される"""
         model = MatrixFactorizationModel(n_components=2)
         model.fit(sample_skill_matrix)
 
@@ -142,7 +142,7 @@ class TestPrediction:
             model.predict('m001')
 
     def test_predict_unknown_member_raises_error(self, trained_model):
-        """未知の会員で予測するとエラー"""
+        """未知のメンバーで予測するとエラー"""
         with pytest.raises(ValueError, match="学習データに存在しません"):
             trained_model.predict('m999')
 
@@ -193,7 +193,7 @@ class TestFactorRetrieval:
     """因子取得のテスト"""
 
     def test_get_member_factors(self, trained_model):
-        """会員の潜在因子を取得"""
+        """メンバーの潜在因子を取得"""
         factors = trained_model.get_member_factors('m001')
 
         assert isinstance(factors, np.ndarray)

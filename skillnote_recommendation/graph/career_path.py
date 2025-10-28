@@ -5,6 +5,7 @@ Career Path Recommendation System
 力量ギャップ分析と学習パスの生成を提供
 """
 
+import logging
 from typing import List, Dict, Tuple, Optional, Set
 import pandas as pd
 import numpy as np
@@ -12,6 +13,9 @@ from dataclasses import dataclass
 from .knowledge_graph import CompetenceKnowledgeGraph
 from .category_hierarchy import CategoryHierarchy
 from ..config_loader import get_config
+
+
+logger = logging.getLogger(__name__)
 
 
 # 設定値を取得するヘルパー関数
@@ -118,9 +122,9 @@ class CareerGapAnalyzer:
         Returns:
             ギャップ分析結果の辞書
         """
-        print(f"\n{'='*80}")
-        print(f"キャリアギャップ分析: {source_member_code} → {target_member_code}")
-        print(f"{'='*80}")
+        logger.info("\n%s", "=" * 80)
+        logger.info("キャリアギャップ分析: %s → %s", source_member_code, target_member_code)
+        logger.info("%s", "=" * 80)
 
         # 各メンバーの保有力量を取得
         source_competences = self._get_member_competences(source_member_code)
@@ -130,10 +134,13 @@ class CareerGapAnalyzer:
         common_codes = set(source_competences.keys()) & set(target_competences.keys())
         missing_codes = set(target_competences.keys()) - set(source_competences.keys())
 
-        print(f"\n分析結果:")
-        print(f"  共通力量: {len(common_codes)}個")
-        print(f"  不足力量: {len(missing_codes)}個")
-        print(f"  到達度: {len(common_codes) / len(target_competences) * 100:.1f}%")
+        logger.info("\n分析結果:")
+        logger.info("  共通力量: %d個", len(common_codes))
+        logger.info("  不足力量: %d個", len(missing_codes))
+        logger.info(
+            "  到達度: %.1f%%",
+            len(common_codes) / len(target_competences) * 100 if len(target_competences) > 0 else 0.0,
+        )
 
         # ギャップスコアを計算（Jaccard距離）
         union = len(set(source_competences.keys()) | set(target_competences.keys()))
@@ -244,9 +251,9 @@ class LearningPathGenerator:
         Returns:
             CareerPathAnalysis オブジェクト
         """
-        print(f"\n{'='*80}")
-        print(f"学習パス生成")
-        print(f"{'='*80}")
+        logger.info("\n%s", "=" * 80)
+        logger.info("学習パス生成")
+        logger.info("%s", "=" * 80)
 
         missing_competences = gap_analysis['missing_competences']
         source_competences = gap_analysis['source_competences']
@@ -268,10 +275,10 @@ class LearningPathGenerator:
         phase_2 = [g for g in scored_gaps if g.phase == PHASE_INTERMEDIATE][:max_per_phase]
         phase_3 = [g for g in scored_gaps if g.phase == PHASE_EXPERT][:max_per_phase]
 
-        print(f"\n学習パス:")
-        print(f"  Phase 1（{PHASE_BASIC}）: {len(phase_1)}個")
-        print(f"  Phase 2（{PHASE_INTERMEDIATE}）: {len(phase_2)}個")
-        print(f"  Phase 3（{PHASE_EXPERT}）: {len(phase_3)}個")
+        logger.info("\n学習パス:")
+        logger.info("  Phase 1（%s）: %d個", PHASE_BASIC, len(phase_1))
+        logger.info("  Phase 2（%s）: %d個", PHASE_INTERMEDIATE, len(phase_2))
+        logger.info("  Phase 3（%s）: %d個", PHASE_EXPERT, len(phase_3))
 
         return CareerPathAnalysis(
             source_member_code=gap_analysis['source_member_code'],

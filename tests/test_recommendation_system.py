@@ -71,13 +71,13 @@ class TestSystemInitialization:
             RecommendationSystem(output_dir=str(temp_output_dir))
 
 
-# ==================== 会員情報取得テスト ====================
+# ==================== メンバー情報取得テスト ====================
 
 class TestGetMemberInfo:
-    """会員情報取得のテスト"""
+    """メンバー情報取得のテスト"""
 
     def test_get_member_info(self, temp_output_files, monkeypatch):
-        """会員情報が取得できる"""
+        """メンバー情報が取得できる"""
         from skillnote_recommendation.core import config
         monkeypatch.setattr(config.Config, 'OUTPUT_DIR', str(temp_output_files))
 
@@ -92,7 +92,7 @@ class TestGetMemberInfo:
         assert 'license_count' in info
 
     def test_get_member_info_not_found(self, temp_output_files, monkeypatch):
-        """存在しない会員でNone返却"""
+        """存在しないメンバーでNone返却"""
         from skillnote_recommendation.core import config
         monkeypatch.setattr(config.Config, 'OUTPUT_DIR', str(temp_output_files))
 
@@ -194,7 +194,7 @@ class TestPrintRecommendations:
 
     def test_print_recommendations_invalid_member(self, temp_output_files,
                                                   monkeypatch, capsys):
-        """存在しない会員の場合"""
+        """存在しないメンバーの場合"""
         from skillnote_recommendation.core import config
         monkeypatch.setattr(config.Config, 'OUTPUT_DIR', str(temp_output_files))
 
@@ -264,7 +264,7 @@ class TestExportRecommendations:
         from skillnote_recommendation.core import config
         monkeypatch.setattr(config.Config, 'OUTPUT_DIR', str(temp_output_files))
 
-        # 全ての力量を保有している会員データを作成
+        # 全ての力量を保有しているメンバーデータを作成
         df_members = pd.DataFrame({'メンバーコード': ['m999']})
         df_competence_master = pd.DataFrame({
             '力量コード': ['s001'],
@@ -305,14 +305,14 @@ class TestIntegration:
     """統合動作のテスト"""
 
     def test_full_workflow(self, temp_output_files, monkeypatch):
-        """完全なワークフロー: 初期化→会員情報→推薦→出力"""
+        """完全なワークフロー: 初期化→メンバー情報→推薦→出力"""
         from skillnote_recommendation.core import config
         monkeypatch.setattr(config.Config, 'OUTPUT_DIR', str(temp_output_files))
 
         # 1. 初期化
         system = RecommendationSystem(output_dir=str(temp_output_files))
 
-        # 2. 会員情報取得
+        # 2. メンバー情報取得
         info = system.get_member_info('m001')
         assert info is not None
 
@@ -328,13 +328,13 @@ class TestIntegration:
         assert output_path.exists()
 
     def test_multiple_members(self, temp_output_files, monkeypatch):
-        """複数の会員に対する推薦"""
+        """複数のメンバーに対する推薦"""
         from skillnote_recommendation.core import config
         monkeypatch.setattr(config.Config, 'OUTPUT_DIR', str(temp_output_files))
 
         system = RecommendationSystem(output_dir=str(temp_output_files))
 
-        # 複数の会員に推薦
+        # 複数のメンバーに推薦
         member_codes = ['m001', 'm002', 'm003']
         for member_code in member_codes:
             recommendations = system.recommend_competences(member_code, top_n=3)

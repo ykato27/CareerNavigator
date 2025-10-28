@@ -9,7 +9,7 @@ from typing import Optional, List, Dict
 
 
 class Member:
-    """会員クラス"""
+    """メンバークラス"""
     
     def __init__(self, member_code: str, name: str, role: str = None, grade: str = None):
         self.member_code = member_code
@@ -37,7 +37,7 @@ class Competence:
 
 
 class MemberCompetence:
-    """会員習得力量クラス"""
+    """メンバー習得力量クラス"""
 
     def __init__(self, member_code: str, competence_code: str,
                  level: int, acquired_date: Optional[str] = None):
@@ -59,8 +59,8 @@ class ReferencePerson:
                  competence_gap: Dict[str, int], reason: str):
         """
         Args:
-            member_code: 会員コード
-            member_name: 会員名
+            member_code: メンバーコード
+            member_name: メンバー名
             reference_type: 参考タイプ（similar_career, role_model, diverse_career）
             similarity_score: 類似度スコア（0-1）
             common_competences: 共通の力量リスト
@@ -80,8 +80,8 @@ class ReferencePerson:
     def to_dict(self):
         """辞書形式に変換"""
         return {
-            '会員コード': self.member_code,
-            '会員名': self.member_name,
+            'メンバーコード': self.member_code,
+            'メンバー名': self.member_name,
             '参考タイプ': self.reference_type,
             '類似度': round(self.similarity_score, 2),
             '共通力量数': len(self.common_competences),

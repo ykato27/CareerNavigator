@@ -4,6 +4,7 @@ Knowledge Graph のテストスクリプト
 実際のデータでグラフを構築し、基本機能をテストする
 """
 
+import logging
 import sys
 from pathlib import Path
 
@@ -16,25 +17,33 @@ from skillnote_recommendation.core.data_transformer import DataTransformer
 from skillnote_recommendation.graph.knowledge_graph import CompetenceKnowledgeGraph
 
 
+logger = logging.getLogger(__name__)
+
+
 def test_knowledge_graph():
     """Knowledge Graphのテスト"""
 
-    print("=" * 80)
-    print("Knowledge Graph テスト")
-    print("=" * 80)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
+    logger.info("=" * 80)
+    logger.info("Knowledge Graph テスト")
+    logger.info("=" * 80)
 
     # 1. データ読み込み
-    print("\n[1/3] データ読み込み中...")
+    logger.info("\n[1/3] データ読み込み中...")
     loader = DataLoader()
     raw_data = loader.load_all_data()
 
     # 2. データ変換
-    print("\n[2/3] データ変換中...")
+    logger.info("\n[2/3] データ変換中...")
     transformer = DataTransformer()
     transformed_data = transformer.transform_all(raw_data)
 
     # 3. Knowledge Graph 構築
-    print("\n[3/3] Knowledge Graph 構築中...")
+    logger.info("\n[3/3] Knowledge Graph 構築中...")
     kg = CompetenceKnowledgeGraph(
         member_competence=transformed_data['member_competence'],
         member_master=transformed_data['members_clean'],
@@ -42,46 +51,50 @@ def test_knowledge_graph():
     )
 
     # 4. 基本機能のテスト
-    print("\n" + "=" * 80)
-    print("基本機能テスト")
-    print("=" * 80)
+    logger.info("\n" + "=" * 80)
+    logger.info("基本機能テスト")
+    logger.info("=" * 80)
 
     # サンプルメンバーを選択
     sample_member_code = transformed_data['members_clean']['メンバーコード'].iloc[0]
     sample_member_name = transformed_data['members_clean']['メンバー名'].iloc[0]
 
-    print(f"\nテスト対象メンバー: {sample_member_name} ({sample_member_code})")
+    logger.info("\nテスト対象メンバー: %s (%s)", sample_member_name, sample_member_code)
 
     # (1) メンバーの習得済み力量を取得
     acquired = kg.get_member_acquired_competences(sample_member_code)
-    print(f"\n  習得済み力量数: {len(acquired)}")
-    print(f"  習得済み力量（最初の5件）: {list(acquired)[:5]}")
+    logger.info("\n  習得済み力量数: %d", len(acquired))
+    logger.info("  習得済み力量（最初の5件）: %s", list(acquired)[:5])
 
     # (2) メンバーの類似メンバーを取得
     member_node = f"member_{sample_member_code}"
     similar_members = kg.get_neighbors(member_node, edge_type="similar")
-    print(f"\n  類似メンバー数: {len(similar_members)}")
+    logger.info("\n  類似メンバー数: %d", len(similar_members))
     if similar_members:
         for similar_node in similar_members[:3]:
             similar_info = kg.get_node_info(similar_node)
             edge_data = kg.G[member_node][similar_node]
-            print(f"    - {similar_info.get('name', 'N/A')} (類似度: {edge_data.get('similarity', 0):.3f})")
+            logger.info(
+                "    - %s (類似度: %.3f)",
+                similar_info.get('name', 'N/A'),
+                edge_data.get('similarity', 0),
+            )
 
     # (3) サンプル力量のカテゴリーを取得
     if acquired:
         sample_comp_code = list(acquired)[0]
         category = kg.get_competence_category(sample_comp_code)
         comp_info = kg.get_node_info(f"competence_{sample_comp_code}")
-        print(f"\n  サンプル力量: {comp_info.get('name', 'N/A')} ({sample_comp_code})")
-        print(f"    カテゴリー: {category}")
-        print(f"    タイプ: {comp_info.get('type', 'N/A')}")
+        logger.info("\n  サンプル力量: %s (%s)", comp_info.get('name', 'N/A'), sample_comp_code)
+        logger.info("    カテゴリー: %s", category)
+        logger.info("    タイプ: %s", comp_info.get('type', 'N/A'))
 
     # (4) グラフのエクスポート（任意）
     # kg.export_to_gexf("output/knowledge_graph.gexf")
 
-    print("\n" + "=" * 80)
-    print("テスト完了")
-    print("=" * 80)
+    logger.info("\n" + "=" * 80)
+    logger.info("テスト完了")
+    logger.info("=" * 80)
 
     return kg
 

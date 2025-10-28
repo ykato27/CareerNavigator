@@ -4,12 +4,16 @@
 時系列分割による評価とメトリクス計算を提供
 """
 
+import logging
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 from collections import defaultdict
 from skillnote_recommendation.core.recommendation_engine import RecommendationEngine
+
+
+logger = logging.getLogger(__name__)
 
 
 class RecommendationEvaluator:
@@ -34,7 +38,7 @@ class RecommendationEvaluator:
         時系列による学習・評価データ分割
 
         Args:
-            member_competence: 会員習得力量データ（取得日カラム必須）
+            member_competence: メンバー習得力量データ（取得日カラム必須）
             split_date: 分割日（YYYY-MM-DD形式、Noneの場合はtrain_ratioで自動計算）
             train_ratio: 学習データ割合（split_dateがNoneの場合に使用）
 
@@ -46,7 +50,7 @@ class RecommendationEvaluator:
         """
         # 取得日カラムの確認
         if '取得日' not in member_competence.columns:
-            raise ValueError("会員習得力量データに '取得日' カラムが必要です")
+            raise ValueError("メンバー習得力量データに '取得日' カラムが必要です")
 
         # 取得日をdatetime型に変換
         df = member_competence.copy()
@@ -94,15 +98,15 @@ class RecommendationEvaluator:
             test_data: 評価データ（将来の習得力量）
             competence_master: 力量マスタ
             top_k: 推薦する上位K件
-            member_sample: 評価対象会員リスト（Noneの場合は全会員）
+            member_sample: 評価対象メンバーリスト（Noneの場合は全メンバー）
             similarity_data: 類似度データ（Noneの場合は空のDataFrame）
 
         Returns:
             評価メトリクスの辞書
         """
-        # 評価対象会員の決定
+        # 評価対象メンバーの決定
         if member_sample is None:
-            # テストデータで習得記録がある会員
+            # テストデータで習得記録があるメンバー
             member_sample = test_data['メンバーコード'].unique().tolist()
 
         # エンジンの準備
@@ -111,7 +115,7 @@ class RecommendationEvaluator:
             if similarity_data is None:
                 similarity_data = pd.DataFrame(columns=['力量1', '力量2', '類似度'])
 
-            # 会員マスタの準備（メンバーコードのみ）
+            # メンバーマスタの準備（メンバーコードのみ）
             members_data = pd.DataFrame({
                 'メンバーコード': train_data['メンバーコード'].unique()
             })
@@ -243,7 +247,7 @@ class RecommendationEvaluator:
         データを時系列で複数のfoldに分割し、各foldで評価を実行
 
         Args:
-            member_competence: 会員習得力量データ
+            member_competence: メンバー習得力量データ
             competence_master: 力量マスタ
             n_splits: 分割数
             top_k: 推薦する上位K件
@@ -298,11 +302,11 @@ class RecommendationEvaluator:
         Args:
             metrics: 評価メトリクスの辞書
         """
-        print("\n" + "=" * 80)
-        print("推薦システム評価結果")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("推薦システム評価結果")
+        logger.info("=" * 80)
 
-        print(f"\n評価対象会員数: {metrics.get('evaluated_members', 0)}名")
+        logger.info("\n評価対象メンバー数: %d名", metrics.get('evaluated_members', 0))
 
         # K値を取得
         k = None
@@ -312,13 +316,28 @@ class RecommendationEvaluator:
                 break
 
         if k:
-            print(f"\n【Top-{k} 推薦の評価】")
-            print(f"  Precision@{k}: {metrics.get(f'precision@{k}', 0.0):.4f}")
-            print(f"  Recall@{k}:    {metrics.get(f'recall@{k}', 0.0):.4f}")
-            print(f"  NDCG@{k}:      {metrics.get(f'ndcg@{k}', 0.0):.4f}")
-            print(f"  Hit Rate:      {metrics.get('hit_rate', 0.0):.4f}")
+            logger.info("\n【Top-%s 推薦の評価】", k)
+            logger.info(
+                "  Precision@%s: %.4f",
+                k,
+                metrics.get(f'precision@{k}', 0.0),
+            )
+            logger.info(
+                "  Recall@%s:    %.4f",
+                k,
+                metrics.get(f'recall@{k}', 0.0),
+            )
+            logger.info(
+                "  NDCG@%s:      %.4f",
+                k,
+                metrics.get(f'ndcg@{k}', 0.0),
+            )
+            logger.info(
+                "  Hit Rate:      %.4f",
+                metrics.get('hit_rate', 0.0),
+            )
 
-        print("\n" + "=" * 80)
+        logger.info("\n" + "=" * 80)
 
     def export_evaluation_results(
         self,
@@ -334,7 +353,7 @@ class RecommendationEvaluator:
         """
         df = pd.DataFrame([metrics])
         df.to_csv(output_path, index=False, encoding='utf-8-sig')
-        print(f"\n評価結果を出力: {output_path}")
+        logger.info("\n評価結果を出力: %s", output_path)
 
     def calculate_diversity_metrics(
         self,
@@ -345,7 +364,7 @@ class RecommendationEvaluator:
         推薦結果の多様性指標を計算
 
         Args:
-            recommendations_list: 会員ごとの推薦結果リスト（各要素は推薦オブジェクトのリスト）
+            recommendations_list: メンバーごとの推薦結果リスト（各要素は推薦オブジェクトのリスト）
             competence_master: 力量マスタ
 
         Returns:
@@ -421,7 +440,7 @@ class RecommendationEvaluator:
             test_data: 評価データ（将来の習得力量）
             competence_master: 力量マスタ
             top_k: 推薦する上位K件
-            member_sample: 評価対象会員リスト（Noneの場合は全会員）
+            member_sample: 評価対象メンバーリスト（Noneの場合は全メンバー）
             similarity_data: 類似度データ（Noneの場合は空のDataFrame）
 
         Returns:
@@ -461,7 +480,7 @@ class RecommendationEvaluator:
         else:
             engine = self.engine
 
-        # 各会員の推薦結果を収集
+        # 各メンバーの推薦結果を収集
         recommendations_list = []
         for member_code in member_sample:
             actual_acquired = test_data[

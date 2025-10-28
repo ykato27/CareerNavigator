@@ -26,9 +26,9 @@ class RecommendationEngine:
         初期化
         
         Args:
-            df_members: 会員マスタ
+            df_members: メンバーマスタ
             df_competence_master: 力量マスタ
-            df_member_competence: 会員習得力量データ
+            df_member_competence: メンバー習得力量データ
             df_similarity: 類似度データ
             category_importance_weight: カテゴリ重要度の重み
             acquisition_ease_weight: 習得容易性の重み
@@ -47,10 +47,10 @@ class RecommendationEngine:
     
     def get_member_competences(self, member_code: str) -> pd.DataFrame:
         """
-        会員の保有力量を取得
+        メンバーの保有力量を取得
         
         Args:
-            member_code: 会員コード
+            member_code: メンバーコード
             
         Returns:
             保有力量データ
@@ -65,7 +65,7 @@ class RecommendationEngine:
         未習得力量を取得
         
         Args:
-            member_code: 会員コード
+            member_code: メンバーコード
             competence_type: 力量タイプ（SKILL/EDUCATION/LICENSE）
             
         Returns:
@@ -114,7 +114,7 @@ class RecommendationEngine:
         習得容易性を計算
         
         Args:
-            member_code: 会員コード
+            member_code: メンバーコード
             target_competence_code: 対象力量コード
             
         Returns:
@@ -227,7 +227,7 @@ class RecommendationEngine:
         力量を推薦
         
         Args:
-            member_code: 会員コード
+            member_code: メンバーコード
             competence_type: 力量タイプフィルタ（None/SKILL/EDUCATION/LICENSE）
             category_filter: カテゴリフィルタ（部分一致）
             top_n: 推薦件数

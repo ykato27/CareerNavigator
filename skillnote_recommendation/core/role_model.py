@@ -1,7 +1,7 @@
 """
 ロールモデル検索モジュール
 
-推薦された力量を既に習得している会員（ロールモデル）を検索する機能を提供します。
+推薦された力量を既に習得しているメンバー（ロールモデル）を検索する機能を提供します。
 """
 
 from typing import List, Dict, Any
@@ -11,7 +11,7 @@ import pandas as pd
 class RoleModelFinder:
     """ロールモデル検索クラス
 
-    特定の力量を持つ会員を検索し、参考となる会員情報を提供します。
+    特定の力量を持つメンバーを検索し、参考となるメンバー情報を提供します。
     """
 
     def __init__(
@@ -23,8 +23,8 @@ class RoleModelFinder:
         """初期化
 
         Args:
-            members: 会員マスターDataFrame
-            member_competence: 会員×力量習得データDataFrame
+            members: メンバーマスターDataFrame
+            member_competence: メンバー×力量習得データDataFrame
             competence_master: 力量マスターDataFrame
         """
         self.members = members
@@ -42,16 +42,16 @@ class RoleModelFinder:
 
         Args:
             competence_code: 力量コード
-            target_member_code: 対象会員コード（除外する場合）
-            top_n: 返す会員数
-            min_level: 最小レベル（このレベル以上の会員のみ）
+            target_member_code: 対象メンバーコード（除外する場合）
+            top_n: 返すメンバー数
+            min_level: 最小レベル（このレベル以上のメンバーのみ）
 
         Returns:
             ロールモデル情報のリスト
             [
                 {
-                    'member_code': 会員コード,
-                    'member_name': 会員名,
+                    'member_code': メンバーコード,
+                    'member_name': メンバー名,
                     'competence_level': 力量レベル,
                     'total_competences': 総習得力量数,
                     'skill_count': SKILL数,
@@ -63,31 +63,31 @@ class RoleModelFinder:
                 ...
             ]
         """
-        # 指定された力量を持つ会員を検索
+        # 指定された力量を持つメンバーを検索
         has_competence = self.member_competence[
             (self.member_competence['力量コード'] == competence_code) &
             (self.member_competence['レベル'] >= min_level)
         ].copy()
 
-        # 対象会員を除外
+        # 対象メンバーを除外
         if target_member_code:
             has_competence = has_competence[
-                has_competence['会員コード'] != target_member_code
+                has_competence['メンバーコード'] != target_member_code
             ]
 
         if has_competence.empty:
             return []
 
-        # 各会員の習得力量統計を計算
+        # 各メンバーの習得力量統計を計算
         role_models = []
 
         for _, row in has_competence.iterrows():
-            member_code = row['会員コード']
+            member_code = row['メンバーコード']
             competence_level = row['レベル']
 
-            # 会員情報を取得
+            # メンバー情報を取得
             member_info = self.members[
-                self.members['会員コード'] == member_code
+                self.members['メンバーコード'] == member_code
             ]
 
             if member_info.empty:
@@ -95,9 +95,9 @@ class RoleModelFinder:
 
             member_info = member_info.iloc[0]
 
-            # 会員の全習得力量を取得
+            # メンバーの全習得力量を取得
             member_comps = self.member_competence[
-                self.member_competence['会員コード'] == member_code
+                self.member_competence['メンバーコード'] == member_code
             ]
 
             # 力量タイプ別にカウント
@@ -113,7 +113,7 @@ class RoleModelFinder:
 
             role_models.append({
                 'member_code': member_code,
-                'member_name': member_info.get('会員名', '不明'),
+                'member_name': member_info.get('メンバー名', '不明'),
                 'competence_level': int(competence_level),
                 'total_competences': len(member_comps),
                 'skill_count': skill_count,
@@ -137,37 +137,37 @@ class RoleModelFinder:
         top_n: int = 5,
         min_similarity: float = 0.3
     ) -> List[Dict[str, Any]]:
-        """類似する会員を検索（習得力量パターンが似ている会員）
+        """類似するメンバーを検索（習得力量パターンが似ているメンバー）
 
         Args:
-            member_code: 基準となる会員コード
-            top_n: 返す会員数
+            member_code: 基準となるメンバーコード
+            top_n: 返すメンバー数
             min_similarity: 最小類似度（Jaccard係数）
 
         Returns:
-            類似会員情報のリスト
+            類似メンバー情報のリスト
         """
-        # 対象会員の習得力量セット
+        # 対象メンバーの習得力量セット
         target_comps = set(
             self.member_competence[
-                self.member_competence['会員コード'] == member_code
+                self.member_competence['メンバーコード'] == member_code
             ]['力量コード'].values
         )
 
         if not target_comps:
             return []
 
-        # 全会員の類似度を計算
+        # 全メンバーの類似度を計算
         similarities = []
 
-        for other_member_code in self.member_competence['会員コード'].unique():
+        for other_member_code in self.member_competence['メンバーコード'].unique():
             if other_member_code == member_code:
                 continue
 
-            # 他会員の習得力量セット
+            # 他メンバーの習得力量セット
             other_comps = set(
                 self.member_competence[
-                    self.member_competence['会員コード'] == other_member_code
+                    self.member_competence['メンバーコード'] == other_member_code
                 ]['力量コード'].values
             )
 
@@ -183,9 +183,9 @@ class RoleModelFinder:
             if similarity < min_similarity:
                 continue
 
-            # 会員情報を取得
+            # メンバー情報を取得
             member_info = self.members[
-                self.members['会員コード'] == other_member_code
+                self.members['メンバーコード'] == other_member_code
             ]
 
             if member_info.empty:
@@ -195,7 +195,7 @@ class RoleModelFinder:
 
             similarities.append({
                 'member_code': other_member_code,
-                'member_name': member_info.get('会員名', '不明'),
+                'member_name': member_info.get('メンバー名', '不明'),
                 'similarity': similarity,
                 'common_competences': intersection,
                 'total_competences': len(other_comps),

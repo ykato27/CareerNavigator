@@ -15,7 +15,7 @@ from pathlib import Path
 
 @pytest.fixture
 def sample_members():
-    """サンプル会員データ（最小データセット）"""
+    """サンプルメンバーデータ（最小データセット）"""
     return pd.DataFrame({
         'メンバーコード': ['m001', 'm002', 'm003', 'm004', 'm005'],
         'メンバー名': ['田中太郎', '鈴木花子', '佐藤次郎', '高橋美咲', '伊藤健一'],
@@ -112,7 +112,7 @@ def sample_competence_master():
 
 @pytest.fixture
 def sample_member_competence():
-    """サンプル会員習得力量データ（正規化済み）"""
+    """サンプルメンバー習得力量データ（正規化済み）"""
     return pd.DataFrame({
         'メンバーコード': ['m001', 'm001', 'm001', 'm002', 'm002', 'm003', 'm003', 'm004', 'm005'],
         '力量コード': ['s001', 's002', 'e001', 's001', 's003', 's002', 'l001', 's001', 's004'],

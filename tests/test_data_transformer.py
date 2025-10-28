@@ -234,14 +234,14 @@ class TestCreateCategoryNames:
         assert mapping['cat02'] == '技術'
 
 
-# ==================== 会員習得力量データ作成テスト ====================
+# ==================== メンバー習得力量データ作成テスト ====================
 
 class TestCreateMemberCompetence:
-    """会員習得力量データ作成のテスト"""
+    """メンバー習得力量データ作成のテスト"""
 
     def test_create_member_competence(self, sample_members, sample_acquired,
                                      sample_competence_master):
-        """会員習得力量データが作成される"""
+        """メンバー習得力量データが作成される"""
         data = {
             'members': sample_members,
             'acquired': sample_acquired
@@ -336,7 +336,7 @@ class TestCreateSkillMatrix:
     """スキルマトリクス作成のテスト"""
 
     def test_create_skill_matrix(self, sample_member_competence):
-        """会員×力量マトリクスが作成される"""
+        """メンバー×力量マトリクスが作成される"""
         transformer = DataTransformer()
         matrix = transformer.create_skill_matrix(sample_member_competence)
 
@@ -349,7 +349,7 @@ class TestCreateSkillMatrix:
         transformer = DataTransformer()
         matrix = transformer.create_skill_matrix(sample_member_competence)
 
-        # 会員数（行）
+        # メンバー数（行）
         unique_members = sample_member_competence['メンバーコード'].nunique()
         assert matrix.shape[0] == unique_members
 
@@ -370,7 +370,7 @@ class TestCreateSkillMatrix:
         transformer = DataTransformer()
         matrix = transformer.create_skill_matrix(sample_member_competence)
 
-        # 特定の会員・力量の値を確認
+        # 特定のメンバー・力量の値を確認
         # m001がs001を保有している場合
         if 'm001' in matrix.index and 's001' in matrix.columns:
             expected_level = sample_member_competence[
@@ -382,13 +382,13 @@ class TestCreateSkillMatrix:
             assert actual_level == expected_level
 
 
-# ==================== 会員マスタクリーニングテスト ====================
+# ==================== メンバーマスタクリーニングテスト ====================
 
 class TestCleanMembersData:
-    """会員マスタクリーニングのテスト"""
+    """メンバーマスタクリーニングのテスト"""
 
     def test_clean_members_data(self, sample_members):
-        """会員マスタがクリーニングされる"""
+        """メンバーマスタがクリーニングされる"""
         data = {'members': sample_members}
 
         transformer = DataTransformer()

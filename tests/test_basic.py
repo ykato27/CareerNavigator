@@ -19,7 +19,7 @@ def test_config():
 
 
 def test_member_model():
-    """会員モデルのテスト"""
+    """メンバーモデルのテスト"""
     member = Member(
         member_code='m001',
         name='テスト太郎',

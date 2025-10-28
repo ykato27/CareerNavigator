@@ -12,7 +12,7 @@ from skillnote_recommendation.ml.ml_recommender import MLRecommender
 
 @pytest.fixture
 def sample_skill_matrix():
-    """サンプル会員×力量マトリクス"""
+    """サンプルメンバー×力量マトリクス"""
     return pd.DataFrame(
         {
             's001': [3, 0, 2, 0, 1],
@@ -38,7 +38,7 @@ def sample_competence_master():
 
 @pytest.fixture
 def sample_member_competence():
-    """サンプル会員習得力量データ"""
+    """サンプルメンバー習得力量データ"""
     data = []
     for member_idx, member_code in enumerate(['m001', 'm002', 'm003', 'm004', 'm005']):
         for comp_idx, comp_code in enumerate(['s001', 's002', 's003', 's004', 's005']):
@@ -218,7 +218,7 @@ class TestEdgeCases:
     """エッジケースのテスト"""
 
     def test_recommend_all_acquired(self, ml_recommender, sample_skill_matrix):
-        """全て習得済みの会員"""
+        """全て習得済みのメンバー"""
         # m003は全て習得済みと仮定（実際はテストデータによる）
         recommendations = ml_recommender.recommend(member_code='m003', top_n=3)
 
