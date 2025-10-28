@@ -11,17 +11,23 @@ import numpy as np
 from dataclasses import dataclass
 from .knowledge_graph import CompetenceKnowledgeGraph
 from .category_hierarchy import CategoryHierarchy
+from ..config_loader import get_config
 
 
-# 定数
-PHASE_BASIC = "基礎固め"
-PHASE_INTERMEDIATE = "専門性構築"
-PHASE_EXPERT = "エキスパート"
+# 設定値を取得するヘルパー関数
+def _get_phase_names():
+    """フェーズ名を設定ファイルから取得"""
+    return {
+        'basic': get_config("career_path.phases.basic", "基礎固め"),
+        'intermediate': get_config("career_path.phases.intermediate", "専門性構築"),
+        'expert': get_config("career_path.phases.expert", "エキスパート")
+    }
 
-# スコアリング重み
-WEIGHT_HIERARCHY = 0.3  # カテゴリー階層の重み
-WEIGHT_EASE = 0.3       # 習得容易性の重み
-WEIGHT_IMPORTANCE = 0.4  # 重要度の重み
+
+# 定数（後方互換性のため）
+PHASE_BASIC = get_config("career_path.phases.basic", "基礎固め")
+PHASE_INTERMEDIATE = get_config("career_path.phases.intermediate", "専門性構築")
+PHASE_EXPERT = get_config("career_path.phases.expert", "エキスパート")
 
 
 @dataclass
@@ -302,10 +308,14 @@ class LearningPathGenerator:
         importance_score = comp_info.get('importance_score', 0.5)
 
         # 4. 総合優先度スコア（バランス型）
+        weight_hierarchy = get_config("career_path.weights.hierarchy", 0.3)
+        weight_ease = get_config("career_path.weights.ease", 0.3)
+        weight_importance = get_config("career_path.weights.importance", 0.4)
+
         priority_score = (
-            WEIGHT_HIERARCHY * (1.0 - (hierarchy_level - 1) / 2.0) +  # 基礎ほど高スコア
-            WEIGHT_EASE * ease_score +
-            WEIGHT_IMPORTANCE * importance_score
+            weight_hierarchy * (1.0 - (hierarchy_level - 1) / 2.0) +  # 基礎ほど高スコア
+            weight_ease * ease_score +
+            weight_importance * importance_score
         )
 
         # 5. フェーズを決定
@@ -383,9 +393,12 @@ class LearningPathGenerator:
 
         階層レベルと優先度スコアを組み合わせて判定
         """
-        if hierarchy_level == 1:
+        basic_max = get_config("career_path.phase_thresholds.basic_max", 1)
+        intermediate_max = get_config("career_path.phase_thresholds.intermediate_max", 2)
+
+        if hierarchy_level <= basic_max:
             return PHASE_BASIC
-        elif hierarchy_level == 2:
+        elif hierarchy_level <= intermediate_max:
             return PHASE_INTERMEDIATE
         else:
             return PHASE_EXPERT
