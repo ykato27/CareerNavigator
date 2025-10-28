@@ -4,6 +4,7 @@
 DataFrameベースのMatrixFactorizationModelと整合する設計。
 """
 
+import logging
 import pandas as pd
 from typing import List, Optional, Dict
 from skillnote_recommendation.core.models import Recommendation
@@ -12,6 +13,9 @@ from skillnote_recommendation.ml.diversity import DiversityReranker
 from skillnote_recommendation.ml.exceptions import ColdStartError, MLModelNotTrainedError
 from skillnote_recommendation.core.reference_persons import ReferencePersonFinder
 from skillnote_recommendation.config_loader import get_config
+
+
+logger = logging.getLogger(__name__)
 
 
 class MLRecommender:
@@ -45,14 +49,14 @@ class MLRecommender:
         member_master: pd.DataFrame
     ):
         """
-        member_competence（会員習得力量データ）から会員×力量マトリクスを生成し、
+        member_competence（メンバー習得力量データ）からメンバー×力量マトリクスを生成し、
         MatrixFactorizationModel（NMF）を学習。
         """
-        print("\n" + "=" * 80)
-        print("MLモデル学習開始（NMF）")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("MLモデル学習開始（NMF）")
+        logger.info("=" * 80)
 
-        # 会員×力量マトリクスを作成
+        # メンバー×力量マトリクスを作成
         skill_matrix = member_competence.pivot_table(
             index="メンバーコード",
             columns="力量コード",
@@ -66,10 +70,10 @@ class MLRecommender:
         mf_model = MatrixFactorizationModel(n_components=n_components, random_state=random_state)
         mf_model.fit(skill_matrix)
 
-        print(f"会員数: {skill_matrix.shape[0]}")
-        print(f"力量数: {skill_matrix.shape[1]}")
-        print(f"再構成誤差: {mf_model.get_reconstruction_error():.4f}")
-        print("=" * 80)
+        logger.info("メンバー数: %d", skill_matrix.shape[0])
+        logger.info("力量数: %d", skill_matrix.shape[1])
+        logger.info("再構成誤差: %.4f", mf_model.get_reconstruction_error())
+        logger.info("=" * 80)
 
         # 参考人物検索エンジンを初期化
         reference_finder = ReferencePersonFinder(
@@ -99,11 +103,11 @@ class MLRecommender:
         use_diversity: bool = True,
         diversity_strategy: str = "hybrid"
     ) -> List[Recommendation]:
-        """特定会員に対する推薦を生成"""
+        """特定メンバーに対する推薦を生成"""
         if not self.mf_model.is_fitted:
             raise MLModelNotTrainedError()
 
-        # コールドスタート問題のチェック：会員が学習データに存在するか
+        # コールドスタート問題のチェック：メンバーが学習データに存在するか
         if member_code not in self.mf_model.member_index:
             raise ColdStartError(member_code)
 
@@ -235,7 +239,7 @@ class MLRecommender:
         個人の力量プロファイルに基づいたリッチな推薦理由を生成
 
         Args:
-            member_code: 対象会員コード
+            member_code: 対象メンバーコード
             competence_info: 推薦力量の情報
             score: 推薦スコア
             use_diversity: 多様性を考慮するか
@@ -249,7 +253,7 @@ class MLRecommender:
         typ = competence_info["力量タイプ"]
         cat = competence_info.get("力量カテゴリー名", "")
 
-        # 会員の力量プロファイルを分析
+        # メンバーの力量プロファイルを分析
         acquired = self._get_acquired_competences(member_code)
         acquired_count = len(acquired)
 
@@ -405,7 +409,7 @@ class MLRecommender:
         return benefits
 
     def _analyze_category_profile(self, member_code: str) -> Dict[str, int]:
-        """会員のカテゴリ別力量保有状況を分析"""
+        """メンバーのカテゴリ別力量保有状況を分析"""
         member_comps = self.member_competence[
             self.member_competence["メンバーコード"] == member_code
         ]

@@ -4,8 +4,12 @@ Category Hierarchy Handler
 カテゴリー階層構造の解析と活用
 """
 
+import logging
 import pandas as pd
 from typing import Dict, List, Tuple, Optional
+
+
+logger = logging.getLogger(__name__)
 
 
 class CategoryHierarchy:
@@ -25,9 +29,9 @@ class CategoryHierarchy:
         self.parent_map = self._build_parent_map()
         self.children_map = self._build_children_map()
 
-        print(f"\nCategory Hierarchy 構築完了")
-        print(f"  カテゴリー総数: {len(self.hierarchy)}")
-        print(f"  階層レベル数: {self._count_levels()}")
+        logger.info("\nCategory Hierarchy 構築完了")
+        logger.info("  カテゴリー総数: %d", len(self.hierarchy))
+        logger.info("  階層レベル数: %d", self._count_levels())
 
     def _build_hierarchy(self) -> Dict[str, Dict]:
         """カテゴリー階層を構築

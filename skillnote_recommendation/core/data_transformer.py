@@ -4,10 +4,14 @@
 スキルノートのデータを推薦システム用に変換
 """
 
+import logging
 import pandas as pd
 import numpy as np
 from typing import Dict, Tuple
 from skillnote_recommendation.core.config import Config
+
+
+logger = logging.getLogger(__name__)
 
 
 class DataTransformer:
@@ -48,9 +52,9 @@ class DataTransformer:
         Returns:
             統合力量マスタ
         """
-        print("\n" + "=" * 80)
-        print("統合力量マスタ作成")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("統合力量マスタ作成")
+        logger.info("=" * 80)
         
         # 各力量タイプのマスタを整形
         skills = data['skills'][['力量コード', '力量名', '力量カテゴリーコード', '概要']].copy()
@@ -77,10 +81,19 @@ class DataTransformer:
         category_names = self._create_category_names(data['categories'])
         competence_master['力量カテゴリー名'] = competence_master['力量カテゴリーコード_主'].map(category_names)
         
-        print(f"\n統合完了: {len(competence_master)}件")
-        print(f"  - SKILL: {len(competence_master[competence_master['力量タイプ'] == 'SKILL'])}件")
-        print(f"  - EDUCATION: {len(competence_master[competence_master['力量タイプ'] == 'EDUCATION'])}件")
-        print(f"  - LICENSE: {len(competence_master[competence_master['力量タイプ'] == 'LICENSE'])}件")
+        logger.info("\n統合完了: %d件", len(competence_master))
+        logger.info(
+            "  - SKILL: %d件",
+            len(competence_master[competence_master['力量タイプ'] == 'SKILL'])
+        )
+        logger.info(
+            "  - EDUCATION: %d件",
+            len(competence_master[competence_master['力量タイプ'] == 'EDUCATION'])
+        )
+        logger.info(
+            "  - LICENSE: %d件",
+            len(competence_master[competence_master['力量タイプ'] == 'LICENSE'])
+        )
         
         return competence_master
     
@@ -110,26 +123,26 @@ class DataTransformer:
     def create_member_competence(self, data: Dict[str, pd.DataFrame], 
                                  competence_master: pd.DataFrame) -> Tuple[pd.DataFrame, list]:
         """
-        会員習得力量データを作成
+        メンバー習得力量データを作成
         
         Args:
             data: 読み込んだデータの辞書
             competence_master: 統合力量マスタ
             
         Returns:
-            (会員習得力量データ, 有効な会員コードリスト)
+            (メンバー習得力量データ, 有効なメンバーコードリスト)
         """
-        print("\n" + "=" * 80)
-        print("会員習得力量データ作成")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("メンバー習得力量データ作成")
+        logger.info("=" * 80)
         
-        # 有効な会員を抽出
+        # 有効なメンバーを抽出
         valid_members = data['members'][
             (~data['members']['メンバー名'].str.contains('削除|テスト|test', case=False, na=False)) &
             (data['members']['メンバーコード'].notna())
         ]['メンバーコード'].unique()
         
-        print(f"\n有効な会員数: {len(valid_members)}名")
+        logger.info("\n有効なメンバー数: %d名", len(valid_members))
         
         # 習得力量データ
         member_competence = data['acquired'][
@@ -151,23 +164,23 @@ class DataTransformer:
             suffixes=('', '_master')
         )
         
-        print(f"習得記録数: {len(member_competence)}件")
+        logger.info("習得記録数: %d件", len(member_competence))
         
         return member_competence, valid_members.tolist()
     
     def create_skill_matrix(self, member_competence: pd.DataFrame) -> pd.DataFrame:
         """
-        会員×力量マトリクスを作成
+        メンバー×力量マトリクスを作成
         
         Args:
-            member_competence: 会員習得力量データ
+            member_competence: メンバー習得力量データ
             
         Returns:
-            会員×力量マトリクス
+            メンバー×力量マトリクス
         """
-        print("\n" + "=" * 80)
-        print("会員×力量マトリクス作成")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("メンバー×力量マトリクス作成")
+        logger.info("=" * 80)
         
         skill_matrix = member_competence.pivot_table(
             index='メンバーコード',
@@ -176,19 +189,23 @@ class DataTransformer:
             fill_value=0
         )
         
-        print(f"\nマトリクスサイズ: {skill_matrix.shape[0]}名 × {skill_matrix.shape[1]}力量")
+        logger.info(
+            "\nマトリクスサイズ: %d名 × %d力量",
+            skill_matrix.shape[0],
+            skill_matrix.shape[1],
+        )
         
         return skill_matrix
     
     def clean_members_data(self, data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """
-        会員マスタをクリーンにする
+        メンバーマスタをクリーンにする
         
         Args:
             data: 読み込んだデータの辞書
             
         Returns:
-            クリーンな会員マスタ
+            クリーンなメンバーマスタ
         """
         members_clean = data['members'][
             (~data['members']['メンバー名'].str.contains('削除|テスト|test', case=False, na=False)) &

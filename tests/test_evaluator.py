@@ -16,7 +16,7 @@ from skillnote_recommendation.core.recommendation_engine import RecommendationEn
 
 @pytest.fixture
 def temporal_member_competence():
-    """時系列データを含む会員習得力量データ"""
+    """時系列データを含むメンバー習得力量データ"""
     # 2023年1月から2024年12月までのデータ
     base_date = datetime(2023, 1, 1)
 
@@ -278,7 +278,7 @@ class TestEvaluationMetrics:
 
     def test_evaluate_with_member_sample(self, temporal_member_competence,
                                         sample_competence_master):
-        """特定会員のみ評価"""
+        """特定メンバーのみ評価"""
         evaluator = RecommendationEvaluator()
 
         train_data, test_data = evaluator.temporal_train_test_split(
@@ -286,7 +286,7 @@ class TestEvaluationMetrics:
             train_ratio=0.7
         )
 
-        # 特定会員のみ評価
+        # 特定メンバーのみ評価
         member_sample = ['m001', 'm002']
 
         metrics = evaluator.evaluate_recommendations(
@@ -297,7 +297,7 @@ class TestEvaluationMetrics:
             member_sample=member_sample
         )
 
-        # 評価対象会員数が制限される
+        # 評価対象メンバー数が制限される
         assert metrics['evaluated_members'] <= len(member_sample)
 
     def test_evaluate_empty_test_data(self, sample_competence_master):

@@ -20,7 +20,7 @@ from skillnote_recommendation.core.data_transformer import DataTransformer
 loader = DataLoader()
 data = loader.load_all_data()
 
-# 会員習得力量データ作成
+# メンバー習得力量データ作成
 transformer = DataTransformer()
 competence_master = transformer.create_competence_master(data)
 member_competence, _ = transformer.create_member_competence(data, competence_master)
@@ -73,7 +73,7 @@ evaluator.print_evaluation_results(metrics)
 推薦システム評価結果
 ================================================================================
 
-評価対象会員数: 150名
+評価対象メンバー数: 150名
 
 【Top-10 推薦の評価】
   Precision@10: 0.3245
@@ -122,11 +122,11 @@ evaluator.export_evaluation_results(
 
 ### Hit Rate（ヒット率）
 
-少なくとも1つの正解を含む推薦を得た会員の割合。
+少なくとも1つの正解を含む推薦を得たメンバーの割合。
 
 **解釈**:
-- 1.0に近いほど多くの会員に有用な推薦を提供
-- 例: Hit Rate = 0.72 → 72%の会員に少なくとも1つの有用な推薦
+- 1.0に近いほど多くのメンバーに有用な推薦を提供
+- 例: Hit Rate = 0.72 → 72%のメンバーに少なくとも1つの有用な推薦
 
 ## 時系列クロスバリデーション
 
@@ -156,10 +156,10 @@ print(f"\n平均 Precision@10: {avg_precision:.3f}")
 print(f"平均 Recall@10: {avg_recall:.3f}")
 ```
 
-## 特定会員のみ評価
+## 特定メンバーのみ評価
 
 ```python
-# 評価対象を特定会員に限定
+# 評価対象を特定メンバーに限定
 target_members = ['m001', 'm002', 'm003']
 
 metrics = evaluator.evaluate_recommendations(
@@ -182,7 +182,7 @@ metrics = evaluator.evaluate_recommendations(
 ### 2. 評価対象の選択
 
 ```python
-# テストデータで実際に習得した会員のみ評価
+# テストデータで実際に習得したメンバーのみ評価
 # （デフォルトの動作）
 metrics = evaluator.evaluate_recommendations(
     train_data=train_data,
@@ -283,21 +283,21 @@ print(cv_df[['precision@10', 'recall@10', 'ndcg@10', 'hit_rate']].describe())
 
 ## トラブルシューティング
 
-### 問題: 評価対象会員が0になる
+### 問題: 評価対象メンバーが0になる
 
-**原因**: テストデータに習得記録がない、または学習データに存在しない会員
+**原因**: テストデータに習得記録がない、または学習データに存在しないメンバー
 
 **解決策**:
 ```python
 # データの確認
-print(f"学習データの会員数: {train_data['メンバーコード'].nunique()}")
-print(f"評価データの会員数: {test_data['メンバーコード'].nunique()}")
+print(f"学習データのメンバー数: {train_data['メンバーコード'].nunique()}")
+print(f"評価データのメンバー数: {test_data['メンバーコード'].nunique()}")
 
-# 共通会員の確認
+# 共通メンバーの確認
 train_members = set(train_data['メンバーコード'].unique())
 test_members = set(test_data['メンバーコード'].unique())
 common_members = train_members & test_members
-print(f"共通会員数: {len(common_members)}")
+print(f"共通メンバー数: {len(common_members)}")
 ```
 
 ### 問題: メトリクスが全て0.0
@@ -321,11 +321,11 @@ engine = RecommendationEngine(
     df_similarity=pd.DataFrame(columns=['力量1', '力量2', '類似度'])
 )
 
-# サンプル会員で推薦を確認
+# サンプルメンバーで推薦を確認
 sample_member = train_data['メンバーコード'].iloc[0]
 recommendations = engine.recommend(sample_member, top_n=10)
 
-print(f"会員 {sample_member} の推薦:")
+print(f"メンバー {sample_member} の推薦:")
 for rec in recommendations[:5]:
     print(f"  - {rec.competence_name} (スコア: {rec.priority_score:.2f})")
 ```

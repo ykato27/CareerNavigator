@@ -5,12 +5,16 @@ CSVファイルからデータを読み込む機能を提供
 ディレクトリスキャンにより複数CSVファイルの自動読み込みと結合に対応
 """
 
+import logging
 import pandas as pd
 import re
 import os
 import glob
-from typing import Dict, List
+from typing import Dict
 from skillnote_recommendation.core.config import Config
+
+
+logger = logging.getLogger(__name__)
 
 
 class DataLoader:
@@ -131,9 +135,9 @@ class DataLoader:
         Returns:
             データの辞書（キー: ファイル種別、値: DataFrame）
         """
-        print("=" * 80)
-        print("データ読み込み")
-        print("=" * 80)
+        logger.info("=" * 80)
+        logger.info("データ読み込み")
+        logger.info("=" * 80)
 
         data = {}
 
@@ -145,13 +149,18 @@ class DataLoader:
                 # ファイル数も表示
                 dir_path = os.path.join(self.data_dir, dir_name)
                 csv_files = glob.glob(os.path.join(dir_path, '*.csv'))
-                print(f"  ✓ {dir_name}/: {len(csv_files)}ファイル, {len(df)}行")
+                logger.info(
+                    "  ✓ %s/: %dファイル, %d行",
+                    dir_name,
+                    len(csv_files),
+                    len(df),
+                )
 
             except FileNotFoundError as e:
-                print(f"  ✗ {key}: ディレクトリ '{dir_name}/' が見つかりません")
+                logger.error("  ✗ %s: ディレクトリ '%s/' が見つかりません", key, dir_name)
                 raise e
 
-        print(f"\n全{len(data)}種類のデータ読み込み完了")
+        logger.info("\n全%d種類のデータ読み込み完了", len(data))
 
         return data
     
@@ -165,9 +174,9 @@ class DataLoader:
         Returns:
             検証結果（True: 正常、False: 異常）
         """
-        print("\n" + "=" * 80)
-        print("データ検証")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("データ検証")
+        logger.info("=" * 80)
         
         # 必須カラムのチェック
         required_columns = {
@@ -186,14 +195,14 @@ class DataLoader:
             missing_cols = [col for col in required_cols if col not in df.columns]
             
             if missing_cols:
-                print(f"  ✗ {key}: 必須カラムが不足 - {missing_cols}")
+                logger.error("  ✗ %s: 必須カラムが不足 - %s", key, missing_cols)
                 all_valid = False
             else:
-                print(f"  ✓ {key}: 必須カラム確認")
-        
+                logger.info("  ✓ %s: 必須カラム確認", key)
+
         if all_valid:
-            print("\n全データの検証完了")
+            logger.info("\n全データの検証完了")
         else:
-            print("\n検証エラーがあります")
+            logger.error("\n検証エラーがあります")
         
         return all_valid

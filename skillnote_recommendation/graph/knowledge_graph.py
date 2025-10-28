@@ -5,12 +5,16 @@ Knowledge Graph構築モジュール
 グラフベースの推薦アルゴリズムの基盤を提供
 """
 
+import logging
 import networkx as nx
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Set, Optional
 from sklearn.metrics.pairwise import cosine_similarity
 from .category_hierarchy import CategoryHierarchy
+
+
+logger = logging.getLogger(__name__)
 
 
 class CompetenceKnowledgeGraph:
@@ -57,13 +61,13 @@ class CompetenceKnowledgeGraph:
             self.category_hierarchy = None
 
         # グラフ構築
-        print("\n" + "=" * 80)
-        print("Knowledge Graph 構築開始")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("Knowledge Graph 構築開始")
+        logger.info("=" * 80)
         self._build_graph()
-        print("\nKnowledge Graph 構築完了")
-        print(f"  ノード数: {self.G.number_of_nodes()}")
-        print(f"  エッジ数: {self.G.number_of_edges()}")
+        logger.info("\nKnowledge Graph 構築完了")
+        logger.info("  ノード数: %d", self.G.number_of_nodes())
+        logger.info("  エッジ数: %d", self.G.number_of_edges())
         self._print_graph_stats()
 
     def _build_graph(self):
@@ -71,32 +75,32 @@ class CompetenceKnowledgeGraph:
         total_steps = 7 if self.use_category_hierarchy else 6
 
         # 1. メンバーノード追加
-        print(f"\n[1/{total_steps}] メンバーノードを追加中...")
+        logger.info("\n[1/%d] メンバーノードを追加中...", total_steps)
         self._add_member_nodes()
 
         # 2. 力量ノード追加
-        print(f"[2/{total_steps}] 力量ノードを追加中...")
+        logger.info("[2/%d] 力量ノードを追加中...", total_steps)
         self._add_competence_nodes()
 
         # 3. カテゴリーノード追加
-        print(f"[3/{total_steps}] カテゴリーノードを追加中...")
+        logger.info("[3/%d] カテゴリーノードを追加中...", total_steps)
         self._add_category_nodes()
 
         # 4. メンバー-力量エッジ（習得関係）
-        print(f"[4/{total_steps}] メンバー-力量エッジを追加中...")
+        logger.info("[4/%d] メンバー-力量エッジを追加中...", total_steps)
         self._add_member_competence_edges()
 
         # 5. 力量-カテゴリーエッジ（所属関係）
-        print(f"[5/{total_steps}] 力量-カテゴリーエッジを追加中...")
+        logger.info("[5/%d] 力量-カテゴリーエッジを追加中...", total_steps)
         self._add_competence_category_edges()
 
         # 6. カテゴリー階層エッジ（親子関係）NEW!
         if self.use_category_hierarchy:
-            print(f"[6/{total_steps}] カテゴリー階層エッジを追加中...")
+            logger.info("[6/%d] カテゴリー階層エッジを追加中...", total_steps)
             self._add_category_hierarchy_edges()
 
         # 7. メンバー間類似度エッジ
-        print(f"[{total_steps}/{total_steps}] メンバー間類似度エッジを追加中...")
+        logger.info("[%d/%d] メンバー間類似度エッジを追加中...", total_steps, total_steps)
         self._add_member_similarity_edges()
 
     def _add_member_nodes(self):
@@ -111,7 +115,7 @@ class CompetenceKnowledgeGraph:
                 grade=row.get('職能等級', None),
                 position=row.get('役職', None),
             )
-        print(f"  追加: {len(self.member_master_df)}個のメンバーノード")
+        logger.info("  追加: %d個のメンバーノード", len(self.member_master_df))
 
     def _add_competence_nodes(self):
         """力量ノードを追加"""
@@ -126,7 +130,7 @@ class CompetenceKnowledgeGraph:
                 category=row.get('力量カテゴリー名', None),
                 description=row.get('概要', None),
             )
-        print(f"  追加: {len(self.competence_master_df)}個の力量ノード")
+        logger.info("  追加: %d個の力量ノード", len(self.competence_master_df))
 
     def _add_category_nodes(self):
         """カテゴリーノードを追加"""
@@ -141,7 +145,7 @@ class CompetenceKnowledgeGraph:
                     node_type="category",
                     name=category
                 )
-        print(f"  追加: {len(categories)}個のカテゴリーノード")
+        logger.info("  追加: %d個のカテゴリーノード", len(categories))
 
     def _add_member_competence_edges(self):
         """メンバー-力量エッジ（習得関係）を追加"""
@@ -160,7 +164,7 @@ class CompetenceKnowledgeGraph:
                     level=float(row['正規化レベル'])
                 )
                 edge_count += 1
-        print(f"  追加: {edge_count}本のメンバー-力量エッジ")
+        logger.info("  追加: %d本のメンバー-力量エッジ", edge_count)
 
     def _add_competence_category_edges(self):
         """力量-カテゴリーエッジ（所属関係）を追加"""
@@ -180,7 +184,7 @@ class CompetenceKnowledgeGraph:
                         weight=1.0
                     )
                     edge_count += 1
-        print(f"  追加: {edge_count}本の力量-カテゴリーエッジ")
+        logger.info("  追加: %d本の力量-カテゴリーエッジ", edge_count)
 
     def _add_category_hierarchy_edges(self):
         """カテゴリー階層エッジを追加（親子関係）"""
@@ -208,7 +212,7 @@ class CompetenceKnowledgeGraph:
                     )
                     edge_count += 1
 
-        print(f"  追加: {edge_count}本のカテゴリー階層エッジ")
+        logger.info("  追加: %d本のカテゴリー階層エッジ", edge_count)
 
     def _add_member_similarity_edges(self, threshold: float = 0.3, top_k: int = 5):
         """メンバー間の類似度エッジを追加
@@ -259,7 +263,12 @@ class CompetenceKnowledgeGraph:
                         )
                         edge_count += 1
 
-        print(f"  追加: {edge_count}本のメンバー類似度エッジ（閾値={threshold}, top_k={top_k}）")
+        logger.info(
+            "  追加: %d本のメンバー類似度エッジ（閾値=%s, top_k=%s）",
+            edge_count,
+            threshold,
+            top_k,
+        )
 
     def get_neighbors(self, node_id: str, edge_type: Optional[str] = None) -> List[str]:
         """指定ノードの隣接ノードを取得
@@ -338,9 +347,9 @@ class CompetenceKnowledgeGraph:
             node_type = self.G.nodes[node].get('node_type', 'unknown')
             node_types[node_type] = node_types.get(node_type, 0) + 1
 
-        print("\n  ノードタイプ別:")
+        logger.info("\n  ノードタイプ別:")
         for node_type, count in sorted(node_types.items()):
-            print(f"    - {node_type}: {count}")
+            logger.info("    - %s: %d", node_type, count)
 
         # エッジタイプ別の数
         edge_types = {}
@@ -348,13 +357,13 @@ class CompetenceKnowledgeGraph:
             edge_type = self.G[u][v].get('edge_type', 'unknown')
             edge_types[edge_type] = edge_types.get(edge_type, 0) + 1
 
-        print("\n  エッジタイプ別:")
+        logger.info("\n  エッジタイプ別:")
         for edge_type, count in sorted(edge_types.items()):
-            print(f"    - {edge_type}: {count}")
+            logger.info("    - %s: %d", edge_type, count)
 
         # 平均次数
         avg_degree = sum(dict(self.G.degree()).values()) / self.G.number_of_nodes()
-        print(f"\n  平均次数: {avg_degree:.2f}")
+        logger.info("\n  平均次数: %.2f", avg_degree)
 
     def export_to_gexf(self, filename: str):
         """グラフをGEXF形式でエクスポート（Gephi等で可視化可能）
@@ -363,4 +372,4 @@ class CompetenceKnowledgeGraph:
             filename: 出力ファイル名
         """
         nx.write_gexf(self.G, filename)
-        print(f"\nグラフをエクスポートしました: {filename}")
+        logger.info("\nグラフをエクスポートしました: %s", filename)

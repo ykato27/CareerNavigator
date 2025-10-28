@@ -224,13 +224,13 @@ def test_load_csv_file_not_found(tmp_path):
 | 9 | `test_competence_master_level_ranges` | レベル範囲（'1-5'または'●'）が正しい | 中 |
 | 10 | `test_create_category_names` | カテゴリ名マッピングの作成 | 高 |
 | 11 | `test_create_category_names_hierarchy` | 階層カテゴリの結合（' > '区切り） | 高 |
-| 12 | `test_create_member_competence` | 会員習得力量データの作成 | 高 |
+| 12 | `test_create_member_competence` | メンバー習得力量データの作成 | 高 |
 | 13 | `test_filter_invalid_members` | 削除・テストユーザーの除外 | 高 |
 | 14 | `test_member_competence_merge` | 力量マスタとのマージ | 高 |
-| 15 | `test_create_skill_matrix` | 会員×力量マトリクスの作成 | 高 |
+| 15 | `test_create_skill_matrix` | メンバー×力量マトリクスの作成 | 高 |
 | 16 | `test_skill_matrix_shape` | マトリクスの行列数確認 | 高 |
 | 17 | `test_skill_matrix_fill_value` | 未習得箇所が 0 で埋められる | 高 |
-| 18 | `test_clean_members_data` | 会員マスタのクリーニング | 中 |
+| 18 | `test_clean_members_data` | メンバーマスタのクリーニング | 中 |
 
 #### サンプルテストコード
 
@@ -319,8 +319,8 @@ def test_jaccard_coefficient():
 | # | テストケース | 検証内容 | 優先度 |
 |---|------------|---------|--------|
 | 1 | `test_engine_initialization` | 必要なDataFrameでの初期化 | 高 |
-| 2 | `test_get_member_competences` | 会員の保有力量取得 | 高 |
-| 3 | `test_get_member_competences_empty` | 力量未保有会員で空データ返却 | 中 |
+| 2 | `test_get_member_competences` | メンバーの保有力量取得 | 高 |
+| 3 | `test_get_member_competences_empty` | 力量未保有メンバーで空データ返却 | 中 |
 | 4 | `test_get_unacquired_competences` | 未習得力量の取得 | 高 |
 | 5 | `test_unacquired_with_type_filter` | 力量タイプフィルタの適用 | 高 |
 | 6 | `test_calculate_category_importance` | カテゴリ重要度の計算（0-10範囲） | 高 |
@@ -378,8 +378,8 @@ def test_recommend_sorted_by_priority(sample_engine):
 |---|------------|---------|--------|
 | 1 | `test_system_initialization` | システム初期化とデータ読み込み | 高 |
 | 2 | `test_initialization_missing_files` | データファイル欠落時に例外 | 高 |
-| 3 | `test_get_member_info` | 会員情報取得 | 高 |
-| 4 | `test_get_member_info_not_found` | 存在しない会員でNone返却 | 中 |
+| 3 | `test_get_member_info` | メンバー情報取得 | 高 |
+| 4 | `test_get_member_info_not_found` | 存在しないメンバーでNone返却 | 中 |
 | 5 | `test_member_info_structure` | 返却辞書の構造確認 | 高 |
 | 6 | `test_member_info_competence_counts` | 保有力量数の集計 | 高 |
 | 7 | `test_recommend_competences` | 力量推薦の実行 | 高 |
@@ -393,7 +393,7 @@ def test_recommend_sorted_by_priority(sample_engine):
 
 ```python
 def test_get_member_info(sample_system):
-    """会員情報取得の検証"""
+    """メンバー情報取得の検証"""
     info = sample_system.get_member_info('m001')
 
     assert info is not None
@@ -431,7 +431,7 @@ def test_export_recommendations(sample_system, tmp_path):
 |---|------------|---------|--------|
 | 1 | `test_data_pipeline_end_to_end` | データ読込→変換→類似度計算の一連の流れ | 高 |
 | 2 | `test_recommendation_pipeline` | データ準備→推薦実行の流れ | 高 |
-| 3 | `test_invalid_member_handling` | 無効な会員コードのエラーハンドリング | 高 |
+| 3 | `test_invalid_member_handling` | 無効なメンバーコードのエラーハンドリング | 高 |
 | 4 | `test_empty_data_handling` | 空データでのシステム動作 | 中 |
 | 5 | `test_large_dataset_performance` | 大規模データでのパフォーマンス | 低 |
 
@@ -457,10 +457,10 @@ def test_export_recommendations(sample_system, tmp_path):
 
 | 種類 | 目的 | データ量 |
 |------|------|----------|
-| **最小データセット** | 基本機能の検証 | 会員5名、力量20件 |
-| **正常データセット** | 実際の運用に近いデータ | 会員50名、力量100件 |
+| **最小データセット** | 基本機能の検証 | メンバー5名、力量20件 |
+| **正常データセット** | 実際の運用に近いデータ | メンバー50名、力量100件 |
 | **エッジケースデータ** | 境界値・例外ケース | 各種異常パターン |
-| **パフォーマンステストデータ** | スケーラビリティ検証 | 会員500名、力量500件 |
+| **パフォーマンステストデータ** | スケーラビリティ検証 | メンバー500名、力量500件 |
 
 ### 5.2 テストフィクスチャ
 
@@ -469,7 +469,7 @@ def test_export_recommendations(sample_system, tmp_path):
 ```python
 @pytest.fixture
 def sample_members():
-    """サンプル会員データ"""
+    """サンプルメンバーデータ"""
     return pd.DataFrame({
         'メンバーコード': ['m001', 'm002', 'm003'],
         'メンバー名': ['田中太郎', '鈴木花子', '佐藤次郎'],
@@ -501,8 +501,8 @@ def sample_member_competence():
 
 ### 5.3 エッジケースパターン
 
-1. **空データ**: 会員ゼロ、力量ゼロ
-2. **単一データ**: 会員1名のみ、力量1件のみ
+1. **空データ**: メンバーゼロ、力量ゼロ
+2. **単一データ**: メンバー1名のみ、力量1件のみ
 3. **重複データ**: 同一コードの重複
 4. **欠損値**: NaN, 空文字列
 5. **境界値**: レベル0, レベル5, 類似度0.0, 類似度1.0

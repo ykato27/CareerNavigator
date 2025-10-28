@@ -1,9 +1,11 @@
 """
+"""
 データ変換スクリプト
 
 CSVファイルを読み込み、推薦システム用にデータを変換
 """
 
+import logging
 import sys
 from skillnote_recommendation.core.config import Config
 from skillnote_recommendation.core.data_loader import DataLoader
@@ -11,13 +13,21 @@ from skillnote_recommendation.core.data_transformer import DataTransformer
 from skillnote_recommendation.core.similarity_calculator import SimilarityCalculator
 
 
+logger = logging.getLogger(__name__)
+
+
 def main():
     """メイン処理"""
-    print("=" * 80)
-    print("スキルノート データ変換処理")
-    print("=" * 80)
-    print(f"\n入力ディレクトリ: {Config.DATA_DIR}")
-    print(f"出力ディレクトリ: {Config.OUTPUT_DIR}")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
+    logger.info("=" * 80)
+    logger.info("スキルノート データ変換処理")
+    logger.info("=" * 80)
+    logger.info("\n入力ディレクトリ: %s", Config.DATA_DIR)
+    logger.info("出力ディレクトリ: %s", Config.OUTPUT_DIR)
     
     # ディレクトリ作成
     Config.ensure_directories()
@@ -29,7 +39,7 @@ def main():
         
         # データ検証
         if not loader.validate_data(data):
-            print("\nエラー: データ検証に失敗しました")
+            logger.error("\nエラー: データ検証に失敗しました")
             return 1
         
         # ステップ2: データ変換
@@ -38,15 +48,15 @@ def main():
         # 統合力量マスタ作成
         competence_master = transformer.create_competence_master(data)
         
-        # 会員習得力量データ作成
+        # メンバー習得力量データ作成
         member_competence, valid_members = transformer.create_member_competence(
             data, competence_master
         )
         
-        # 会員×力量マトリクス作成
+        # メンバー×力量マトリクス作成
         skill_matrix = transformer.create_skill_matrix(member_competence)
         
-        # 会員マスタクリーニング
+        # メンバーマスタクリーニング
         members_clean = transformer.clean_members_data(data)
         
         # ステップ3: 類似度計算
@@ -54,63 +64,77 @@ def main():
         similarity_df = similarity_calc.calculate_similarity(member_competence)
         
         # ステップ4: データ保存
-        print("\n" + "=" * 80)
-        print("データ保存")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("データ保存")
+        logger.info("=" * 80)
         
         members_clean.to_csv(
             Config.get_output_path('members_clean'),
             index=False,
             encoding=Config.OUTPUT_ENCODING
         )
-        print(f"  ✓ {Config.OUTPUT_FILES['members_clean']}: {len(members_clean)}件")
+        logger.info("  ✓ %s: %d件", Config.OUTPUT_FILES['members_clean'], len(members_clean))
         
         competence_master.to_csv(
             Config.get_output_path('competence_master'),
             index=False,
             encoding=Config.OUTPUT_ENCODING
         )
-        print(f"  ✓ {Config.OUTPUT_FILES['competence_master']}: {len(competence_master)}件")
+        logger.info(
+            "  ✓ %s: %d件",
+            Config.OUTPUT_FILES['competence_master'],
+            len(competence_master),
+        )
         
         member_competence.to_csv(
             Config.get_output_path('member_competence'),
             index=False,
             encoding=Config.OUTPUT_ENCODING
         )
-        print(f"  ✓ {Config.OUTPUT_FILES['member_competence']}: {len(member_competence)}件")
+        logger.info(
+            "  ✓ %s: %d件",
+            Config.OUTPUT_FILES['member_competence'],
+            len(member_competence),
+        )
         
         skill_matrix.to_csv(
             Config.get_output_path('skill_matrix'),
             encoding=Config.OUTPUT_ENCODING
         )
-        print(f"  ✓ {Config.OUTPUT_FILES['skill_matrix']}: "
-              f"{skill_matrix.shape[0]}×{skill_matrix.shape[1]}")
+        logger.info(
+            "  ✓ %s: %d×%d",
+            Config.OUTPUT_FILES['skill_matrix'],
+            skill_matrix.shape[0],
+            skill_matrix.shape[1],
+        )
         
         similarity_df.to_csv(
             Config.get_output_path('competence_similarity'),
             index=False,
             encoding=Config.OUTPUT_ENCODING
         )
-        print(f"  ✓ {Config.OUTPUT_FILES['competence_similarity']}: {len(similarity_df)}件")
-        
-        print("\n" + "=" * 80)
-        print("データ変換処理完了")
-        print("=" * 80)
-        print(f"\n変換データは {Config.OUTPUT_DIR}/ に保存されました")
+        logger.info(
+            "  ✓ %s: %d件",
+            Config.OUTPUT_FILES['competence_similarity'],
+            len(similarity_df),
+        )
+
+        logger.info("\n" + "=" * 80)
+        logger.info("データ変換処理完了")
+        logger.info("=" * 80)
+        logger.info("\n変換データは %s/ に保存されました", Config.OUTPUT_DIR)
         
         return 0
         
     except FileNotFoundError as e:
-        print(f"\nエラー: {e}")
-        print(f"\n必要なCSVファイルを {Config.DATA_DIR}/ に配置してください:")
+        logger.error("\nエラー: %s", e)
+        logger.error("\n必要なCSVファイルを %s/ に配置してください:", Config.DATA_DIR)
         for key, filename in Config.INPUT_FILES.items():
-            print(f"  - {filename}")
+            logger.error("  - %s", filename)
         return 1
-    
+
     except Exception as e:
-        print(f"\nエラー: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("\nエラー: %s", e)
         return 1
 
 

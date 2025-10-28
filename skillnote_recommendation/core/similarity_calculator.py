@@ -4,9 +4,13 @@
 力量間の類似度（同時習得パターン）を計算
 """
 
+import logging
 import pandas as pd
 import numpy as np
 from skillnote_recommendation.core.config import Config
+
+
+logger = logging.getLogger(__name__)
 
 
 class SimilarityCalculator:
@@ -28,14 +32,14 @@ class SimilarityCalculator:
         力量間の類似度を計算（Jaccard係数）
         
         Args:
-            member_competence: 会員習得力量データ
+            member_competence: メンバー習得力量データ
             
         Returns:
             類似度データフレーム
         """
-        print("\n" + "=" * 80)
-        print("力量間類似度計算")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("力量間類似度計算")
+        logger.info("=" * 80)
         
         # 二値マトリクス作成
         skill_matrix = member_competence.pivot_table(
@@ -53,11 +57,11 @@ class SimilarityCalculator:
         actual_sample_size = min(self.sample_size, len(competences))
         sample_competences = np.random.choice(competences, actual_sample_size, replace=False)
         
-        print(f"\n{actual_sample_size}個の力量についてサンプリング計算中...")
+        logger.info("\n%d個の力量についてサンプリング計算中...", actual_sample_size)
         
         for i, comp1 in enumerate(sample_competences):
             if i % 20 == 0 and i > 0:
-                print(f"  進捗: {i}/{actual_sample_size}")
+                logger.debug("  進捗: %d/%d", i, actual_sample_size)
             
             comp1_vector = skill_binary[comp1].values
             
@@ -87,6 +91,6 @@ class SimilarityCalculator:
                         })
         
         similarity_df = pd.DataFrame(similarities)
-        print(f"完了: {len(similarity_df)}件の類似ペアを検出")
+        logger.info("完了: %d件の類似ペアを検出", len(similarity_df))
         
         return similarity_df
