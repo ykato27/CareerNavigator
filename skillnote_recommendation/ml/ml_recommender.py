@@ -11,6 +11,7 @@ from skillnote_recommendation.ml.matrix_factorization import MatrixFactorization
 from skillnote_recommendation.ml.diversity import DiversityReranker
 from skillnote_recommendation.ml.exceptions import ColdStartError, MLModelNotTrainedError
 from skillnote_recommendation.core.reference_persons import ReferencePersonFinder
+from skillnote_recommendation.config_loader import get_config
 
 
 class MLRecommender:
@@ -59,8 +60,10 @@ class MLRecommender:
             fill_value=0
         )
 
-        # NMFモデルを学習
-        mf_model = MatrixFactorizationModel(n_components=20, random_state=42)
+        # NMFモデルを学習（設定ファイルから読み込み）
+        n_components = get_config("nmf.n_components", 20)
+        random_state = get_config("nmf.random_state", 42)
+        mf_model = MatrixFactorizationModel(n_components=n_components, random_state=random_state)
         mf_model.fit(skill_matrix)
 
         print(f"会員数: {skill_matrix.shape[0]}")

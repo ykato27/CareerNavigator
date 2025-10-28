@@ -10,15 +10,7 @@ import numpy as np
 import networkx as nx
 from typing import Dict, List, Tuple, Set, Optional
 from .knowledge_graph import CompetenceKnowledgeGraph
-
-
-# デフォルト設定値
-DEFAULT_RESTART_PROB = 0.15
-DEFAULT_MAX_ITER = 100
-DEFAULT_TOLERANCE = 1e-6
-DEFAULT_MAX_PATHS = 3
-DEFAULT_MAX_PATH_LENGTH = 10  # 5→10に延長
-MIN_SCORE_THRESHOLD = 1e-10
+from ..config_loader import get_config
 
 
 class RandomWalkRecommender:
@@ -30,24 +22,27 @@ class RandomWalkRecommender:
 
     def __init__(self,
                  knowledge_graph: CompetenceKnowledgeGraph,
-                 restart_prob: float = DEFAULT_RESTART_PROB,
-                 max_iter: int = DEFAULT_MAX_ITER,
-                 tolerance: float = DEFAULT_TOLERANCE,
+                 restart_prob: float = None,
+                 max_iter: int = None,
+                 tolerance: float = None,
                  enable_cache: bool = True):
         """
         Args:
             knowledge_graph: ナレッジグラフ
             restart_prob: 再スタート確率（PageRankのダンピング係数相当）
                          0.15 = スタート地点に15%の確率で戻る
-            max_iter: 最大反復回数
-            tolerance: 収束判定の閾値
+                         Noneの場合、config.yamlから読み込み
+            max_iter: 最大反復回数（Noneの場合、config.yamlから読み込み）
+            tolerance: 収束判定の閾値（Noneの場合、config.yamlから読み込み）
             enable_cache: PageRank結果のキャッシュを有効にするか
         """
         self.graph = knowledge_graph.G
         self.kg = knowledge_graph
-        self.restart_prob = restart_prob
-        self.max_iter = max_iter
-        self.tolerance = tolerance
+
+        # 設定ファイルから読み込み（引数がNoneの場合）
+        self.restart_prob = restart_prob if restart_prob is not None else get_config("rwr.restart_prob", 0.15)
+        self.max_iter = max_iter if max_iter is not None else get_config("rwr.max_iter", 100)
+        self.tolerance = tolerance if tolerance is not None else get_config("rwr.tolerance", 1e-6)
         self.enable_cache = enable_cache
 
         # Plan 3: PageRank結果のキャッシュ
@@ -144,9 +139,10 @@ class RandomWalkRecommender:
         )
 
         # 非常に小さいスコアは除外
+        min_threshold = get_config("rwr.min_score_threshold", 1e-10)
         filtered_scores = {
             node: score for node, score in scores.items()
-            if score > MIN_SCORE_THRESHOLD
+            if score > min_threshold
         }
 
         # Plan 3: キャッシュに保存
@@ -175,20 +171,26 @@ class RandomWalkRecommender:
     def _extract_paths(self,
                        source: str,
                        target: str,
-                       max_paths: int = DEFAULT_MAX_PATHS,
-                       max_length: int = DEFAULT_MAX_PATH_LENGTH) -> List[List[str]]:
+                       max_paths: int = None,
+                       max_length: int = None) -> List[List[str]]:
         """
         推薦パスを抽出（Plan 4: k-shortest paths最適化版 + フォールバック）
 
         Args:
             source: 開始ノード（メンバー）
             target: 終了ノード（力量）
-            max_paths: 抽出する最大パス数
-            max_length: 最大パス長
+            max_paths: 抽出する最大パス数（Noneの場合、config.yamlから読み込み）
+            max_length: 最大パス長（Noneの場合、config.yamlから読み込み）
 
         Returns:
             [[node1, node2, node3], ...] のパスリスト
         """
+        # 設定ファイルから読み込み（引数がNoneの場合）
+        if max_paths is None:
+            max_paths = get_config("rwr.max_paths", 3)
+        if max_length is None:
+            max_length = get_config("rwr.max_path_length", 10)
+
         try:
             # Plan 4: k-shortest paths アルゴリズム（短い順に生成）
             # all_simple_pathsよりも効率的（全パス列挙を避ける）
