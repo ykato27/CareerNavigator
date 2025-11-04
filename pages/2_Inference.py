@@ -29,7 +29,6 @@ from skillnote_recommendation.utils.visualization import (
     prepare_positioning_display_dataframe,
 )
 from skillnote_recommendation.core.models import Recommendation
-from skillnote_recommendation.config_loader import get_config
 
 
 # =========================================================
@@ -596,12 +595,11 @@ st.subheader("⚙️ 推論設定")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    default_top_n = get_config("ui.default_top_n", 10)
     top_n = st.slider(
         "推薦数",
         min_value=1,
         max_value=20,
-        value=default_top_n,
+        value=10,
         step=1
     )
 
@@ -625,14 +623,10 @@ with col2:
         st.caption(f"選択中: {', '.join(selected_types)}")
 
 with col3:
-    default_diversity = get_config("ui.default_diversity_strategy", "hybrid")
-    diversity_options = ["hybrid", "mmr", "category", "type"]
-    default_diversity_index = diversity_options.index(default_diversity) if default_diversity in diversity_options else 0
-
     diversity_strategy = st.selectbox(
         "多様性戦略",
-        options=diversity_options,
-        index=default_diversity_index,
+        options=["hybrid", "mmr", "category", "type"],
+        index=0,
         help="推薦結果の多様性を確保する戦略を選択"
     )
 
@@ -643,14 +637,10 @@ with col3:
 st.markdown("---")
 st.subheader("🎯 推薦手法の選択")
 
-default_method = get_config("ui.default_recommendation_method", "NMF推薦")
-method_options = ["NMF推薦", "グラフベース推薦", "ハイブリッド推薦"]
-default_method_index = method_options.index(default_method) if default_method in method_options else 0
-
 recommendation_method = st.radio(
     "使用する推薦手法を選択してください",
-    options=method_options,
-    index=default_method_index,
+    options=["NMF推薦", "グラフベース推薦", "ハイブリッド推薦"],
+    index=0,
     help="推薦手法を選択します。NMFは高速、グラフベースは説明可能性が高い、ハイブリッドは両方の良いところを組み合わせます。",
     horizontal=True
 )
@@ -669,12 +659,11 @@ if recommendation_method in ["グラフベース推薦", "ハイブリッド推�
 
     with col_g1:
         if recommendation_method == "ハイブリッド推薦":
-            default_rwr_weight = get_config("hybrid.default_rwr_weight", 0.5)
             rwr_weight = st.slider(
                 "グラフベーススコアの重み",
                 min_value=0.0,
                 max_value=1.0,
-                value=default_rwr_weight,
+                value=0.5,
                 step=0.1,
                 help="0.5 = グラフとNMFを同等に評価、1.0 = グラフのみ、0.0 = NMFのみ"
             )
@@ -682,14 +671,13 @@ if recommendation_method in ["グラフベース推薦", "ハイブリッド推�
             rwr_weight = 1.0  # グラフベース推薦の場合は常に1.0
 
     with col_g2:
-        default_show_paths = get_config("ui.default_show_paths", True)
         show_paths = st.checkbox(
             "推薦パスを表示",
-            value=default_show_paths,
+            value=True,
             help="推薦理由をグラフで可視化します"
         )
 else:
-    rwr_weight = get_config("hybrid.default_rwr_weight", 0.5)  # デフォルト値
+    rwr_weight = 0.5  # デフォルト値
     show_paths = False
 
 

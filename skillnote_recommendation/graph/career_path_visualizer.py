@@ -8,20 +8,14 @@ import plotly.graph_objects as go
 import plotly.express as px
 from typing import List, Dict
 from .career_path import CareerPathAnalysis, CompetenceGap, PHASE_BASIC, PHASE_INTERMEDIATE, PHASE_EXPERT
-from ..config_loader import get_config
 
 
-# フェーズごとの色設定（設定ファイルから読み込み）
-def _get_phase_colors():
-    """フェーズ色を設定ファイルから取得"""
-    return {
-        PHASE_BASIC: get_config("career_path.phase_colors.basic", "#4ECDC4"),
-        PHASE_INTERMEDIATE: get_config("career_path.phase_colors.intermediate", "#FFD93D"),
-        PHASE_EXPERT: get_config("career_path.phase_colors.expert", "#FF6B6B")
-    }
-
-
-PHASE_COLORS = _get_phase_colors()
+# フェーズごとの色設定
+PHASE_COLORS = {
+    PHASE_BASIC: '#4ECDC4',  # 青緑（基礎）
+    PHASE_INTERMEDIATE: '#FFD93D',  # 黄色（中級）
+    PHASE_EXPERT: '#FF6B6B',  # 赤（上級）
+}
 
 
 class CareerPathVisualizer:

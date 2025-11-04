@@ -5,7 +5,6 @@ Random Walk with Restartとmatrix factorization (NMF)を組み合わせた
 ハイブリッド推薦システム
 """
 
-import logging
 from typing import List, Dict, Tuple, Optional
 import numpy as np
 import pandas as pd
@@ -15,10 +14,17 @@ from .knowledge_graph import CompetenceKnowledgeGraph
 from .random_walk import RandomWalkRecommender
 from ..ml.ml_recommender import MLRecommender
 from ..core.models import Recommendation
-from ..config_loader import get_config
 
 
-logger = logging.getLogger(__name__)
+# デフォルト設定値
+DEFAULT_RWR_WEIGHT = 0.5
+DEFAULT_RESTART_PROB = 0.15
+CANDIDATE_MULTIPLIER = 3  # 候補を多めに取得する倍率
+HYBRID_BOOST_FACTOR = 1.1  # 両方で推薦された場合のブースト
+RWR_SCORE_THRESHOLD_HIGH = 0.5  # 推薦理由生成の閾値（高）
+RWR_SCORE_THRESHOLD_LOW = 0.3  # 推薦理由生成の閾値（低）
+NMF_SCORE_THRESHOLD_HIGH = 0.5
+NMF_SCORE_THRESHOLD_LOW = 0.3
 
 
 @dataclass
@@ -59,34 +65,31 @@ class HybridGraphRecommender:
     def __init__(self,
                  knowledge_graph: CompetenceKnowledgeGraph,
                  ml_recommender: MLRecommender,
-                 rwr_weight: float = None,
-                 restart_prob: float = None,
+                 rwr_weight: float = DEFAULT_RWR_WEIGHT,
+                 restart_prob: float = DEFAULT_RESTART_PROB,
                  enable_cache: bool = True):
         """
         Args:
             knowledge_graph: ナレッジグラフ
             ml_recommender: NMFベースのML推薦エンジン
-            rwr_weight: RWRスコアの重み（0-1）、残りがNMFの重み（Noneの場合、config.yamlから読み込み）
-            restart_prob: RWRの再スタート確率（Noneの場合、config.yamlから読み込み）
+            rwr_weight: RWRスコアの重み（0-1）、残りがNMFの重み
+            restart_prob: RWRの再スタート確率
             enable_cache: RWRのPageRankキャッシュを有効にするか
         """
         self.kg = knowledge_graph
         self.ml_recommender = ml_recommender
-
-        # 設定ファイルから読み込み（引数がNoneの場合）
-        self.rwr_weight = rwr_weight if rwr_weight is not None else get_config("hybrid.default_rwr_weight", 0.5)
-        self.nmf_weight = 1.0 - self.rwr_weight
-        restart_prob_value = restart_prob if restart_prob is not None else get_config("rwr.restart_prob", 0.15)
         self.rwr = RandomWalkRecommender(
             knowledge_graph=knowledge_graph,
-            restart_prob=restart_prob_value,
+            restart_prob=restart_prob,
             enable_cache=enable_cache
         )
+        self.rwr_weight = rwr_weight
+        self.nmf_weight = 1.0 - rwr_weight
 
-        logger.info("\nHybrid Graph Recommender 初期化完了")
-        logger.info("  RWR重み: %.2f", self.rwr_weight)
-        logger.info("  NMF重み: %.2f", self.nmf_weight)
-        logger.info("  キャッシュ: %s", '有効' if enable_cache else '無効')
+        print(f"\nHybrid Graph Recommender 初期化完了")
+        print(f"  RWR重み: {self.rwr_weight:.2f}")
+        print(f"  NMF重み: {self.nmf_weight:.2f}")
+        print(f"  キャッシュ: {'有効' if enable_cache else '無効'}")
 
     def recommend(self,
                   member_code: str,
@@ -107,12 +110,12 @@ class HybridGraphRecommender:
         Returns:
             ハイブリッド推薦結果のリスト
         """
-        logger.info("\n%s", "=" * 80)
-        logger.info("Hybrid推薦開始: %s", member_code)
-        logger.info("%s", "=" * 80)
+        print(f"\n{'='*80}")
+        print(f"Hybrid推薦開始: {member_code}")
+        print(f"{'='*80}")
 
         # 1. RWRで推薦（パス付き）
-        logger.info("\n[1/4] RWR推薦...")
+        print("\n[1/4] RWR推薦...")
         rwr_results = self.rwr.recommend(
             member_code=member_code,
             top_n=top_n * CANDIDATE_MULTIPLIER,  # 多めに取得してフィルタ
@@ -121,7 +124,7 @@ class HybridGraphRecommender:
         rwr_dict = {comp: (score, paths) for comp, score, paths in rwr_results}
 
         # 2. NMFで推薦
-        logger.info("\n[2/4] NMF推薦...")
+        print("\n[2/4] NMF推薦...")
         nmf_results = self.ml_recommender.recommend(
             member_code=member_code,
             top_n=top_n * CANDIDATE_MULTIPLIER,
@@ -132,11 +135,11 @@ class HybridGraphRecommender:
         nmf_dict = {rec.competence_code: rec.priority_score for rec in nmf_results}
 
         # 3. スコアを正規化して融合
-        logger.info("\n[3/4] スコア融合...")
+        print("\n[3/4] スコア融合...")
         hybrid_scores = self._fuse_scores(rwr_dict, nmf_dict)
 
         # 4. フィルタリングとTop-N選択
-        logger.info("\n[4/4] Top-%d選択...", top_n)
+        print(f"\n[4/4] Top-{top_n}選択...")
         recommendations = self._select_top_n(
             hybrid_scores=hybrid_scores,
             nmf_results=nmf_results,
@@ -145,7 +148,7 @@ class HybridGraphRecommender:
             category_filter=category_filter
         )
 
-        logger.info("\n完了: %d件の推薦を生成", len(recommendations))
+        print(f"\n完了: {len(recommendations)}件の推薦を生成")
         return recommendations
 
     def _fuse_scores(self,
@@ -320,14 +323,8 @@ class HybridGraphRecommender:
         """推薦理由を生成"""
         reasons = []
 
-        # 閾値を設定ファイルから読み込み
-        rwr_high = get_config("hybrid.thresholds.rwr_high", 0.5)
-        rwr_low = get_config("hybrid.thresholds.rwr_low", 0.3)
-        nmf_high = get_config("hybrid.thresholds.nmf_high", 0.5)
-        nmf_low = get_config("hybrid.thresholds.nmf_low", 0.3)
-
         # RWRスコアが高い場合
-        if data['rwr_score'] > rwr_high:
+        if data['rwr_score'] > RWR_SCORE_THRESHOLD_HIGH:
             # パスから理由を生成
             paths = data['paths']
             if paths:
@@ -335,11 +332,11 @@ class HybridGraphRecommender:
                 reasons.extend(path_reasons)
 
         # NMFスコアが高い場合
-        if data['nmf_score'] > nmf_high:
+        if data['nmf_score'] > NMF_SCORE_THRESHOLD_HIGH:
             reasons.append("類似メンバーの習得パターンから推薦")
 
         # 両方高い場合
-        if data['rwr_score'] > rwr_low and data['nmf_score'] > nmf_low:
+        if data['rwr_score'] > RWR_SCORE_THRESHOLD_LOW and data['nmf_score'] > NMF_SCORE_THRESHOLD_LOW:
             reasons.append("グラフ構造と協調フィルタリングの両方で高評価")
 
         return reasons if reasons else ["推薦システムによる提案"]
