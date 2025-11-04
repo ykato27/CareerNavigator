@@ -6,15 +6,19 @@ Random Walk with Restart (RWR) アルゴリズム
 新しい力量を発見する。
 """
 
-import logging
 import numpy as np
 import networkx as nx
 from typing import Dict, List, Tuple, Set, Optional
 from .knowledge_graph import CompetenceKnowledgeGraph
-from ..config_loader import get_config
 
 
-logger = logging.getLogger(__name__)
+# デフォルト設定値
+DEFAULT_RESTART_PROB = 0.15
+DEFAULT_MAX_ITER = 100
+DEFAULT_TOLERANCE = 1e-6
+DEFAULT_MAX_PATHS = 3
+DEFAULT_MAX_PATH_LENGTH = 10  # 5→10に延長
+MIN_SCORE_THRESHOLD = 1e-10
 
 
 class RandomWalkRecommender:
@@ -26,27 +30,24 @@ class RandomWalkRecommender:
 
     def __init__(self,
                  knowledge_graph: CompetenceKnowledgeGraph,
-                 restart_prob: float = None,
-                 max_iter: int = None,
-                 tolerance: float = None,
+                 restart_prob: float = DEFAULT_RESTART_PROB,
+                 max_iter: int = DEFAULT_MAX_ITER,
+                 tolerance: float = DEFAULT_TOLERANCE,
                  enable_cache: bool = True):
         """
         Args:
             knowledge_graph: ナレッジグラフ
             restart_prob: 再スタート確率（PageRankのダンピング係数相当）
                          0.15 = スタート地点に15%の確率で戻る
-                         Noneの場合、config.yamlから読み込み
-            max_iter: 最大反復回数（Noneの場合、config.yamlから読み込み）
-            tolerance: 収束判定の閾値（Noneの場合、config.yamlから読み込み）
+            max_iter: 最大反復回数
+            tolerance: 収束判定の閾値
             enable_cache: PageRank結果のキャッシュを有効にするか
         """
         self.graph = knowledge_graph.G
         self.kg = knowledge_graph
-
-        # 設定ファイルから読み込み（引数がNoneの場合）
-        self.restart_prob = restart_prob if restart_prob is not None else get_config("rwr.restart_prob", 0.15)
-        self.max_iter = max_iter if max_iter is not None else get_config("rwr.max_iter", 100)
-        self.tolerance = tolerance if tolerance is not None else get_config("rwr.tolerance", 1e-6)
+        self.restart_prob = restart_prob
+        self.max_iter = max_iter
+        self.tolerance = tolerance
         self.enable_cache = enable_cache
 
         # Plan 3: PageRank結果のキャッシュ
@@ -73,16 +74,16 @@ class RandomWalkRecommender:
         if not self.graph.has_node(member_node):
             raise ValueError(f"メンバー {member_code} がグラフに存在しません")
 
-        logger.info("\n%s", "=" * 80)
-        logger.info("RWR推薦: %s", member_code)
-        logger.info("%s", "=" * 80)
+        print(f"\n{'='*80}")
+        print(f"RWR推薦: {member_code}")
+        print(f"{'='*80}")
 
         # 1. RWRスコアを計算
-        logger.info("  [1/3] RWRスコア計算中...")
+        print("  [1/3] RWRスコア計算中...")
         scores = self._random_walk_with_restart(member_node)
 
         # 2. 力量ノードのみ抽出してソート
-        logger.info("  [2/3] 力量スコア抽出中...")
+        print("  [2/3] 力量スコア抽出中...")
         competence_scores = []
         acquired_competences = self.kg.get_member_acquired_competences(member_code)
 
@@ -97,7 +98,7 @@ class RandomWalkRecommender:
         competence_scores.sort(key=lambda x: x[1], reverse=True)
 
         # 3. Top-N推薦と推薦パスを抽出
-        logger.info("  [3/3] Top-%d推薦とパス抽出中...", top_n)
+        print(f"  [3/3] Top-{top_n}推薦とパス抽出中...")
         recommendations = []
 
         for comp_code, score in competence_scores[:top_n]:
@@ -111,7 +112,7 @@ class RandomWalkRecommender:
                 )
             recommendations.append((comp_code, score, paths))
 
-        logger.info("  完了: %d件の推薦を生成", len(recommendations))
+        print(f"  完了: {len(recommendations)}件の推薦を生成")
 
         return recommendations
 
@@ -127,7 +128,7 @@ class RandomWalkRecommender:
         """
         # Plan 3: キャッシュチェック
         if self.enable_cache and start_node in self._pagerank_cache:
-            logger.debug("    キャッシュヒット: %s", start_node)
+            print(f"    キャッシュヒット: {start_node}")
             return self._pagerank_cache[start_node]
 
         # NetworkXのPersonalized PageRankを使用（高速化）
@@ -143,17 +144,16 @@ class RandomWalkRecommender:
         )
 
         # 非常に小さいスコアは除外
-        min_threshold = get_config("rwr.min_score_threshold", 1e-10)
         filtered_scores = {
             node: score for node, score in scores.items()
-            if score > min_threshold
+            if score > MIN_SCORE_THRESHOLD
         }
 
         # Plan 3: キャッシュに保存
         if self.enable_cache:
             self._pagerank_cache[start_node] = filtered_scores
 
-        logger.info("    完了: NetworkX PageRank使用（高速化版）")
+        print(f"    完了: NetworkX PageRank使用（高速化版）")
 
         return filtered_scores
 
@@ -163,7 +163,7 @@ class RandomWalkRecommender:
     def clear_cache(self):
         """PageRankキャッシュをクリア"""
         self._pagerank_cache.clear()
-        logger.info("PageRankキャッシュをクリアしました")
+        print("PageRankキャッシュをクリアしました")
 
     def get_cache_stats(self) -> Dict[str, int]:
         """キャッシュ統計を取得"""
@@ -175,26 +175,20 @@ class RandomWalkRecommender:
     def _extract_paths(self,
                        source: str,
                        target: str,
-                       max_paths: int = None,
-                       max_length: int = None) -> List[List[str]]:
+                       max_paths: int = DEFAULT_MAX_PATHS,
+                       max_length: int = DEFAULT_MAX_PATH_LENGTH) -> List[List[str]]:
         """
         推薦パスを抽出（Plan 4: k-shortest paths最適化版 + フォールバック）
 
         Args:
             source: 開始ノード（メンバー）
             target: 終了ノード（力量）
-            max_paths: 抽出する最大パス数（Noneの場合、config.yamlから読み込み）
-            max_length: 最大パス長（Noneの場合、config.yamlから読み込み）
+            max_paths: 抽出する最大パス数
+            max_length: 最大パス長
 
         Returns:
             [[node1, node2, node3], ...] のパスリスト
         """
-        # 設定ファイルから読み込み（引数がNoneの場合）
-        if max_paths is None:
-            max_paths = get_config("rwr.max_paths", 3)
-        if max_length is None:
-            max_length = get_config("rwr.max_path_length", 10)
-
         try:
             # Plan 4: k-shortest paths アルゴリズム（短い順に生成）
             # all_simple_pathsよりも効率的（全パス列挙を避ける）
