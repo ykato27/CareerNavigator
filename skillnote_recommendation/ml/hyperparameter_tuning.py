@@ -87,31 +87,37 @@ class NMFHyperparameterTuner:
         logger.info(f"Trial {trial.number}: {params}")
 
         try:
-            # 重要：各トライアルで異なるrandom_stateを使用
-            # NMFは非凸最適化なので、異なる初期値から探索することで
-            # より良い局所最適解を見つけられる可能性がある
-            trial_random_state = self.random_state + trial.number
+            # 重要：固定のrandom_stateを使用してパラメータの効果を純粋に比較
+            # 異なるrandom_stateだと初期値の違いがパラメータの効果を覆い隠す
+            trial_random_state = self.random_state
 
             # モデルを学習
-            model = MatrixFactorizationModel(**params, random_state=trial_random_state)
+            model = MatrixFactorizationModel(random_state=trial_random_state, **params)
             model.fit(self.skill_matrix)
+
+            # デバッグ：実際にNMFモデルに設定されたパラメータを確認
+            logger.info(f"Trial {trial.number}: params={params}")
+            logger.info(f"Trial {trial.number}: NMF n_components={model.model.n_components_}, "
+                       f"alpha_W={model.model.alpha_W}, alpha_H={model.model.alpha_H}, "
+                       f"l1_ratio={model.model.l1_ratio}, max_iter={model.model.max_iter}")
 
             # 再構成誤差を取得
             reconstruction_error = model.get_reconstruction_error()
 
             # デバッグ：再構成誤差をログ出力
-            logger.info(f"Trial {trial.number} reconstruction error: {reconstruction_error:.6f} (random_state={trial_random_state})")
+            logger.info(f"Trial {trial.number} reconstruction error: {reconstruction_error:.6f}")
 
             # 追加メトリクスをログ
             trial.set_user_attr('n_iter', model.model.n_iter_)
             trial.set_user_attr('sparsity_W', np.sum(model.W == 0) / model.W.size)
             trial.set_user_attr('sparsity_H', np.sum(model.H == 0) / model.H.size)
-            trial.set_user_attr('random_state', trial_random_state)
 
             return reconstruction_error
 
         except Exception as e:
             logger.warning(f"Trial {trial.number} failed: {e}")
+            import traceback
+            logger.warning(traceback.format_exc())
             # 失敗した場合は大きな値を返す
             return float('inf')
 
@@ -234,15 +240,16 @@ class NMFHyperparameterTuner:
         params['solver'] = 'cd'
         params['tol'] = 1e-5
 
-        # 最良トライアルで使われたrandom_stateを取得
-        best_trial = self.study.best_trial
-        best_random_state = best_trial.user_attrs.get('random_state', self.random_state)
+        logger.info(f"最良モデルの学習: params={params}")
 
-        logger.info(f"最良モデルの学習: random_state={best_random_state}")
-
-        # モデルを学習（最良トライアルと同じrandom_stateを使用）
-        model = MatrixFactorizationModel(**params, random_state=best_random_state)
+        # モデルを学習（固定のrandom_stateを使用）
+        model = MatrixFactorizationModel(random_state=self.random_state, **params)
         model.fit(self.skill_matrix)
+
+        logger.info(f"最良モデル: NMF n_components={model.model.n_components_}, "
+                   f"alpha_W={model.model.alpha_W}, alpha_H={model.model.alpha_H}, "
+                   f"l1_ratio={model.model.l1_ratio}")
+        logger.info(f"最良モデル: reconstruction_error={model.get_reconstruction_error():.6f}")
 
         return model
 

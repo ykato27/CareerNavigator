@@ -461,12 +461,6 @@ if st.session_state.get("model_trained", False):
                     else:
                         st.text(f"{key}: {value}")
 
-                # 最良トライアルのrandom_stateを表示
-                tuner = tuning_results['tuner']
-                best_trial = tuner.study.best_trial
-                best_random_state = best_trial.user_attrs.get('random_state', 'N/A')
-                st.text(f"random_state: {best_random_state}")
-
             st.markdown("---")
             st.markdown("### 📈 最適化履歴")
 
@@ -578,10 +572,10 @@ if st.session_state.get("model_trained", False):
             with st.expander("📋 全試行の詳細結果"):
                 try:
                     trials_df = tuner.get_optimization_history()
-                    # 必要な列のみを表示（random_stateも追加）
+                    # 必要な列のみを表示
                     display_cols = ['number', 'value', 'params_n_components', 'params_alpha_W',
                                    'params_alpha_H', 'params_l1_ratio', 'params_max_iter',
-                                   'user_attrs_random_state', 'user_attrs_n_iter', 'state']
+                                   'user_attrs_n_iter', 'state']
                     available_cols = [col for col in display_cols if col in trials_df.columns]
 
                     if available_cols:
@@ -598,11 +592,18 @@ if st.session_state.get("model_trained", False):
                         best_value = display_df.iloc[0]['value']
                         st.success(f"✨ 最良トライアル: #{int(best_trial_num)} (再構成誤差: {best_value:.6f})")
 
+                        # 改善度を計算
+                        worst_value = display_df['value'].max()
+                        improvement_pct = (worst_value - best_value) / worst_value * 100
+                        st.info(f"📊 最良トライアルと最悪トライアルの差: {improvement_pct:.2f}% 改善")
+
                     else:
                         st.dataframe(trials_df, use_container_width=True, height=400)
 
                     st.info("""
-                    **user_attrs_random_state**: 各トライアルで使用されたrandom_state（異なる値で探索）
+                    **number**: トライアル番号
+                    **value**: 再構成誤差（低いほど良い）
+                    **params_***: 各トライアルで試されたパラメータ値
                     **user_attrs_n_iter**: 収束までのイテレーション数
                     """)
 
