@@ -250,8 +250,8 @@ else:
                 text=f"Trial {trial.number + 1}/{int(n_trials) if use_tuning else 1} - 現在の誤差: {trial.value:.6f} - 最良: {study.best_value:.6f}"
             )
 
-            # グラフを更新（5試行ごと、または最後の試行）
-            if len(trial_history) >= 5 or trial.number == (int(n_trials) - 1 if use_tuning else 0):
+            # グラフを更新（毎回更新）
+            if True:  # リアルタイム更新
                 import pandas as pd
                 import plotly.graph_objects as go
 
