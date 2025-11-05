@@ -818,11 +818,12 @@ def create_skill_transition_graph(
     graph_recommender,
     member_code: str,
     recommended_skill: str,
-    width: int = 1000,
-    height: int = 700
+    width: int = 900,
+    height: int = 400,
+    max_paths: int = 1
 ) -> go.Figure:
     """
-    スキル遷移グラフの可視化（推薦パス強調）
+    スキル遷移グラフの可視化（シンプルなパス表示）
 
     Args:
         graph_recommender: SkillTransitionGraphRecommenderインスタンス
@@ -830,6 +831,7 @@ def create_skill_transition_graph(
         recommended_skill: 推薦されたスキルコード
         width: 図の幅
         height: 図の高さ
+        max_paths: 表示する最大パス数（デフォルト: 1 = 最短パスのみ）
 
     Returns:
         plotly.graph_objects.Figure
@@ -839,73 +841,106 @@ def create_skill_transition_graph(
     graph = graph_recommender.graph
     user_skills = graph_recommender.get_user_skills(member_code)
 
-    # サブグラフを抽出（ユーザースキル + 推薦スキル + パス）
-    relevant_nodes = set(user_skills) | {recommended_skill}
+    # 最短パスを見つける
+    best_path = None
+    best_length = float('inf')
 
-    # 中間ノード（パス上のスキル）も含める
     for user_skill in user_skills:
         try:
             if user_skill in graph and recommended_skill in graph:
                 path = nx.shortest_path(graph, user_skill, recommended_skill)
-                relevant_nodes.update(path)
+                if len(path) < best_length:
+                    best_path = path
+                    best_length = len(path)
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             pass
 
-    # サブグラフ作成
-    subgraph = graph.subgraph(relevant_nodes)
+    if not best_path:
+        # パスが見つからない場合は直接推薦として表示
+        best_path = [user_skills[0] if user_skills else 'Unknown', recommended_skill]
 
-    # レイアウト計算（階層的レイアウト）
-    try:
-        # Spring layoutを使用
-        pos = nx.spring_layout(subgraph, k=1.5, iterations=50, seed=42)
-    except Exception:
-        # フォールバック: 簡易レイアウト
-        pos = {node: (i, 0) for i, node in enumerate(subgraph.nodes())}
+    # 階層的レイアウト（左から右へ）
+    pos = {}
+    for i, node in enumerate(best_path):
+        pos[node] = (i * 2, 0)
 
-    # エッジの描画
+    # エッジの描画（パスに沿った矢印）
     edge_traces = []
-    for edge in subgraph.edges(data=True):
-        source, target, data = edge
+    annotations = []  # 矢印用
+
+    for i in range(len(best_path) - 1):
+        source = best_path[i]
+        target = best_path[i + 1]
         x0, y0 = pos[source]
         x1, y1 = pos[target]
-        weight = data.get('weight', 1)
 
-        # エッジの太さと色
-        width_val = min(weight / 2, 10)
+        # 遷移情報を取得
+        weight = 1
+        if graph.has_edge(source, target):
+            weight = graph[source][target].get('weight', 1)
 
+        # エッジライン
         edge_trace = go.Scatter(
-            x=[x0, x1, None],
-            y=[y0, y1, None],
+            x=[x0, x1],
+            y=[y0, y1],
             mode='lines',
-            line=dict(width=width_val, color='rgba(125,125,125,0.5)'),
+            line=dict(width=3, color='#4A90E2'),
             hoverinfo='text',
-            text=f"{graph_recommender.get_skill_name(source)} → "
-                 f"{graph_recommender.get_skill_name(target)}<br>"
-                 f"遷移人数: {weight}人",
+            hovertext=f"{graph_recommender.get_skill_name(source)} → "
+                     f"{graph_recommender.get_skill_name(target)}<br>"
+                     f"遷移人数: {weight}人",
             showlegend=False
         )
         edge_traces.append(edge_trace)
 
+        # 矢印アノテーション
+        annotations.append(
+            dict(
+                x=x1,
+                y=y1,
+                ax=x0,
+                ay=y0,
+                xref='x',
+                yref='y',
+                axref='x',
+                ayref='y',
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1.5,
+                arrowwidth=2,
+                arrowcolor='#4A90E2',
+                standoff=20
+            )
+        )
+
     # ノードの描画
     node_x, node_y, node_text, node_color, node_size = [], [], [], [], []
-    for node in subgraph.nodes():
+
+    for i, node in enumerate(best_path):
         x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
 
         skill_name = graph_recommender.get_skill_name(node)
-        node_text.append(skill_name)
+
+        # ステップ番号を追加
+        if i == 0:
+            node_text.append(f"【START】<br>{skill_name}")
+        elif i == len(best_path) - 1:
+            node_text.append(f"【GOAL】<br>{skill_name}")
+        else:
+            node_text.append(f"Step {i}<br>{skill_name}")
 
         # 色分け
         if node in user_skills:
             node_color.append('#4A90E2')  # 青: 習得済み
-            node_size.append(25)
+            node_size.append(40)
         elif node == recommended_skill:
             node_color.append('#E24A4A')  # 赤: 推薦スキル
-            node_size.append(30)
+            node_size.append(45)
         else:
             node_color.append('#95A5A6')  # グレー: 中間スキル
-            node_size.append(20)
+            node_size.append(35)
 
     node_trace = go.Scatter(
         x=node_x,
@@ -913,64 +948,40 @@ def create_skill_transition_graph(
         mode='markers+text',
         text=node_text,
         textposition='top center',
-        textfont=dict(size=10),
+        textfont=dict(size=12, family='Arial, sans-serif'),
         marker=dict(
             size=node_size,
             color=node_color,
-            line=dict(width=2, color='white')
+            line=dict(width=3, color='white'),
+            symbol='circle'
         ),
         hoverinfo='text',
         hovertext=node_text,
         showlegend=False
     )
 
-    # 凡例用のダミートレース
-    legend_traces = [
-        go.Scatter(
-            x=[None], y=[None],
-            mode='markers',
-            marker=dict(size=15, color='#4A90E2'),
-            name='習得済みスキル',
-            showlegend=True
-        ),
-        go.Scatter(
-            x=[None], y=[None],
-            mode='markers',
-            marker=dict(size=15, color='#E24A4A'),
-            name='推薦スキル',
-            showlegend=True
-        ),
-        go.Scatter(
-            x=[None], y=[None],
-            mode='markers',
-            marker=dict(size=15, color='#95A5A6'),
-            name='学習パス上のスキル',
-            showlegend=True
-        )
-    ]
-
     # レイアウト
-    fig = go.Figure(data=edge_traces + [node_trace] + legend_traces)
+    fig = go.Figure(data=edge_traces + [node_trace])
+
+    # パス情報をテキストで表示
+    path_text = " → ".join([graph_recommender.get_skill_name(n) for n in best_path])
 
     fig.update_layout(
         title=dict(
-            text=f'スキル遷移グラフ: {graph_recommender.get_skill_name(recommended_skill)}への学習パス',
+            text=f'推奨学習パス（{len(best_path)}ステップ）<br><sub>{path_text}</sub>',
             x=0.5,
-            xanchor='center'
+            xanchor='center',
+            font=dict(size=16)
         ),
-        showlegend=True,
+        showlegend=False,
         hovermode='closest',
         width=width,
         height=height,
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        plot_bgcolor='white',
-        legend=dict(
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=0.01
-        )
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-0.5, (len(best_path) - 1) * 2 + 0.5]),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-1, 1]),
+        plot_bgcolor='#F8F9FA',
+        annotations=annotations,
+        margin=dict(t=100, b=50, l=50, r=50)
     )
 
     return fig
