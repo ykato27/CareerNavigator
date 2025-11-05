@@ -157,19 +157,40 @@ class DataTransformer:
         ]['メンバーコード'].unique()
 
         logger.info("\n有効なメンバー数: %d名", len(valid_members))
+        if len(valid_members) > 0:
+            logger.info("  有効なメンバーの例（最初の5名）: %s", list(valid_members[:5]))
+
+        # 保有力量データに含まれるメンバーコードを確認
+        acquired_member_codes = acquired_df['メンバーコード'].unique()
+        logger.info("\n保有力量データに含まれるメンバー数: %d名", len(acquired_member_codes))
+        if len(acquired_member_codes) > 0:
+            logger.info("  保有力量データのメンバーの例（最初の5名）: %s", list(acquired_member_codes[:5]))
+
+        # 一致するメンバーを確認
+        matching_members = set(valid_members) & set(acquired_member_codes)
+        logger.info("\n一致するメンバー数: %d名", len(matching_members))
+        if len(matching_members) == 0:
+            logger.warning("  ⚠ 有効なメンバーと保有力量データのメンバーが一致しません！")
+            logger.warning("  メンバーマスタと保有力量データのメンバーコードの形式を確認してください")
 
         # 習得力量データ
         member_competence = acquired_df[
             acquired_df['メンバーコード'].isin(valid_members)
         ].copy()
 
-        logger.info("有効メンバーでフィルタ後: %d件", len(member_competence))
+        logger.info("\n有効メンバーでフィルタ後: %d件", len(member_competence))
 
         if member_competence.empty:
             logger.warning("  ⚠ 有効なメンバーの習得力量データがありません")
             logger.warning("  保有力量データの先頭5件:")
             logger.warning("\n%s", acquired_df.head().to_string())
-            return member_competence, valid_members.tolist()
+
+            # 空のDataFrameでも必要なカラムを持つ構造を返す
+            empty_df = pd.DataFrame(columns=[
+                'メンバーコード', '力量コード', '力量タイプ', 'レベル',
+                '正規化レベル', '力量名', '力量カテゴリー名'
+            ])
+            return empty_df, valid_members.tolist()
 
         # レベル正規化
         member_competence['正規化レベル'] = member_competence.apply(
@@ -193,30 +214,43 @@ class DataTransformer:
     def create_skill_matrix(self, member_competence: pd.DataFrame) -> pd.DataFrame:
         """
         メンバー×力量マトリクスを作成
-        
+
         Args:
             member_competence: メンバー習得力量データ
-            
+
         Returns:
             メンバー×力量マトリクス
         """
         logger.info("\n" + "=" * 80)
         logger.info("メンバー×力量マトリクス作成")
         logger.info("=" * 80)
-        
+
+        # 空データの場合は空のマトリクスを返す
+        if member_competence.empty:
+            logger.warning("  ⚠ メンバー習得力量データが空のため、空のマトリクスを返します")
+            return pd.DataFrame()
+
+        # 必須カラムの確認
+        required_columns = ['メンバーコード', '力量コード', '正規化レベル']
+        missing_columns = [col for col in required_columns if col not in member_competence.columns]
+        if missing_columns:
+            logger.error("  ⚠ 必須カラムが不足しています: %s", missing_columns)
+            logger.error("  利用可能なカラム: %s", list(member_competence.columns))
+            raise ValueError(f"メンバー習得力量データに必須カラムが不足しています: {missing_columns}")
+
         skill_matrix = member_competence.pivot_table(
             index='メンバーコード',
             columns='力量コード',
             values='正規化レベル',
             fill_value=0
         )
-        
+
         logger.info(
             "\nマトリクスサイズ: %d名 × %d力量",
             skill_matrix.shape[0],
             skill_matrix.shape[1],
         )
-        
+
         return skill_matrix
     
     def clean_members_data(self, data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
