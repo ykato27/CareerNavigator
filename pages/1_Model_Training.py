@@ -56,7 +56,12 @@ if not st.session_state.get("data_loaded", False):
 def build_ml_recommender(
     transformed_data: dict,
     use_preprocessing: bool = True,
-    use_tuning: bool = False
+    use_tuning: bool = False,
+    tuning_n_trials: int = None,
+    tuning_timeout: int = None,
+    tuning_search_space: dict = None,
+    tuning_sampler: str = None,
+    tuning_progress_callback = None
 ) -> MLRecommender:
     """
     MLRecommenderを学習済みの状態で作成する
@@ -65,13 +70,23 @@ def build_ml_recommender(
         transformed_data: 変換済みデータ
         use_preprocessing: データ前処理を使用するか
         use_tuning: ハイパーパラメータチューニングを使用するか
+        tuning_n_trials: チューニング試行回数
+        tuning_timeout: チューニングタイムアウト
+        tuning_search_space: チューニング探索空間
+        tuning_sampler: チューニングサンプラー
+        tuning_progress_callback: 進捗コールバック
     """
     recommender = MLRecommender.build(
         member_competence=transformed_data["member_competence"],
         competence_master=transformed_data["competence_master"],
         member_master=transformed_data["members_clean"],
         use_preprocessing=use_preprocessing,
-        use_tuning=use_tuning
+        use_tuning=use_tuning,
+        tuning_n_trials=tuning_n_trials,
+        tuning_timeout=tuning_timeout,
+        tuning_search_space=tuning_search_space,
+        tuning_sampler=tuning_sampler,
+        tuning_progress_callback=tuning_progress_callback
     )
     return recommender
 
@@ -90,6 +105,11 @@ if st.session_state.get("model_trained", False):
         st.rerun()
 else:
     st.info("📚 NMF（非負値行列分解）を使用して、メンバーの力量習得パターンを学習します。")
+
+    # 変数の初期化
+    sampler_choice = "tpe"
+    n_trials = 50
+    custom_search_space = None
 
     # 学習オプション
     with st.expander("⚙️ 学習オプション", expanded=True):
@@ -117,25 +137,164 @@ else:
             """)
 
         if use_tuning:
-            st.markdown("""
-            **ハイパーパラメータチューニングの内容:**
-            - 探索方法: TPE（Tree-structured Parzen Estimator）ベイズ最適化
-            - 探索パラメータ: 潜在因子数、正則化パラメータ、最大イテレーション数など
-            - 試行回数: 50回（約5-10分）
+            st.markdown("---")
+            st.markdown("### ⚙️ チューニング詳細設定")
+
+            # サンプラー選択
+            sampler_col1, sampler_col2 = st.columns(2)
+            with sampler_col1:
+                sampler_choice = st.selectbox(
+                    "探索方法（サンプラー）",
+                    options=["tpe", "random", "cmaes"],
+                    format_func=lambda x: {
+                        "tpe": "TPE (Tree-structured Parzen Estimator) - 推奨",
+                        "random": "ランダムサーチ",
+                        "cmaes": "CMA-ES (進化戦略)"
+                    }[x],
+                    help="TPE: ベイズ最適化で効率的に探索\nランダム: ランダムに探索\nCMA-ES: 進化戦略による最適化"
+                )
+
+            with sampler_col2:
+                n_trials = st.number_input(
+                    "試行回数",
+                    min_value=10,
+                    max_value=200,
+                    value=50,
+                    step=10,
+                    help="探索する組み合わせの数。多いほど良い解が見つかる可能性が高まりますが、時間がかかります。"
+                )
+
+            # 探索範囲の設定
+            with st.expander("🔍 探索範囲の詳細設定", expanded=False):
+                st.markdown("各パラメータの探索範囲を設定します。デフォルト値から変更する場合のみ調整してください。")
+
+                range_col1, range_col2 = st.columns(2)
+
+                with range_col1:
+                    st.markdown("**潜在因子数 (n_components)**")
+                    n_comp_min = st.number_input("最小値", min_value=5, max_value=50, value=10, key="n_comp_min")
+                    n_comp_max = st.number_input("最大値", min_value=5, max_value=50, value=30, key="n_comp_max")
+
+                    st.markdown("**正則化係数 W (alpha_W)**")
+                    alpha_w_min = st.number_input("最小値", min_value=0.0001, max_value=1.0, value=0.001, format="%.4f", key="alpha_w_min")
+                    alpha_w_max = st.number_input("最大値", min_value=0.0001, max_value=1.0, value=0.5, format="%.4f", key="alpha_w_max")
+
+                with range_col2:
+                    st.markdown("**正則化係数 H (alpha_H)**")
+                    alpha_h_min = st.number_input("最小値", min_value=0.0001, max_value=1.0, value=0.001, format="%.4f", key="alpha_h_min")
+                    alpha_h_max = st.number_input("最大値", min_value=0.0001, max_value=1.0, value=0.5, format="%.4f", key="alpha_h_max")
+
+                    st.markdown("**L1比率 (l1_ratio)**")
+                    l1_min = st.number_input("最小値", min_value=0.0, max_value=1.0, value=0.0, format="%.2f", key="l1_min")
+                    l1_max = st.number_input("最大値", min_value=0.0, max_value=1.0, value=1.0, format="%.2f", key="l1_max")
+
+                st.markdown("**最大イテレーション数 (max_iter)**")
+                iter_col1, iter_col2 = st.columns(2)
+                with iter_col1:
+                    iter_min = st.number_input("最小値", min_value=100, max_value=3000, value=500, step=100, key="iter_min")
+                with iter_col2:
+                    iter_max = st.number_input("最大値", min_value=100, max_value=3000, value=1500, step=100, key="iter_max")
+
+                # 探索空間を構築
+                custom_search_space = {
+                    'n_components': (n_comp_min, n_comp_max),
+                    'alpha_W': (alpha_w_min, alpha_w_max),
+                    'alpha_H': (alpha_h_min, alpha_h_max),
+                    'l1_ratio': (l1_min, l1_max),
+                    'max_iter': (iter_min, iter_max)
+                }
+
+            st.info(f"""
+            **選択した設定:**
+            - 探索方法: {sampler_choice.upper()}
+            - 試行回数: {n_trials}回
+            - 推定時間: {n_trials * 0.1:.1f}〜{n_trials * 0.2:.1f}分
             """)
-            st.warning("⏱️ チューニングには5-10分程度かかる場合があります。")
+            st.warning("⏱️ チューニングには時間がかかる場合があります。")
 
     # 学習実行ボタン
     button_label = "🚀 MLモデル学習を実行（チューニングあり）" if use_tuning else "🚀 MLモデル学習を実行"
 
     if st.button(button_label, type="primary"):
+        # リアルタイム可視化用のプレースホルダー
+        progress_placeholder = st.empty()
+        chart_placeholder = st.empty()
+        metrics_placeholder = st.empty()
+
+        # チューニング進捗を保存するためのリスト
+        trial_history = []
+
+        def progress_callback(trial, study):
+            """チューニングの進捗をリアルタイムで表示"""
+            trial_history.append({
+                'trial': trial.number,
+                'value': trial.value,
+                'best_value': study.best_value
+            })
+
+            # プログレスバーを更新
+            progress_pct = (trial.number + 1) / n_trials if use_tuning else 1.0
+            progress_placeholder.progress(
+                progress_pct,
+                text=f"Trial {trial.number + 1}/{n_trials if use_tuning else 1} - 現在の誤差: {trial.value:.6f} - 最良: {study.best_value:.6f}"
+            )
+
+            # グラフを更新（5試行ごと、または最後の試行）
+            if len(trial_history) >= 5 or trial.number == (n_trials - 1 if use_tuning else 0):
+                import pandas as pd
+                import plotly.graph_objects as go
+
+                df_history = pd.DataFrame(trial_history)
+
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=df_history['trial'],
+                    y=df_history['value'],
+                    mode='markers',
+                    name='各試行',
+                    marker=dict(size=8, opacity=0.6, color='lightblue')
+                ))
+                fig.add_trace(go.Scatter(
+                    x=df_history['trial'],
+                    y=df_history['best_value'],
+                    mode='lines',
+                    name='最良値の推移',
+                    line=dict(color='red', width=2)
+                ))
+                fig.update_layout(
+                    title='ハイパーパラメータ最適化の進捗',
+                    xaxis_title='Trial',
+                    yaxis_title='再構成誤差',
+                    height=400
+                )
+                chart_placeholder.plotly_chart(fig, use_container_width=True)
+
+                # メトリクスを表示
+                col1, col2, col3 = metrics_placeholder.columns(3)
+                with col1:
+                    st.metric("現在の Trial", f"{trial.number + 1}/{n_trials if use_tuning else 1}")
+                with col2:
+                    st.metric("現在の誤差", f"{trial.value:.6f}")
+                with col3:
+                    st.metric("最良誤差", f"{study.best_value:.6f}")
+
         with st.spinner("MLモデルを学習中..." if not use_tuning else "ハイパーパラメータチューニング中..."):
             try:
                 ml_recommender = build_ml_recommender(
                     st.session_state.transformed_data,
                     use_preprocessing=use_preprocessing,
-                    use_tuning=use_tuning
+                    use_tuning=use_tuning,
+                    tuning_n_trials=n_trials if use_tuning else None,
+                    tuning_timeout=None,
+                    tuning_search_space=custom_search_space if use_tuning else None,
+                    tuning_sampler=sampler_choice if use_tuning else None,
+                    tuning_progress_callback=progress_callback if use_tuning else None
                 )
+
+                # プレースホルダーをクリア
+                progress_placeholder.empty()
+                chart_placeholder.empty()
+                metrics_placeholder.empty()
                 st.session_state.ml_recommender = ml_recommender
                 st.session_state.model_trained = True
 

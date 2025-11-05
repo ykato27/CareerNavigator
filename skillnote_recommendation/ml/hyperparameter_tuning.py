@@ -17,7 +17,7 @@ from sklearn.model_selection import KFold
 
 try:
     import optuna
-    from optuna.samplers import TPESampler
+    from optuna.samplers import TPESampler, RandomSampler, GridSampler, CmaEsSampler
     OPTUNA_AVAILABLE = True
 except ImportError:
     OPTUNA_AVAILABLE = False
@@ -40,7 +40,9 @@ class NMFHyperparameterTuner:
         random_state: int = 42,
         search_space: Optional[Dict] = None,
         use_cross_validation: bool = True,
-        n_folds: int = 3
+        n_folds: int = 3,
+        sampler: str = "tpe",
+        progress_callback: Optional[Callable] = None
     ):
         """
         初期化
@@ -54,6 +56,8 @@ class NMFHyperparameterTuner:
             search_space: 探索空間の辞書
             use_cross_validation: 交差検証を使用するか（推奨: True）
             n_folds: 交差検証の分割数（デフォルト: 3, 計算時間とのトレードオフ）
+            sampler: サンプラー種別 ("tpe", "random", "cmaes")
+            progress_callback: 進捗コールバック関数（trial, study を受け取る）
         """
         if not OPTUNA_AVAILABLE:
             raise ImportError(
@@ -68,6 +72,8 @@ class NMFHyperparameterTuner:
         self.random_state = random_state
         self.use_cross_validation = use_cross_validation
         self.n_folds = n_folds
+        self.sampler = sampler
+        self.progress_callback = progress_callback
 
         # 最適化された探索空間（より狭い範囲で効率的に探索）
         self.search_space = search_space or {
@@ -288,12 +294,32 @@ class NMFHyperparameterTuner:
         # Optunaのログレベルを調整（INFOレベルで詳細を表示）
         optuna.logging.set_verbosity(optuna.logging.INFO)
 
-        # Studyを作成（TPESamplerでベイズ最適化）
-        sampler = TPESampler(seed=self.random_state)
+        # サンプラーを選択
+        if self.sampler == "tpe":
+            sampler_instance = TPESampler(seed=self.random_state)
+            logger.info("サンプラー: TPE (Tree-structured Parzen Estimator)")
+        elif self.sampler == "random":
+            sampler_instance = RandomSampler(seed=self.random_state)
+            logger.info("サンプラー: Random Sampler")
+        elif self.sampler == "cmaes":
+            sampler_instance = CmaEsSampler(seed=self.random_state)
+            logger.info("サンプラー: CMA-ES (Covariance Matrix Adaptation Evolution Strategy)")
+        else:
+            sampler_instance = TPESampler(seed=self.random_state)
+            logger.warning(f"不明なサンプラー '{self.sampler}'。TPEを使用します。")
+
+        # Studyを作成
         self.study = optuna.create_study(
             direction='minimize',  # 再構成誤差を最小化
-            sampler=sampler
+            sampler=sampler_instance
         )
+
+        # プログレスコールバックを設定
+        all_callbacks = callbacks or []
+        if self.progress_callback:
+            def progress_wrapper(study, trial):
+                self.progress_callback(trial, study)
+            all_callbacks.append(progress_wrapper)
 
         # 最適化実行
         self.study.optimize(
@@ -302,7 +328,7 @@ class NMFHyperparameterTuner:
             timeout=self.timeout,
             n_jobs=self.n_jobs,
             show_progress_bar=show_progress_bar,
-            callbacks=callbacks
+            callbacks=all_callbacks if all_callbacks else None
         )
 
         # 最良の結果を取得
@@ -449,7 +475,12 @@ def tune_nmf_hyperparameters_from_config(
     skill_matrix: pd.DataFrame,
     config,
     show_progress_bar: bool = True,
-    return_tuner: bool = False
+    return_tuner: bool = False,
+    custom_n_trials: Optional[int] = None,
+    custom_timeout: Optional[int] = None,
+    custom_search_space: Optional[Dict] = None,
+    custom_sampler: Optional[str] = None,
+    progress_callback: Optional[Callable] = None
 ) -> Tuple:
     """
     Configを使ってハイパーパラメータチューニングを実行
@@ -459,6 +490,11 @@ def tune_nmf_hyperparameters_from_config(
         config: Configクラスインスタンス
         show_progress_bar: プログレスバーを表示するか
         return_tuner: Tunerオブジェクトも返すか
+        custom_n_trials: カスタム試行回数（Noneの場合はconfigから取得）
+        custom_timeout: カスタムタイムアウト（Noneの場合はconfigから取得）
+        custom_search_space: カスタム探索空間（Noneの場合はconfigから取得）
+        custom_sampler: カスタムサンプラー（Noneの場合は"tpe"）
+        progress_callback: 進捗コールバック関数
 
     Returns:
         return_tuner=False: (最適パラメータ, 最小再構成誤差, 最良モデル)
@@ -468,13 +504,15 @@ def tune_nmf_hyperparameters_from_config(
 
     tuner = NMFHyperparameterTuner(
         skill_matrix=skill_matrix,
-        n_trials=optuna_params['n_trials'],
-        timeout=optuna_params['timeout'],
+        n_trials=custom_n_trials or optuna_params['n_trials'],
+        timeout=custom_timeout or optuna_params['timeout'],
         n_jobs=optuna_params['n_jobs'],
         random_state=config.MF_PARAMS['random_state'],
-        search_space=optuna_params['search_space'],
+        search_space=custom_search_space or optuna_params['search_space'],
         use_cross_validation=optuna_params.get('use_cross_validation', True),
-        n_folds=optuna_params.get('n_folds', 3)
+        n_folds=optuna_params.get('n_folds', 3),
+        sampler=custom_sampler or "tpe",
+        progress_callback=progress_callback
     )
 
     best_params, best_value = tuner.optimize(show_progress_bar=show_progress_bar)
