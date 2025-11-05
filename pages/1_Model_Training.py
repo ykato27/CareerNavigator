@@ -235,6 +235,9 @@ if st.session_state.get("model_trained", False):
             else:
                 df_member_factors_code = df_member_factors.copy()
 
+            # メンバーコードを文字列型として明示的に変換
+            df_member_factors_code["メンバーコード"] = df_member_factors_code["メンバーコード"].astype(str)
+
             pivot_table_code = df_member_factors_code.pivot_table(
                 index="メンバーコード",
                 columns="潜在因子",
@@ -242,13 +245,26 @@ if st.session_state.get("model_trained", False):
                 aggfunc="mean"
             )
 
-            fig_code = px.imshow(
-                pivot_table_code,
-                labels=dict(x="潜在因子", y="メンバーコード", color="重み"),
+            # go.Heatmapを使用してカテゴリデータとして扱う
+            import plotly.graph_objects as go
+
+            fig_code = go.Figure(data=go.Heatmap(
+                z=pivot_table_code.values,
+                x=pivot_table_code.columns.tolist(),
+                y=pivot_table_code.index.tolist(),
+                colorscale="Blues",
+                colorbar=dict(title="重み"),
+                hoverongaps=False,
+                hovertemplate="メンバーコード: %{y}<br>潜在因子: %{x}<br>重み: %{z:.3f}<extra></extra>"
+            ))
+
+            fig_code.update_layout(
                 title="メンバーの潜在因子分布ヒートマップ（メンバーコード）",
-                color_continuous_scale="Blues"
+                xaxis_title="潜在因子",
+                yaxis_title="メンバーコード",
+                height=500,
+                yaxis=dict(type='category')  # カテゴリデータとして扱う
             )
-            fig_code.update_layout(height=500)
             st.plotly_chart(fig_code, use_container_width=True)
 
     # 力量の潜在因子分布
