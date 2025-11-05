@@ -116,7 +116,7 @@ class NMFHyperparameterTuner:
 
         改善点:
         1. random_stateを固定（パラメータの効果のみを評価）
-        2. 交差検証による汎化性能の評価
+        2. スキルベースの交差検証による汎化性能の評価
         3. より詳細なメトリクスの記録
 
         Args:
@@ -134,23 +134,17 @@ class NMFHyperparameterTuner:
 
         try:
             if self.use_cross_validation:
-                # 交差検証の方法を選択
-                if self.use_time_series_split:
-                    print(f"[DEBUG] Trial {trial.number}: Using TimeSeriesSplit with {self.n_folds} folds")
-                    cv_splitter = TimeSeriesSplit(n_splits=self.n_folds)
-                    split_method = "TimeSeriesSplit"
-                else:
-                    print(f"[DEBUG] Trial {trial.number}: Using KFold with {self.n_folds} folds")
-                    cv_splitter = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_state)
-                    split_method = "KFold"
+                # Matrix Factorization用のスキルベース交差検証
+                print(f"[DEBUG] Trial {trial.number}: Using skill-based cross-validation with {self.n_folds} folds")
+                split_method = "SkillBasedCV"
 
                 # 交差検証を実行
                 cv_errors = []
-                for fold_idx, (train_idx, val_idx) in enumerate(cv_splitter.split(self.skill_matrix)):
+                for fold_idx in range(self.n_folds):
                     print(f"[DEBUG] Trial {trial.number}, Fold {fold_idx+1}/{self.n_folds}: Training...")
-                    # 訓練データと検証データに分割
-                    train_matrix = self.skill_matrix.iloc[train_idx]
-                    val_matrix = self.skill_matrix.iloc[val_idx]
+
+                    # スキルベースの分割：各メンバーのスキルをランダムにマスク
+                    train_matrix, val_mask = self._create_skill_based_split(fold_idx)
 
                     # モデルを学習（random_stateは固定、Early stopping有効）
                     model = MatrixFactorizationModel(
@@ -162,8 +156,8 @@ class NMFHyperparameterTuner:
                     )
                     model.fit(train_matrix)
 
-                    # 検証データで評価
-                    val_error = self._calculate_validation_error(model, train_matrix, val_matrix)
+                    # 検証データで評価（マスクされたスキルのみ）
+                    val_error = self._calculate_skill_based_validation_error(model, val_mask)
                     cv_errors.append(val_error)
 
                     logger.debug(f"  Fold {fold_idx+1}/{self.n_folds}: error={val_error:.6f}")
@@ -215,6 +209,102 @@ class NMFHyperparameterTuner:
             # 失敗した場合は大きな値を返す
             return float('inf')
 
+    def _create_skill_based_split(self, fold_idx: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        スキルベースの分割を作成
+
+        各メンバーのスキル（力量）をランダムにマスクし、トレーニング用とバリデーション用に分割します。
+        これにより、Matrix Factorizationモデルの評価が可能になります。
+
+        Args:
+            fold_idx: フォールドのインデックス（0から始まる）
+
+        Returns:
+            (train_matrix, val_mask): トレーニングマトリックス（マスク適用後）と
+                                      バリデーションマスク（元の値を保持）
+        """
+        # 元のマトリックスをコピー
+        train_matrix = self.skill_matrix.copy()
+        val_mask = pd.DataFrame(0.0, index=self.skill_matrix.index, columns=self.skill_matrix.columns)
+
+        # 各メンバーについて、スキルをランダムにマスク
+        np.random.seed(self.random_state + fold_idx)  # fold毎に異なるseed
+
+        val_ratio = 1.0 / self.n_folds  # 各foldで同じ割合をバリデーションに
+
+        for member_code in self.skill_matrix.index:
+            # このメンバーが持つスキル（非ゼロの要素）を取得
+            member_skills = self.skill_matrix.loc[member_code]
+            non_zero_skills = member_skills[member_skills > 0].index.tolist()
+
+            if len(non_zero_skills) == 0:
+                continue
+
+            # バリデーション用にマスクするスキル数を計算
+            n_val = max(1, int(len(non_zero_skills) * val_ratio))
+
+            # ランダムにバリデーションスキルを選択
+            val_skills = np.random.choice(non_zero_skills, size=n_val, replace=False)
+
+            # バリデーションスキルをマスク（トレーニングマトリックスから削除）
+            train_matrix.loc[member_code, val_skills] = 0.0
+
+            # バリデーションマスクに元の値を保存
+            val_mask.loc[member_code, val_skills] = member_skills[val_skills]
+
+        return train_matrix, val_mask
+
+    def _calculate_skill_based_validation_error(
+        self,
+        model: MatrixFactorizationModel,
+        val_mask: pd.DataFrame
+    ) -> float:
+        """
+        スキルベースのバリデーション誤差を計算
+
+        マスクされたスキル（バリデーション用）の予測精度を評価します。
+
+        Args:
+            model: 学習済みモデル
+            val_mask: バリデーションマスク（マスクされたスキルの元の値）
+
+        Returns:
+            バリデーション誤差（Frobenius norm）
+        """
+        total_squared_error = 0.0
+        total_elements = 0
+
+        for member_code in val_mask.index:
+            # このメンバーのバリデーションスキルを取得
+            member_val_skills = val_mask.loc[member_code]
+            val_skills = member_val_skills[member_val_skills > 0]
+
+            if len(val_skills) == 0:
+                continue
+
+            # 予測スコアを取得
+            try:
+                pred_scores = model.predict(member_code, competence_codes=val_skills.index.tolist())
+            except ValueError:
+                continue
+
+            # 実際の値
+            actual_values = val_skills.values
+            pred_values = pred_scores.values
+
+            # 二乗誤差を計算
+            squared_error = np.sum((pred_values - actual_values) ** 2)
+            total_squared_error += squared_error
+            total_elements += len(val_skills)
+
+        # Frobenius norm（平方根を取る）
+        if total_elements == 0:
+            return float('inf')
+
+        reconstruction_error = np.sqrt(total_squared_error)
+
+        return reconstruction_error
+
     def _calculate_validation_error(
         self,
         model: MatrixFactorizationModel,
@@ -222,7 +312,7 @@ class NMFHyperparameterTuner:
         val_matrix: pd.DataFrame
     ) -> float:
         """
-        検証データでの再構成誤差を計算
+        検証データでの再構成誤差を計算（レガシー - メンバーベース分割用）
 
         検証データのメンバーのうち、訓練データに存在するメンバーのみを対象に、
         力量の予測精度を評価します。
