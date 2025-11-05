@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from skillnote_recommendation.ml.ml_recommender import MLRecommender
+from skillnote_recommendation.core.persistence.streamlit_integration import StreamlitPersistenceManager
 
 
 # =========================================================
@@ -22,6 +23,22 @@ st.set_page_config(
 
 st.title("🤖 モデル学習と分析")
 st.markdown("**ステップ2**: MLモデルを学習し、学習結果を分析します。")
+
+
+# =========================================================
+# 永続化マネージャーの初期化
+# =========================================================
+@st.cache_resource
+def get_persistence_manager():
+    """永続化マネージャーのシングルトンインスタンスを取得"""
+    return StreamlitPersistenceManager()
+
+
+persistence_manager = get_persistence_manager()
+persistence_manager.initialize_session()
+
+# ユーザーログインUI
+persistence_manager.render_user_login()
 
 
 # =========================================================
@@ -121,7 +138,43 @@ else:
                 )
                 st.session_state.ml_recommender = ml_recommender
                 st.session_state.model_trained = True
-                st.success("✅ MLモデル学習が完了しました。")
+
+                # モデルの保存
+                current_user = persistence_manager.get_current_user()
+                if current_user:
+                    with st.spinner("モデルを保存中..."):
+                        try:
+                            # モデルのパラメータとメトリクスを取得
+                            mf_model = ml_recommender.mf_model
+                            parameters = {
+                                "n_components": mf_model.n_components,
+                                "use_preprocessing": use_preprocessing,
+                                "use_tuning": use_tuning,
+                            }
+                            metrics = {
+                                "reconstruction_error": mf_model.get_reconstruction_error(),
+                            }
+
+                            # モデルを保存
+                            model_id = persistence_manager.save_trained_model(
+                                model=ml_recommender,
+                                model_type="nmf",
+                                parameters=parameters,
+                                metrics=metrics,
+                                training_data=st.session_state.transformed_data.get("skill_matrix"),
+                                description=f"NMF model (preprocessing={use_preprocessing}, tuning={use_tuning})"
+                            )
+
+                            if model_id:
+                                st.success(f"✅ MLモデル学習が完了し、保存されました（ID: {model_id[:8]}...）")
+                            else:
+                                st.success("✅ MLモデル学習が完了しました。")
+                        except Exception as save_error:
+                            st.warning(f"⚠️ モデルの保存に失敗しましたが、モデルは使用可能です: {save_error}")
+                else:
+                    st.success("✅ MLモデル学習が完了しました。")
+                    st.info("💡 ログインするとモデルを保存して再利用できます。")
+
                 st.rerun()
             except Exception as e:
                 import traceback
