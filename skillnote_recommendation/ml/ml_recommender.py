@@ -45,7 +45,12 @@ class MLRecommender:
         competence_master: pd.DataFrame,
         member_master: pd.DataFrame,
         use_preprocessing: bool = True,
-        use_tuning: bool = False
+        use_tuning: bool = False,
+        tuning_n_trials: Optional[int] = None,
+        tuning_timeout: Optional[int] = None,
+        tuning_search_space: Optional[Dict] = None,
+        tuning_sampler: Optional[str] = None,
+        tuning_progress_callback: Optional[object] = None
     ):
         """
         member_competence（会員習得力量データ）から会員×力量マトリクスを生成し、
@@ -57,6 +62,11 @@ class MLRecommender:
             member_master: メンバーマスタ
             use_preprocessing: データ前処理を使用するか（デフォルト: True）
             use_tuning: ハイパーパラメータチューニングを使用するか（デフォルト: False）
+            tuning_n_trials: チューニング試行回数（Noneの場合はデフォルト）
+            tuning_timeout: チューニングタイムアウト（Noneの場合はデフォルト）
+            tuning_search_space: チューニング探索空間（Noneの場合はデフォルト）
+            tuning_sampler: チューニングサンプラー（Noneの場合は"tpe"）
+            tuning_progress_callback: チューニング進捗コールバック
         """
         from skillnote_recommendation.core.config import Config
         from skillnote_recommendation.ml.data_preprocessing import create_preprocessor_from_config
@@ -94,7 +104,12 @@ class MLRecommender:
                     skill_matrix=skill_matrix,
                     config=Config,
                     show_progress_bar=True,
-                    return_tuner=True  # Tunerオブジェクトも返す
+                    return_tuner=True,  # Tunerオブジェクトも返す
+                    custom_n_trials=tuning_n_trials,
+                    custom_timeout=tuning_timeout,
+                    custom_search_space=tuning_search_space,
+                    custom_sampler=tuning_sampler,
+                    progress_callback=tuning_progress_callback
                 )
                 print(f"\n✅ チューニング完了")
                 print(f"最適パラメータ: {best_params}")
