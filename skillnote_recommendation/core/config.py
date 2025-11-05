@@ -144,6 +144,36 @@ class Config:
         'color_other_member': '#CCCCCC',  # その他のメンバーの色（灰色）
     }
 
+    # 評価パラメータ
+    EVALUATION_PARAMS = {
+        # 基本パラメータ
+        'top_k': 10,  # 推薦数（評価時）
+        'include_extended_metrics': True,  # MRR, MAP等の拡張メトリクスを計算するか
+        'include_diversity_metrics': True,  # 多様性指標を計算するか
+
+        # Hold-out評価
+        'train_ratio': 0.8,  # 訓練データの割合
+        'use_temporal_split': True,  # 時系列分割を使用するか（Falseの場合はランダム）
+
+        # 交差検証
+        'n_folds': 5,  # 交差検証の分割数
+        'cv_use_temporal': True,  # 時系列交差検証を使用するか
+
+        # Leave-One-Out評価
+        'loo_max_users': None,  # 評価する最大ユーザー数（Noneの場合は全ユーザー）
+
+        # ランダム分割パラメータ
+        'min_test_items': 1,  # テストデータに必要な最小力量数
+
+        # メトリクス計算オプション
+        'calculate_gini': True,  # Gini Indexを計算するか
+        'calculate_novelty': True,  # Noveltyを計算するか（要member_competence）
+
+        # レポート出力
+        'detailed_report': True,  # 詳細なレポートを出力するか
+        'export_results': True,  # 結果をCSVに出力するか
+    }
+
     # ログ設定
     LOGGING_PARAMS = {
         'level': 'INFO',  # ログレベル (DEBUG, INFO, WARNING, ERROR, CRITICAL)

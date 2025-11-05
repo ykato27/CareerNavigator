@@ -88,10 +88,13 @@ class RecommendationEvaluator:
         competence_master: pd.DataFrame,
         top_k: int = 10,
         member_sample: Optional[List[str]] = None,
-        similarity_data: pd.DataFrame = None
+        similarity_data: pd.DataFrame = None,
+        include_extended_metrics: bool = True
     ) -> Dict[str, float]:
         """
         推薦結果を評価
+
+        拡張版：MRR, F1, MAP などの追加メトリクスをサポート
 
         Args:
             train_data: 学習データ（過去の習得力量）
@@ -100,6 +103,7 @@ class RecommendationEvaluator:
             top_k: 推薦する上位K件
             member_sample: 評価対象メンバーリスト（Noneの場合は全メンバー）
             similarity_data: 類似度データ（Noneの場合は空のDataFrame）
+            include_extended_metrics: 拡張メトリクス（MRR, F1, MAP）を計算するか
 
         Returns:
             評価メトリクスの辞書
@@ -134,6 +138,9 @@ class RecommendationEvaluator:
         precision_scores = []
         recall_scores = []
         ndcg_scores = []
+        f1_scores = []
+        mrr_scores = []
+        ap_scores = []  # Average Precision for MAP
         hit_count = 0
         total_members = 0
 
@@ -161,6 +168,9 @@ class RecommendationEvaluator:
                 precision_scores.append(0.0)
                 recall_scores.append(0.0)
                 ndcg_scores.append(0.0)
+                f1_scores.append(0.0)
+                mrr_scores.append(0.0)
+                ap_scores.append(0.0)
                 continue
 
             # Precision@K: 推薦のうち実際に習得した割合
@@ -172,6 +182,13 @@ class RecommendationEvaluator:
             recall = hits / len(actual_acquired) if len(actual_acquired) > 0 else 0.0
             recall_scores.append(recall)
 
+            # F1-Score: PrecisionとRecallの調和平均
+            if precision + recall > 0:
+                f1 = 2 * (precision * recall) / (precision + recall)
+            else:
+                f1 = 0.0
+            f1_scores.append(f1)
+
             # NDCG@K: ランキングの質を評価
             ndcg = self._calculate_ndcg(recommended_codes, actual_acquired, top_k)
             ndcg_scores.append(ndcg)
@@ -180,23 +197,49 @@ class RecommendationEvaluator:
             if hits > 0:
                 hit_count += 1
 
+            # 拡張メトリクス
+            if include_extended_metrics:
+                # MRR (Mean Reciprocal Rank): 最初のヒットの逆順位
+                mrr = self._calculate_mrr(recommended_codes, actual_acquired)
+                mrr_scores.append(mrr)
+
+                # Average Precision (for MAP)
+                ap = self._calculate_average_precision(recommended_codes, actual_acquired)
+                ap_scores.append(ap)
+
         # メトリクスの平均を計算
         if total_members == 0:
-            return {
+            base_metrics = {
                 f'precision@{top_k}': 0.0,
                 f'recall@{top_k}': 0.0,
                 f'ndcg@{top_k}': 0.0,
+                f'f1@{top_k}': 0.0,
                 'hit_rate': 0.0,
                 'evaluated_members': 0
             }
+            if include_extended_metrics:
+                base_metrics.update({
+                    'mrr': 0.0,
+                    f'map@{top_k}': 0.0,
+                })
+            return base_metrics
 
-        return {
+        base_metrics = {
             f'precision@{top_k}': np.mean(precision_scores) if precision_scores else 0.0,
             f'recall@{top_k}': np.mean(recall_scores) if recall_scores else 0.0,
             f'ndcg@{top_k}': np.mean(ndcg_scores) if ndcg_scores else 0.0,
+            f'f1@{top_k}': np.mean(f1_scores) if f1_scores else 0.0,
             'hit_rate': hit_count / total_members if total_members > 0 else 0.0,
             'evaluated_members': total_members
         }
+
+        if include_extended_metrics:
+            base_metrics.update({
+                'mrr': np.mean(mrr_scores) if mrr_scores else 0.0,
+                f'map@{top_k}': np.mean(ap_scores) if ap_scores else 0.0,
+            })
+
+        return base_metrics
 
     def _calculate_ndcg(
         self,
@@ -233,6 +276,64 @@ class RecommendationEvaluator:
             return 0.0
 
         return dcg / idcg
+
+    def _calculate_mrr(
+        self,
+        recommended_items: List[str],
+        relevant_items: List[str]
+    ) -> float:
+        """
+        MRR (Mean Reciprocal Rank) を計算
+
+        最初のヒットの順位の逆数を返す
+
+        Args:
+            recommended_items: 推薦アイテムリスト（ランキング順）
+            relevant_items: 関連アイテムリスト（正解）
+
+        Returns:
+            MRR スコア（0.0-1.0）
+        """
+        for i, item in enumerate(recommended_items):
+            if item in relevant_items:
+                # 最初のヒットの順位の逆数
+                return 1.0 / (i + 1)
+        return 0.0
+
+    def _calculate_average_precision(
+        self,
+        recommended_items: List[str],
+        relevant_items: List[str]
+    ) -> float:
+        """
+        Average Precision (AP) を計算
+
+        各関連アイテムがランク付けされた位置での精度の平均
+
+        Args:
+            recommended_items: 推薦アイテムリスト（ランキング順）
+            relevant_items: 関連アイテムリスト（正解）
+
+        Returns:
+            AP スコア（0.0-1.0）
+        """
+        if len(relevant_items) == 0:
+            return 0.0
+
+        hits = 0
+        precision_sum = 0.0
+
+        for i, item in enumerate(recommended_items):
+            if item in relevant_items:
+                hits += 1
+                # このポジションまでの精度
+                precision_at_i = hits / (i + 1)
+                precision_sum += precision_at_i
+
+        if hits == 0:
+            return 0.0
+
+        return precision_sum / len(relevant_items)
 
     def cross_validate_temporal(
         self,
@@ -295,12 +396,13 @@ class RecommendationEvaluator:
 
         return results
 
-    def print_evaluation_results(self, metrics: Dict[str, float]):
+    def print_evaluation_results(self, metrics: Dict[str, float], detailed: bool = True):
         """
-        評価結果を表示
+        評価結果を表示（拡張版）
 
         Args:
             metrics: 評価メトリクスの辞書
+            detailed: 詳細表示するか
         """
         logger.info("\n" + "=" * 80)
         logger.info("推薦システム評価結果")
@@ -316,26 +418,83 @@ class RecommendationEvaluator:
                 break
 
         if k:
-            logger.info("\n【Top-%s 推薦の評価】", k)
+            logger.info("\n【Top-%s 推薦の精度評価】", k)
             logger.info(
-                "  Precision@%s: %.4f",
+                "  Precision@%s:  %.4f  (推薦のうち正解の割合)",
                 k,
                 metrics.get(f'precision@{k}', 0.0),
             )
             logger.info(
-                "  Recall@%s:    %.4f",
+                "  Recall@%s:     %.4f  (正解のうち推薦された割合)",
                 k,
                 metrics.get(f'recall@{k}', 0.0),
             )
             logger.info(
-                "  NDCG@%s:      %.4f",
+                "  F1@%s:         %.4f  (PrecisionとRecallの調和平均)",
+                k,
+                metrics.get(f'f1@{k}', 0.0),
+            )
+            logger.info(
+                "  NDCG@%s:       %.4f  (ランキング品質)",
                 k,
                 metrics.get(f'ndcg@{k}', 0.0),
             )
             logger.info(
-                "  Hit Rate:      %.4f",
+                "  Hit Rate:       %.4f  (少なくとも1つ正解があった割合)",
                 metrics.get('hit_rate', 0.0),
             )
+
+        # 拡張メトリクス
+        if detailed:
+            if 'mrr' in metrics:
+                logger.info("\n【ランキング評価】")
+                logger.info(
+                    "  MRR:            %.4f  (最初のヒットの平均逆順位)",
+                    metrics.get('mrr', 0.0)
+                )
+            if f'map@{k}' in metrics:
+                logger.info(
+                    "  MAP@%s:         %.4f  (Mean Average Precision)",
+                    k,
+                    metrics.get(f'map@{k}', 0.0)
+                )
+
+            # 多様性・カバレッジ指標
+            if 'catalog_coverage' in metrics or 'coverage' in metrics:
+                logger.info("\n【多様性・カバレッジ評価】")
+                coverage = metrics.get('catalog_coverage', metrics.get('coverage', 0.0))
+                logger.info(
+                    "  Catalog Coverage: %.4f  (推薦に含まれた力量の割合)",
+                    coverage
+                )
+                logger.info(
+                    "  Unique Items:     %d個  (推薦された力量の種類)",
+                    metrics.get('total_unique_recommended', 0)
+                )
+
+            if 'avg_category_diversity' in metrics:
+                logger.info(
+                    "  Category Div.:    %.4f  (カテゴリの多様性)",
+                    metrics.get('avg_category_diversity', 0.0)
+                )
+                logger.info(
+                    "  Type Diversity:   %.4f  (タイプの多様性)",
+                    metrics.get('avg_type_diversity', 0.0)
+                )
+
+            # 高度なメトリクス
+            if 'gini_index' in metrics:
+                logger.info("\n【推薦の偏り評価】")
+                logger.info(
+                    "  Gini Index:       %.4f  (0=均等, 1=偏り大)",
+                    metrics.get('gini_index', 0.0)
+                )
+
+            if 'avg_novelty' in metrics:
+                logger.info(
+                    "  Novelty:          %.4f  (新奇性、高いほど人気度低)",
+                    metrics.get('avg_novelty', 0.0)
+                )
 
         logger.info("\n" + "=" * 80)
 
@@ -358,32 +517,46 @@ class RecommendationEvaluator:
     def calculate_diversity_metrics(
         self,
         recommendations_list: List[List],
-        competence_master: pd.DataFrame
+        competence_master: pd.DataFrame,
+        member_competence: Optional[pd.DataFrame] = None,
+        include_advanced_metrics: bool = True
     ) -> Dict[str, float]:
         """
-        推薦結果の多様性指標を計算
+        推薦結果の多様性指標を計算（拡張版）
+
+        追加機能：Gini Index, Novelty, User Coverage
 
         Args:
             recommendations_list: メンバーごとの推薦結果リスト（各要素は推薦オブジェクトのリスト）
             competence_master: 力量マスタ
+            member_competence: メンバー習得力量データ（Novelty計算用、オプション）
+            include_advanced_metrics: 高度なメトリクス（Gini, Novelty）を計算するか
 
         Returns:
             多様性指標の辞書
         """
         if not recommendations_list or len(recommendations_list) == 0:
-            return {
+            base_metrics = {
                 'avg_category_diversity': 0.0,
                 'avg_type_diversity': 0.0,
                 'avg_unique_categories': 0.0,
                 'avg_unique_types': 0.0,
-                'coverage': 0.0
+                'catalog_coverage': 0.0,
+                'total_unique_recommended': 0
             }
+            if include_advanced_metrics:
+                base_metrics.update({
+                    'gini_index': 0.0,
+                    'avg_novelty': 0.0,
+                })
+            return base_metrics
 
         category_diversities = []
         type_diversities = []
         unique_categories_list = []
         unique_types_list = []
         all_recommended_competences = set()
+        competence_recommendation_counts = defaultdict(int)  # Gini Index用
 
         for recommendations in recommendations_list:
             if len(recommendations) == 0:
@@ -395,6 +568,7 @@ class RecommendationEvaluator:
 
             for rec in recommendations:
                 all_recommended_competences.add(rec.competence_code)
+                competence_recommendation_counts[rec.competence_code] += 1
 
                 # カテゴリとタイプを取得
                 categories.add(rec.category if rec.category else 'Unknown')
@@ -410,18 +584,117 @@ class RecommendationEvaluator:
             type_diversities.append(type_diversity)
             unique_types_list.append(len(types))
 
-        # カバレッジ：推薦に含まれた力量の割合
+        # Catalog Coverage：推薦に含まれた力量の割合
         total_competences = len(competence_master)
-        coverage = len(all_recommended_competences) / total_competences if total_competences > 0 else 0.0
+        catalog_coverage = len(all_recommended_competences) / total_competences if total_competences > 0 else 0.0
 
-        return {
+        base_metrics = {
             'avg_category_diversity': np.mean(category_diversities) if category_diversities else 0.0,
             'avg_type_diversity': np.mean(type_diversities) if type_diversities else 0.0,
             'avg_unique_categories': np.mean(unique_categories_list) if unique_categories_list else 0.0,
             'avg_unique_types': np.mean(unique_types_list) if unique_types_list else 0.0,
-            'coverage': coverage,
-            'total_unique_recommended': len(all_recommended_competences)
+            'catalog_coverage': catalog_coverage,
+            'total_unique_recommended': len(all_recommended_competences),
+            'total_users': len(recommendations_list)
         }
+
+        # 高度なメトリクス
+        if include_advanced_metrics:
+            # Gini Index: 推薦の偏り度（0=完全に均等、1=完全に偏っている）
+            gini_index = self._calculate_gini_index(competence_recommendation_counts)
+            base_metrics['gini_index'] = gini_index
+
+            # Novelty: 人気度が低いアイテムをどれだけ推薦しているか
+            if member_competence is not None:
+                avg_novelty = self._calculate_novelty(
+                    recommendations_list,
+                    member_competence
+                )
+                base_metrics['avg_novelty'] = avg_novelty
+
+        return base_metrics
+
+    def _calculate_gini_index(
+        self,
+        recommendation_counts: Dict[str, int]
+    ) -> float:
+        """
+        Gini Index（ジニ係数）を計算
+
+        推薦の偏り度を測定。0=完全に均等、1=完全に偏っている
+
+        Args:
+            recommendation_counts: 力量コード → 推薦された回数のマッピング
+
+        Returns:
+            Gini Index（0.0-1.0）
+        """
+        if not recommendation_counts:
+            return 0.0
+
+        # カウントを昇順にソート
+        counts = sorted(recommendation_counts.values())
+        n = len(counts)
+        total = sum(counts)
+
+        if total == 0:
+            return 0.0
+
+        # Gini係数の計算
+        cumsum = 0
+        gini_sum = 0
+
+        for i, count in enumerate(counts):
+            cumsum += count
+            gini_sum += (2 * (i + 1) - n - 1) * count
+
+        gini = gini_sum / (n * total)
+
+        return gini
+
+    def _calculate_novelty(
+        self,
+        recommendations_list: List[List],
+        member_competence: pd.DataFrame
+    ) -> float:
+        """
+        Novelty（新奇性）を計算
+
+        人気度が低い（保有者が少ない）力量をどれだけ推薦しているか
+
+        Args:
+            recommendations_list: メンバーごとの推薦結果リスト
+            member_competence: メンバー習得力量データ
+
+        Returns:
+            平均Noveltyスコア（高いほど新奇性が高い）
+        """
+        # 各力量の人気度（保有者数）を計算
+        competence_popularity = member_competence['力量コード'].value_counts().to_dict()
+        total_users = member_competence['メンバーコード'].nunique()
+
+        novelty_scores = []
+
+        for recommendations in recommendations_list:
+            if len(recommendations) == 0:
+                continue
+
+            # 各推薦アイテムのnoveltyを計算（-log(popularity)）
+            rec_novelties = []
+            for rec in recommendations:
+                popularity = competence_popularity.get(rec.competence_code, 0) / total_users
+                # 人気度が低いほど新奇性が高い
+                if popularity > 0:
+                    novelty = -np.log2(popularity)
+                else:
+                    novelty = np.log2(total_users)  # 最大novelty
+                rec_novelties.append(novelty)
+
+            # このユーザーへの推薦の平均novelty
+            if rec_novelties:
+                novelty_scores.append(np.mean(rec_novelties))
+
+        return np.mean(novelty_scores) if novelty_scores else 0.0
 
     def evaluate_with_diversity(
         self,
@@ -498,13 +771,206 @@ class RecommendationEvaluator:
             if len(recommendations) > 0:
                 recommendations_list.append(recommendations)
 
-        # 多様性指標を計算
+        # 多様性指標を計算（member_competenceも渡してNovelty計算を有効化）
         diversity_metrics = self.calculate_diversity_metrics(
             recommendations_list,
-            competence_master
+            competence_master,
+            member_competence=train_data,
+            include_advanced_metrics=True
         )
 
         # 統合
         combined_metrics = {**base_metrics, **diversity_metrics}
 
         return combined_metrics
+
+    def random_user_split(
+        self,
+        member_competence: pd.DataFrame,
+        train_ratio: float = 0.8,
+        min_test_items: int = 1,
+        random_state: int = 42
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        ユーザーごとにランダムに力量を分割（User-based random split）
+
+        各ユーザーの保有力量を訓練データとテストデータにランダムに分割
+
+        Args:
+            member_competence: メンバー習得力量データ
+            train_ratio: 訓練データの割合（デフォルト: 0.8）
+            min_test_items: テストデータに必要な最小力量数（デフォルト: 1）
+            random_state: 乱数シード
+
+        Returns:
+            (学習データ, 評価データ)のタプル
+        """
+        np.random.seed(random_state)
+
+        train_list = []
+        test_list = []
+
+        # ユーザーごとに処理
+        for member_code in member_competence['メンバーコード'].unique():
+            member_data = member_competence[
+                member_competence['メンバーコード'] == member_code
+            ].copy()
+
+            n_items = len(member_data)
+
+            # 最小テスト件数を確保できない場合はスキップ
+            if n_items < min_test_items + 1:
+                train_list.append(member_data)
+                continue
+
+            # ランダムシャッフル
+            member_data = member_data.sample(frac=1, random_state=random_state).reset_index(drop=True)
+
+            # 分割
+            n_train = max(1, int(n_items * train_ratio))
+            train_data = member_data.iloc[:n_train]
+            test_data = member_data.iloc[n_train:]
+
+            # テストデータが最小件数以上あることを確認
+            if len(test_data) >= min_test_items:
+                train_list.append(train_data)
+                test_list.append(test_data)
+            else:
+                # テストデータが不足する場合は全て訓練データへ
+                train_list.append(member_data)
+
+        train_df = pd.concat(train_list, ignore_index=True) if train_list else pd.DataFrame()
+        test_df = pd.concat(test_list, ignore_index=True) if test_list else pd.DataFrame()
+
+        return train_df, test_df
+
+    def leave_one_out_split(
+        self,
+        member_competence: pd.DataFrame,
+        random_state: int = 42
+    ) -> List[Tuple[pd.DataFrame, pd.DataFrame]]:
+        """
+        Leave-One-Out分割
+
+        各ユーザーの最後に取得した1つの力量をテストデータとし、
+        残りを訓練データとする（時系列考慮版）
+
+        Args:
+            member_competence: メンバー習得力量データ（取得日カラム必要）
+            random_state: 乱数シード（取得日がない場合のランダム選択用）
+
+        Returns:
+            (学習データ, 評価データ)のタプルのリスト
+        """
+        np.random.seed(random_state)
+
+        splits = []
+
+        # 取得日があるかチェック
+        has_date = '取得日' in member_competence.columns
+
+        # ユーザーごとに処理
+        for member_code in member_competence['メンバーコード'].unique():
+            member_data = member_competence[
+                member_competence['メンバーコード'] == member_code
+            ].copy()
+
+            if len(member_data) < 2:
+                # 力量が1つしかない場合はスキップ
+                continue
+
+            if has_date:
+                # 取得日でソート
+                member_data['取得日_dt'] = pd.to_datetime(member_data['取得日'], errors='coerce')
+                member_data = member_data.sort_values('取得日_dt')
+                member_data = member_data.drop(columns=['取得日_dt'])
+            else:
+                # 取得日がない場合はランダムシャッフル
+                member_data = member_data.sample(frac=1, random_state=random_state).reset_index(drop=True)
+
+            # 最後の1つをテストデータ、残りを訓練データ
+            train_data = member_data.iloc[:-1]
+            test_data = member_data.iloc[[-1]]
+
+            splits.append((train_data, test_data))
+
+        return splits
+
+    def evaluate_leave_one_out(
+        self,
+        member_competence: pd.DataFrame,
+        competence_master: pd.DataFrame,
+        top_k: int = 10,
+        max_users: Optional[int] = None,
+        random_state: int = 42
+    ) -> Dict[str, float]:
+        """
+        Leave-One-Out評価を実行
+
+        Args:
+            member_competence: メンバー習得力量データ
+            competence_master: 力量マスタ
+            top_k: 推薦する上位K件
+            max_users: 評価する最大ユーザー数（Noneの場合は全ユーザー）
+            random_state: 乱数シード
+
+        Returns:
+            評価メトリクスの辞書
+        """
+        splits = self.leave_one_out_split(member_competence, random_state=random_state)
+
+        if max_users is not None and len(splits) > max_users:
+            # ランダムサンプリング
+            np.random.seed(random_state)
+            sampled_indices = np.random.choice(len(splits), max_users, replace=False)
+            splits = [splits[i] for i in sampled_indices]
+
+        # 全splitで評価を実行し、平均を取る
+        all_metrics = []
+
+        for train_data, test_data in splits:
+            # 他のユーザーの訓練データも含める
+            # （このユーザーのテストデータ以外の全データ）
+            member_code = test_data['メンバーコード'].iloc[0]
+
+            # 全ユーザーの訓練データを使用
+            full_train = member_competence[
+                ~((member_competence['メンバーコード'] == member_code) &
+                  (member_competence.index.isin(test_data.index)))
+            ]
+
+            # 評価
+            metrics = self.evaluate_recommendations(
+                train_data=full_train,
+                test_data=test_data,
+                competence_master=competence_master,
+                top_k=top_k,
+                member_sample=[member_code]
+            )
+
+            all_metrics.append(metrics)
+
+        # 平均を計算
+        if not all_metrics:
+            return {
+                f'precision@{top_k}': 0.0,
+                f'recall@{top_k}': 0.0,
+                f'ndcg@{top_k}': 0.0,
+                f'f1@{top_k}': 0.0,
+                'hit_rate': 0.0,
+                'mrr': 0.0,
+                f'map@{top_k}': 0.0,
+                'evaluated_members': 0
+            }
+
+        # 各メトリクスの平均
+        avg_metrics = {}
+        for key in all_metrics[0].keys():
+            if key != 'evaluated_members':
+                values = [m[key] for m in all_metrics if key in m]
+                avg_metrics[key] = np.mean(values) if values else 0.0
+
+        avg_metrics['evaluated_members'] = len(all_metrics)
+        avg_metrics['total_splits'] = len(splits)
+
+        return avg_metrics
