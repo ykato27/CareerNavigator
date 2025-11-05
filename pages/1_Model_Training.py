@@ -9,7 +9,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from skillnote_recommendation.ml.ml_recommender import MLRecommender
-from skillnote_recommendation.core.persistence.streamlit_integration import StreamlitPersistenceManager
+from skillnote_recommendation.utils.ui_components import (
+    apply_rich_ui_styles,
+    render_gradient_header
+)
 
 
 # =========================================================
@@ -21,24 +24,15 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🤖 モデル学習と分析")
-st.markdown("**ステップ2**: MLモデルを学習し、学習結果を分析します。")
+# Apply rich UI styles
+apply_rich_ui_styles()
 
-
-# =========================================================
-# 永続化マネージャーの初期化
-# =========================================================
-@st.cache_resource
-def get_persistence_manager():
-    """永続化マネージャーのシングルトンインスタンスを取得"""
-    return StreamlitPersistenceManager()
-
-
-persistence_manager = get_persistence_manager()
-persistence_manager.initialize_session()
-
-# ユーザーログインUI
-persistence_manager.render_user_login()
+# リッチなヘッダー
+render_gradient_header(
+    title="モデル学習と分析",
+    icon="🤖",
+    description="MLモデルを学習し、学習結果を分析します"
+)
 
 
 # =========================================================

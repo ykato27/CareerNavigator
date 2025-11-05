@@ -19,6 +19,10 @@ from skillnote_recommendation.utils.visualization import (
 from skillnote_recommendation.utils.streamlit_helpers import (
     check_data_loaded
 )
+from skillnote_recommendation.utils.ui_components import (
+    apply_rich_ui_styles,
+    render_gradient_header
+)
 
 
 def create_comparison_table(graph_recs, nmf_recs, member_code):
@@ -107,10 +111,17 @@ def main():
         layout="wide"
     )
 
-    st.title("🔬 推薦モデル比較分析")
-    st.markdown("""
-    このページでは、**Graph-based推薦**と**NMF推薦**の2つのモデルを比較分析します。
+    # Apply rich UI styles
+    apply_rich_ui_styles()
 
+    # リッチなヘッダー
+    render_gradient_header(
+        title="推薦モデル比較分析",
+        icon="🔬",
+        description="Graph-based推薦とNMF推薦の2つのモデルを比較分析します"
+    )
+
+    st.markdown("""
     - 🕸️ **Graph-based**: スキル遷移パターンから学習パスを推薦（高解釈性）
     - 🧮 **NMF**: 行列分解による潜在因子ベース推薦（高精度）
     """)

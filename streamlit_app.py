@@ -10,7 +10,10 @@ import pandas as pd
 
 from skillnote_recommendation.core.data_loader import DataLoader
 from skillnote_recommendation.core.data_transformer import DataTransformer
-from skillnote_recommendation.core.persistence.streamlit_integration import StreamlitPersistenceManager
+from skillnote_recommendation.utils.ui_components import (
+    apply_rich_ui_styles,
+    render_gradient_header
+)
 
 
 # =========================================================
@@ -22,20 +25,15 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📁 データ読み込み")
-st.markdown("**ステップ1**: 6種類のCSVファイルをアップロードしてデータを準備します。")
+# Apply rich UI styles
+apply_rich_ui_styles()
 
-
-# =========================================================
-# 永続化マネージャーの初期化
-# =========================================================
-@st.cache_resource
-def get_persistence_manager():
-    """永続化マネージャーのシングルトンインスタンスを取得"""
-    return StreamlitPersistenceManager()
-
-
-persistence_manager = get_persistence_manager()
+# リッチなヘッダー
+render_gradient_header(
+    title="データ読み込み",
+    icon="📁",
+    description="6種類のCSVファイルをアップロードしてデータを準備します"
+)
 
 
 # =========================================================
@@ -55,17 +53,8 @@ def _init_session_state():
         if k not in st.session_state:
             st.session_state[k] = v
 
-    # 永続化機能の初期化
-    persistence_manager.initialize_session()
-
 
 _init_session_state()
-
-
-# =========================================================
-# ユーザーログインUI（サイドバー）
-# =========================================================
-persistence_manager.render_user_login()
 
 
 # =========================================================
