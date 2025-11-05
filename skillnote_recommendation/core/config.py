@@ -115,7 +115,7 @@ class Config:
         'timeout': 600,  # タイムアウト（秒）
         'n_jobs': 1,  # 並列実行数（1=逐次実行）
         'show_progress_bar': True,  # プログレスバーを表示
-        'use_cross_validation': True,  # 交差検証を使用（推奨: True、過学習検出）
+        'use_cross_validation': False,  # 交差検証を使用（False=全データで学習、True=交差検証で汎化性能を評価）
         'n_folds': 3,  # 交差検証の分割数（3-5推奨、計算時間とのトレードオフ）
         'search_space': {
             'n_components': (10, 30),  # 探索範囲（最小, 最大）※40->30に縮小

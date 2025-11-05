@@ -286,10 +286,15 @@ class NMFHyperparameterTuner:
         logger.info("=" * 60)
         logger.info(f"試行回数: {self.n_trials}")
         logger.info(f"タイムアウト: {self.timeout}秒")
+        logger.info(f"交差検証: {self.use_cross_validation}")
         logger.info(f"探索空間:")
         for key, value in self.search_space.items():
             logger.info(f"  {key}: {value}")
         logger.info("=" * 60)
+
+        # デバッグ: n_trialsが0または不正な値でないか確認
+        if self.n_trials <= 0:
+            raise ValueError(f"n_trials must be positive, got: {self.n_trials}")
 
         # Optunaのログレベルを調整（INFOレベルで詳細を表示）
         optuna.logging.set_verbosity(optuna.logging.INFO)
