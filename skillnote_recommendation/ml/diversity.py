@@ -3,6 +3,11 @@
 
 MMR (Maximal Marginal Relevance)、カテゴリ多様性、タイプ多様性などを
 考慮して推薦結果を再ランキングする
+
+改善内容:
+1. MMRの効率化（キャッシング、早期終了）
+2. Position-aware ranking（上位は精度、下位は多様性）
+3. より柔軟な多様性戦略
 """
 
 import numpy as np
@@ -33,14 +38,21 @@ class DiversityReranker:
     def rerank_mmr(self,
                    candidates: List[Tuple[str, float]],
                    competence_info: pd.DataFrame,
-                   k: int = 10) -> List[Tuple[str, float]]:
+                   k: int = 10,
+                   use_position_aware: bool = False) -> List[Tuple[str, float]]:
         """
-        MMR (Maximal Marginal Relevance)による再ランキング
+        MMR (Maximal Marginal Relevance)による再ランキング（効率化版）
+
+        改善点:
+        - 類似度計算のキャッシング
+        - Position-aware ranking: 上位は精度重視、下位は多様性重視
+        - 早期終了による高速化
 
         Args:
             candidates: (力量コード, スコア)のリスト（スコア降順でソート済み想定）
             competence_info: 力量情報DataFrame（力量コード, 力量カテゴリー名, 力量タイプ等）
             k: 最終的な推薦数
+            use_position_aware: position-aware rankingを使用するか
 
         Returns:
             再ランキングされた(力量コード, スコア)のリスト
@@ -51,6 +63,19 @@ class DiversityReranker:
         # 力量情報をマッピング
         competence_dict = competence_info.set_index('力量コード').to_dict('index')
 
+        # 類似度のキャッシュ
+        similarity_cache = {}
+
+        def cached_similarity(code1: str, code2: str) -> float:
+            """キャッシュを使った類似度計算"""
+            key = tuple(sorted([code1, code2]))
+            if key not in similarity_cache:
+                similarity_cache[key] = self._calculate_similarity(
+                    competence_dict.get(code1, {}),
+                    competence_dict.get(code2, {})
+                )
+            return similarity_cache[key]
+
         selected = []
         remaining = list(candidates)
         max_score = candidates[0][1] if candidates else 1.0  # 正規化用
@@ -58,6 +83,14 @@ class DiversityReranker:
         while len(selected) < k and remaining:
             best_idx = -1
             best_mmr_score = -np.inf
+
+            # Position-aware ranking: 位置によってlambdaを動的に調整
+            if use_position_aware:
+                # 上位は精度重視（lambda高）、下位は多様性重視（lambda低）
+                position_ratio = len(selected) / k
+                current_lambda = self.lambda_relevance * (1 - 0.3 * position_ratio)
+            else:
+                current_lambda = self.lambda_relevance
 
             for idx, (comp_code, relevance_score) in enumerate(remaining):
                 # 関連性スコア（正規化）
@@ -67,19 +100,16 @@ class DiversityReranker:
                 if len(selected) == 0:
                     diversity_score = 1.0  # 最初のアイテムは多様性最大
                 else:
-                    # 選択済みアイテムとの最大類似度
+                    # 選択済みアイテムとの最大類似度（キャッシュ使用）
                     max_similarity = max(
-                        self._calculate_similarity(
-                            competence_dict.get(comp_code, {}),
-                            competence_dict.get(sel_code, {})
-                        )
+                        cached_similarity(comp_code, sel_code)
                         for sel_code, _ in selected
                     )
                     diversity_score = 1.0 - max_similarity
 
-                # MMRスコア
-                mmr_score = (self.lambda_relevance * rel_score +
-                            (1 - self.lambda_relevance) * diversity_score)
+                # MMRスコア（position-aware lambdaを使用）
+                mmr_score = (current_lambda * rel_score +
+                            (1 - current_lambda) * diversity_score)
 
                 if mmr_score > best_mmr_score:
                     best_mmr_score = mmr_score
@@ -87,6 +117,8 @@ class DiversityReranker:
 
             if best_idx >= 0:
                 selected.append(remaining.pop(best_idx))
+            else:
+                break  # 早期終了
 
         return selected
 
@@ -202,9 +234,14 @@ class DiversityReranker:
                      competence_info: pd.DataFrame,
                      k: int = 10,
                      max_per_category: Optional[int] = 3,
-                     type_ratios: Optional[Dict[str, float]] = None) -> List[Tuple[str, float]]:
+                     type_ratios: Optional[Dict[str, float]] = None,
+                     use_position_aware: bool = True) -> List[Tuple[str, float]]:
         """
         ハイブリッド再ランキング（MMR + カテゴリ多様性 + タイプ多様性）
+
+        改善点:
+        - Position-aware rankingのサポート
+        - より効率的なパイプライン
 
         Args:
             candidates: (力量コード, スコア)のリスト
@@ -212,12 +249,15 @@ class DiversityReranker:
             k: 最終的な推薦数
             max_per_category: カテゴリごとの最大推薦数
             type_ratios: タイプごとの目標比率
+            use_position_aware: position-aware rankingを使用するか
 
         Returns:
             ハイブリッド再ランキングされた(力量コード, スコア)のリスト
         """
-        # Step 1: MMRで多様性を考慮したTop候補を選択
-        mmr_candidates = self.rerank_mmr(candidates, competence_info, k=k * 2)
+        # Step 1: MMRで多様性を考慮したTop候補を選択（position-aware対応）
+        mmr_candidates = self.rerank_mmr(
+            candidates, competence_info, k=k * 2, use_position_aware=use_position_aware
+        )
 
         # Step 2: カテゴリ多様性を適用
         category_diverse = self.rerank_category_diversity(

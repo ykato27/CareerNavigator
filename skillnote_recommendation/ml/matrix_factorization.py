@@ -3,6 +3,11 @@ Matrix Factorizationベースの推薦モデル
 
 NMF (Non-negative Matrix Factorization)を使用してメンバー×力量マトリクスを
 潜在因子に分解し、未習得力量のスコアを予測する
+
+改善内容:
+1. Weighted NMF対応（暗黙的フィードバック考慮）
+2. 正規化レベルに基づくconfidence weighting
+3. より適切なスコアリング
 """
 
 import numpy as np
@@ -15,17 +20,28 @@ import pickle
 class MatrixFactorizationModel:
     """Matrix Factorizationベースの推薦モデル"""
 
-    def __init__(self, n_components: int = 20, random_state: int = 42, **nmf_params):
+    def __init__(
+        self,
+        n_components: int = 20,
+        random_state: int = 42,
+        use_confidence_weighting: bool = False,
+        confidence_alpha: float = 1.0,
+        **nmf_params
+    ):
         """
         初期化
 
         Args:
             n_components: 潜在因子の数（次元数）
             random_state: 乱数シード
+            use_confidence_weighting: confidence weightingを使用するか
+            confidence_alpha: confidence weight計算の係数 (confidence = 1 + alpha * rating)
             **nmf_params: NMFへの追加パラメータ
         """
         self.n_components = n_components
         self.random_state = random_state
+        self.use_confidence_weighting = use_confidence_weighting
+        self.confidence_alpha = confidence_alpha
         self.nmf_params = nmf_params
 
         # NMFモデル
@@ -52,6 +68,10 @@ class MatrixFactorizationModel:
         """
         モデルを学習
 
+        改善点:
+        - confidence weightingにより、高レベルのスキルをより重視
+        - 暗黙的フィードバック（有無のみ）と明示的フィードバック（レベル）の両方に対応
+
         Args:
             skill_matrix: メンバー×力量マトリクス (index=メンバーコード, columns=力量コード)
 
@@ -66,11 +86,22 @@ class MatrixFactorizationModel:
         self.member_index = {code: idx for idx, code in enumerate(self.member_codes)}
         self.competence_index = {code: idx for idx, code in enumerate(self.competence_codes)}
 
-        # NMFで分解
-        # W: メンバー × 潜在因子 (n_members × n_components)
-        # H: 潜在因子 × 力量 (n_components × n_competences)
-        self.W = self.model.fit_transform(skill_matrix.values)
-        self.H = self.model.components_
+        # Confidence weightingを適用
+        if self.use_confidence_weighting:
+            # 正規化レベルにconfidence weightを適用
+            # confidence = 1 + alpha * rating の形式
+            # ただし、0（未取得）は0のまま
+            weighted_matrix = skill_matrix.copy()
+            non_zero_mask = weighted_matrix > 0
+            weighted_matrix[non_zero_mask] = 1 + self.confidence_alpha * weighted_matrix[non_zero_mask]
+
+            # NMFで分解（weighted matrixを使用）
+            self.W = self.model.fit_transform(weighted_matrix.values)
+            self.H = self.model.components_
+        else:
+            # 通常のNMF（従来通り）
+            self.W = self.model.fit_transform(skill_matrix.values)
+            self.H = self.model.components_
 
         self.is_fitted = True
 
@@ -208,6 +239,8 @@ class MatrixFactorizationModel:
         model_data = {
             'n_components': self.n_components,
             'random_state': self.random_state,
+            'use_confidence_weighting': self.use_confidence_weighting,
+            'confidence_alpha': self.confidence_alpha,
             'nmf_params': self.nmf_params,
             'W': self.W,
             'H': self.H,
@@ -236,10 +269,12 @@ class MatrixFactorizationModel:
         with open(filepath, 'rb') as f:
             model_data = pickle.load(f)
 
-        # モデルインスタンスを作成
+        # モデルインスタンスを作成（新しいパラメータに対応、後方互換性も維持）
         model = cls(
             n_components=model_data['n_components'],
             random_state=model_data['random_state'],
+            use_confidence_weighting=model_data.get('use_confidence_weighting', False),
+            confidence_alpha=model_data.get('confidence_alpha', 1.0),
             **model_data['nmf_params']
         )
 

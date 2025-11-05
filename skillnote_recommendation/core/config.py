@@ -95,6 +95,10 @@ class Config:
 
         # ソルバー
         'solver': 'cd',  # 'cd' (coordinate descent) or 'mu' (multiplicative update)
+
+        # Confidence Weighting（暗黙的フィードバック対応）
+        'use_confidence_weighting': False,  # confidence weightingを使用するか（実験的機能）
+        'confidence_alpha': 1.0,  # confidence = 1 + alpha * rating（0.5-2.0推奨）
     }
 
     # データ前処理パラメータ
@@ -111,12 +115,14 @@ class Config:
         'timeout': 600,  # タイムアウト（秒）
         'n_jobs': 1,  # 並列実行数（1=逐次実行）
         'show_progress_bar': True,  # プログレスバーを表示
+        'use_cross_validation': True,  # 交差検証を使用（推奨: True、過学習検出）
+        'n_folds': 3,  # 交差検証の分割数（3-5推奨、計算時間とのトレードオフ）
         'search_space': {
-            'n_components': (10, 40),  # 探索範囲（最小, 最大）
-            'alpha_W': (0.001, 1.0),  # 対数スケールで探索（正則化強度）
-            'alpha_H': (0.001, 1.0),  # 対数スケールで探索（正則化強度）
+            'n_components': (10, 30),  # 探索範囲（最小, 最大）※40->30に縮小
+            'alpha_W': (0.001, 0.5),  # 対数スケールで探索（正則化強度）※1.0->0.5に縮小
+            'alpha_H': (0.001, 0.5),  # 対数スケールで探索（正則化強度）※1.0->0.5に縮小
             'l1_ratio': (0.0, 1.0),  # L1/L2のバランス
-            'max_iter': (500, 2000),  # 最大イテレーション数
+            'max_iter': (500, 1500),  # 最大イテレーション数※2000->1500に縮小
         },
     }
 
