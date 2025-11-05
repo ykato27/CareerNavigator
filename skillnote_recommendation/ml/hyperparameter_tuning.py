@@ -60,8 +60,8 @@ class NMFHyperparameterTuner:
         # デフォルトの探索空間
         self.search_space = search_space or {
             'n_components': (10, 40),
-            'alpha_W': (0.0, 0.2),
-            'alpha_H': (0.0, 0.2),
+            'alpha_W': (0.001, 1.0),  # 対数スケールで探索（0.001で有効化）
+            'alpha_H': (0.001, 1.0),  # 対数スケールで探索（0.001で有効化）
             'l1_ratio': (0.0, 1.0),
             'max_iter': (500, 2000),
         }
@@ -83,6 +83,9 @@ class NMFHyperparameterTuner:
         # ハイパーパラメータをサンプリング
         params = self._suggest_params(trial)
 
+        # デバッグ：パラメータをログ出力
+        logger.info(f"Trial {trial.number}: {params}")
+
         try:
             # モデルを学習
             model = MatrixFactorizationModel(**params, random_state=self.random_state)
@@ -90,6 +93,9 @@ class NMFHyperparameterTuner:
 
             # 再構成誤差を取得
             reconstruction_error = model.get_reconstruction_error()
+
+            # デバッグ：再構成誤差をログ出力
+            logger.info(f"Trial {trial.number} reconstruction error: {reconstruction_error:.6f}")
 
             # 追加メトリクスをログ
             trial.set_user_attr('n_iter', model.model.n_iter_)
@@ -172,8 +178,8 @@ class NMFHyperparameterTuner:
             logger.info(f"  {key}: {value}")
         logger.info("=" * 60)
 
-        # Optunaのログレベルを調整（大量のログを抑制）
-        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        # Optunaのログレベルを調整（INFOレベルで詳細を表示）
+        optuna.logging.set_verbosity(optuna.logging.INFO)
 
         # Studyを作成（TPESamplerでベイズ最適化）
         sampler = TPESampler(seed=self.random_state)

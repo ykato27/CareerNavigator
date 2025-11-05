@@ -485,6 +485,41 @@ if st.session_state.get("model_trained", False):
             except Exception as e:
                 st.warning(f"グラフの表示中にエラーが発生しました: {e}")
 
+            # パラメータの探索範囲統計
+            st.markdown("### 📊 パラメータ探索範囲の統計")
+            try:
+                trials_df = tuner.get_optimization_history()
+
+                # 各パラメータの統計情報を計算
+                param_stats = {}
+                param_cols = ['params_n_components', 'params_alpha_W', 'params_alpha_H',
+                             'params_l1_ratio', 'params_max_iter']
+
+                stats_data = []
+                for col in param_cols:
+                    if col in trials_df.columns:
+                        param_name = col.replace('params_', '')
+                        stats_data.append({
+                            'パラメータ': param_name,
+                            '最小値': f"{trials_df[col].min():.6f}",
+                            '最大値': f"{trials_df[col].max():.6f}",
+                            '平均値': f"{trials_df[col].mean():.6f}",
+                            '標準偏差': f"{trials_df[col].std():.6f}"
+                        })
+
+                if stats_data:
+                    stats_df = pd.DataFrame(stats_data)
+                    st.dataframe(stats_df, use_container_width=True)
+
+                    st.info("""
+                    **探索範囲の統計**は、Optunaが実際に試したパラメータの範囲を示しています。
+                    - **最小値・最大値**：実際に試された値の範囲
+                    - **標準偏差**が大きい：広い範囲を探索している（良い兆候）
+                    - **標準偏差**が小さい：狭い範囲に集中している（探索が不十分な可能性）
+                    """)
+            except Exception as e:
+                st.warning(f"統計情報の計算中にエラーが発生しました: {e}")
+
             # 詳細な試行結果を表示
             with st.expander("📋 全試行の詳細結果"):
                 try:
