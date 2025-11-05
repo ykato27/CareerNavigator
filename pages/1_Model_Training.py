@@ -332,30 +332,74 @@ else:
                     debug_messages.append(f"   - n_trials={int(n_trials)}")
                     debug_messages.append(f"   - sampler={sampler_choice}")
                     debug_messages.append(f"   - callback設定={progress_callback is not None}")
+
+                    # データの検証
+                    if "member_competence" in st.session_state.transformed_data:
+                        mc = st.session_state.transformed_data["member_competence"]
+                        debug_messages.append(f"   - member_competence shape: {mc.shape}")
+                        debug_messages.append(f"   - member_competence 列: {list(mc.columns)}")
+
                     debug_info.code("\n".join(debug_messages))
                     st.session_state.debug_messages = debug_messages.copy()
 
-                ml_recommender = build_ml_recommender(
-                    st.session_state.transformed_data,
-                    use_preprocessing=use_preprocessing,
-                    use_tuning=use_tuning,
-                    tuning_n_trials=int(n_trials) if use_tuning else None,
-                    tuning_timeout=None,
-                    tuning_search_space=custom_search_space if use_tuning else None,
-                    tuning_sampler=sampler_choice if use_tuning else None,
-                    tuning_progress_callback=progress_callback if use_tuning else None
-                )
+                # print()の出力をキャプチャ
+                import sys
+                from io import StringIO
+
+                stdout_capture = StringIO()
+                stderr_capture = StringIO()
+                old_stdout = sys.stdout
+                old_stderr = sys.stderr
+
+                try:
+                    # stdoutとstderrをキャプチャ
+                    sys.stdout = stdout_capture
+                    sys.stderr = stderr_capture
+
+                    ml_recommender = build_ml_recommender(
+                        st.session_state.transformed_data,
+                        use_preprocessing=use_preprocessing,
+                        use_tuning=use_tuning,
+                        tuning_n_trials=int(n_trials) if use_tuning else None,
+                        tuning_timeout=None,
+                        tuning_search_space=custom_search_space if use_tuning else None,
+                        tuning_sampler=sampler_choice if use_tuning else None,
+                        tuning_progress_callback=progress_callback if use_tuning else None
+                    )
+                finally:
+                    # stdoutとstderrを復元
+                    sys.stdout = old_stdout
+                    sys.stderr = old_stderr
+
+                    # キャプチャした出力を取得
+                    captured_stdout = stdout_capture.getvalue()
+                    captured_stderr = stderr_capture.getvalue()
+
+                    # デバッグメッセージに追加
+                    if captured_stdout:
+                        debug_messages.append(f"\n--- 標準出力 (stdout) ---")
+                        debug_messages.append(captured_stdout)
+                    if captured_stderr:
+                        debug_messages.append(f"\n--- エラー出力 (stderr) ---")
+                        debug_messages.append(captured_stderr)
+
+                    st.session_state.debug_messages = debug_messages.copy()
 
                 # チューニング完了のログ
                 if use_tuning:
-                    debug_messages.append(f"✅ チューニング完了")
+                    debug_messages.append(f"\n✅ チューニング完了")
                     debug_messages.append(f"   - 実行された試行数: {len(trial_history)}")
                     debug_messages.append(f"   - コールバック呼び出し回数: {callback_counter[0]}")
                     if ml_recommender.tuning_results:
                         debug_messages.append(f"   - 最良パラメータ: {ml_recommender.tuning_results['best_params']}")
                         debug_messages.append(f"   - 最小誤差: {ml_recommender.tuning_results['best_value']:.6f}")
+                        if hasattr(ml_recommender.tuning_results.get('tuner'), 'study'):
+                            study = ml_recommender.tuning_results['tuner'].study
+                            debug_messages.append(f"   - Studyの試行数: {len(study.trials)}")
                     else:
                         debug_messages.append(f"   ⚠️ tuning_resultsがNone")
+                        debug_messages.append(f"   ⚠️ これは、Optunaのstudy.optimize()が試行を実行しなかったことを意味します")
+                        debug_messages.append(f"   ⚠️ 上記の標準出力/エラー出力を確認してください")
                     debug_info.code("\n".join(debug_messages))
                     # session_stateに最終結果を保存
                     st.session_state.debug_messages = debug_messages.copy()
@@ -406,6 +450,24 @@ else:
                 st.rerun()
             except Exception as e:
                 import traceback
+                import sys
+                from io import StringIO
+
+                # stdoutとstderrを復元（エラー時に復元されていない場合に備えて）
+                if hasattr(sys.stdout, 'getvalue'):
+                    try:
+                        captured_stdout = sys.stdout.getvalue()
+                        captured_stderr = sys.stderr.getvalue() if hasattr(sys.stderr, 'getvalue') else ""
+
+                        if captured_stdout:
+                            debug_messages.append(f"\n--- 標準出力 (stdout) [エラー前] ---")
+                            debug_messages.append(captured_stdout)
+                        if captured_stderr:
+                            debug_messages.append(f"\n--- エラー出力 (stderr) [エラー前] ---")
+                            debug_messages.append(captured_stderr)
+                    except:
+                        pass
+
                 # エラー情報をデバッグメッセージに追加
                 debug_messages.append(f"\n❌ エラー発生")
                 debug_messages.append(f"   - エラータイプ: {type(e).__name__}")
@@ -419,8 +481,12 @@ else:
                 st.info("デバッグ情報:")
                 st.write("transformed_data keys:", list(st.session_state.transformed_data.keys()))
 
+                # デバッグ情報を表示
+                with st.expander("🔍 キャプチャされた出力", expanded=True):
+                    st.code("\n".join(debug_messages))
+
                 # エラー時もデバッグ情報を表示
-                st.warning("⚠️ 詳細なデバッグ情報は上記の「🔍 デバッグ情報」セクションに保存されています。")
+                st.warning("⚠️ 詳細なデバッグ情報は上記のセクションに保存されています。ページをリロードしても情報は残ります。")
 
 
 # =========================================================
