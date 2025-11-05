@@ -468,7 +468,10 @@ def display_recommendation_details(rec, idx: int):
 def display_positioning_maps(
     position_df: pd.DataFrame,
     target_code: str,
-    reference_codes: List[str]
+    reference_codes: List[str] = None,
+    similar_career_codes: List[str] = None,
+    different_career1_codes: List[str] = None,
+    different_career2_codes: List[str] = None
 ):
     """
     メンバーポジショニングマップを複数のタブで表示する。
@@ -476,23 +479,55 @@ def display_positioning_maps(
     Args:
         position_df: メンバー位置データ
         target_code: 対象メンバーコード
-        reference_codes: 参考人物コードのリスト
+        reference_codes: 参考人物コードのリスト（従来型）
+        similar_career_codes: 類似キャリアの参考人物コード（キャリアパターン別）
+        different_career1_codes: 異なるキャリア1の参考人物コード
+        different_career2_codes: 異なるキャリア2の参考人物コード
     """
+    # キャリアパターン別推薦かどうかを判定
+    use_pattern_based = (similar_career_codes is not None or
+                        different_career1_codes is not None or
+                        different_career2_codes is not None)
+
+    # デフォルト値の設定
+    if similar_career_codes is None:
+        similar_career_codes = []
+    if different_career1_codes is None:
+        different_career1_codes = []
+    if different_career2_codes is None:
+        different_career2_codes = []
+    if reference_codes is None:
+        reference_codes = []
     # リッチなセクション区切り
     st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
 
     # カードベースのヘッダー
-    st.markdown("""
-    <div class="card fade-in">
-        <h2>🗺️ メンバーポジショニングマップ</h2>
-        <p>あなたと参考人物が、全メンバーの中でどの位置にいるかを可視化します</p>
-        <div>
-            <span class="badge badge-danger">あなた</span>
-            <span class="badge badge-info">参考人物</span>
-            <span class="badge">その他のメンバー</span>
+    if use_pattern_based:
+        st.markdown("""
+        <div class="card fade-in">
+            <h2>🗺️ メンバーポジショニングマップ</h2>
+            <p>あなたと参考人物（キャリアパターン別）が、全メンバーの中でどの位置にいるかを可視化します</p>
+            <div>
+                <span class="badge badge-danger">あなた</span>
+                <span class="badge badge-info">💼 類似キャリア</span>
+                <span class="badge" style="background-color: #4CAF50;">🌟 異なるキャリア1</span>
+                <span class="badge" style="background-color: #FF9800;">🚀 異なるキャリア2</span>
+                <span class="badge">その他のメンバー</span>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="card fade-in">
+            <h2>🗺️ メンバーポジショニングマップ</h2>
+            <p>あなたと参考人物が、全メンバーの中でどの位置にいるかを可視化します</p>
+            <div>
+                <span class="badge badge-danger">あなた</span>
+                <span class="badge badge-info">参考人物</span>
+                <span class="badge">その他のメンバー</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     # タブを作成
     tab1, tab2, tab3, tab4 = st.tabs([
@@ -509,11 +544,20 @@ def display_positioning_maps(
             "**Y軸**: 保有力量数\n\n"
             "右上に行くほど、多くの力量を高いレベルで保有していることを示します。"
         )
-        fig1 = create_positioning_plot(
-            position_df, target_code, reference_codes,
-            "総合スキルレベル", "保有力量数",
-            "総合スキルレベル vs 保有力量数"
-        )
+        if use_pattern_based:
+            from skillnote_recommendation.utils.visualization import create_positioning_plot_with_patterns
+            fig1 = create_positioning_plot_with_patterns(
+                position_df, target_code,
+                similar_career_codes, different_career1_codes, different_career2_codes,
+                "総合スキルレベル", "保有力量数",
+                "総合スキルレベル vs 保有力量数"
+            )
+        else:
+            fig1 = create_positioning_plot(
+                position_df, target_code, reference_codes,
+                "総合スキルレベル", "保有力量数",
+                "総合スキルレベル vs 保有力量数"
+            )
         st.plotly_chart(fig1, use_container_width=True)
 
     with tab2:
@@ -523,11 +567,20 @@ def display_positioning_maps(
             "**Y軸**: 平均レベル（スキルの深さ）\n\n"
             "右上に行くほど、幅広い力量を深く習得していることを示します。"
         )
-        fig2 = create_positioning_plot(
-            position_df, target_code, reference_codes,
-            "保有力量数", "平均レベル",
-            "スキルの幅 vs 深さ"
-        )
+        if use_pattern_based:
+            from skillnote_recommendation.utils.visualization import create_positioning_plot_with_patterns
+            fig2 = create_positioning_plot_with_patterns(
+                position_df, target_code,
+                similar_career_codes, different_career1_codes, different_career2_codes,
+                "保有力量数", "平均レベル",
+                "スキルの幅 vs 深さ"
+            )
+        else:
+            fig2 = create_positioning_plot(
+                position_df, target_code, reference_codes,
+                "保有力量数", "平均レベル",
+                "スキルの幅 vs 深さ"
+            )
         st.plotly_chart(fig2, use_container_width=True)
 
     with tab3:
@@ -538,11 +591,20 @@ def display_positioning_maps(
             "NMFモデルが学習したスキルパターンの空間で、メンバーを配置します。\n"
             "近くにいる人は似たスキルパターンを持っています。"
         )
-        fig3 = create_positioning_plot(
-            position_df, target_code, reference_codes,
-            "潜在因子1", "潜在因子2",
-            "潜在因子空間でのメンバー分布"
-        )
+        if use_pattern_based:
+            from skillnote_recommendation.utils.visualization import create_positioning_plot_with_patterns
+            fig3 = create_positioning_plot_with_patterns(
+                position_df, target_code,
+                similar_career_codes, different_career1_codes, different_career2_codes,
+                "潜在因子1", "潜在因子2",
+                "潜在因子空間でのメンバー分布"
+            )
+        else:
+            fig3 = create_positioning_plot(
+                position_df, target_code, reference_codes,
+                "潜在因子1", "潜在因子2",
+                "潜在因子空間でのメンバー分布"
+            )
         st.plotly_chart(fig3, use_container_width=True)
 
     with tab4:
@@ -1087,11 +1149,6 @@ if st.session_state.get("last_recommendations_df") is not None:
 
     # メンバーポジショニングマップ
     if st.session_state.get("last_recommendations") is not None:
-        # 参考人物のコードを収集
-        reference_codes = get_reference_person_codes(
-            st.session_state.last_recommendations
-        )
-
         # ポジショニングデータを作成
         position_df = create_member_positioning_data(
             td["member_competence"],
@@ -1099,12 +1156,39 @@ if st.session_state.get("last_recommendations_df") is not None:
             mf_model
         )
 
-        # 可視化を表示
-        display_positioning_maps(
-            position_df,
-            st.session_state.last_target_member_code,
-            reference_codes
-        )
+        # キャリアパターン別推薦がある場合はパターンコードを使用
+        pattern_recs = st.session_state.get('pattern_recommendations', {})
+        if pattern_recs:
+            # 各パターンから参考人物コードを抽出
+            similar_codes = []
+            different1_codes = []
+            different2_codes = []
+
+            if 'similar' in pattern_recs:
+                similar_codes = [p['code'] for p in pattern_recs['similar'].reference_persons]
+            if 'different1' in pattern_recs:
+                different1_codes = [p['code'] for p in pattern_recs['different1'].reference_persons]
+            if 'different2' in pattern_recs:
+                different2_codes = [p['code'] for p in pattern_recs['different2'].reference_persons]
+
+            # パターンベースのポジショニングマップを表示
+            display_positioning_maps(
+                position_df,
+                st.session_state.last_target_member_code,
+                similar_career_codes=similar_codes,
+                different_career1_codes=different1_codes,
+                different_career2_codes=different2_codes
+            )
+        else:
+            # 従来の参考人物ベースのポジショニングマップを表示
+            reference_codes = get_reference_person_codes(
+                st.session_state.last_recommendations
+            )
+            display_positioning_maps(
+                position_df,
+                st.session_state.last_target_member_code,
+                reference_codes=reference_codes
+            )
 
         # キャリアパス推薦
         st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)

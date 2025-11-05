@@ -63,7 +63,7 @@ class Config:
         'different_career2_ref_persons': 5,   # 異なるキャリア2の参考人物数（最大）
 
         # 参考人物の最小数（この数未満の場合は表示しない）
-        'min_ref_persons': 3,
+        'min_ref_persons': 1,
 
         # 参考人物選定基準
         'ref_person_selection': 'top_similar',  # 'top_similar': 類似度上位, 'random': ランダム
