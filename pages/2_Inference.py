@@ -429,6 +429,7 @@ def display_reference_person(ref_person):
         st.markdown("#### 🌟 異なるキャリアパス")
 
     st.markdown(f"**{ref_person.member_name}さん**")
+    st.caption(f"メンバーコード: `{ref_person.member_code}`")
     st.markdown(ref_person.reason)
 
     # 差分分析を表示

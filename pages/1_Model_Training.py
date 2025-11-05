@@ -182,41 +182,74 @@ if st.session_state.get("model_trained", False):
             else:
                 member_names.append(code)
 
-        # 各メンバーの潜在因子の重みを取得
+        # 各メンバーの潜在因子の重みを取得（メンバー名とメンバーコードの両方を含める）
         member_factors_data = []
         for i, (idx, member_code) in enumerate(zip(random_indices, member_codes)):
             factors = mf_model.W[idx, :]
             for factor_idx, weight in enumerate(factors):
                 member_factors_data.append({
-                    "メンバー": member_names[i],  # インデックスで直接参照
+                    "メンバー名": member_names[i],
+                    "メンバーコード": member_code,
                     "潜在因子": f"因子{factor_idx + 1}",
                     "重み": weight
                 })
 
         df_member_factors = pd.DataFrame(member_factors_data)
 
-        # 重複チェックとデバッグ情報
-        duplicates = df_member_factors[df_member_factors.duplicated(subset=["メンバー", "潜在因子"], keep=False)]
-        if not duplicates.empty:
-            st.warning(f"⚠️ 重複データが検出されました（{len(duplicates)}件）。重複を削除します。")
-            df_member_factors = df_member_factors.drop_duplicates(subset=["メンバー", "潜在因子"], keep="first")
+        # タブで2パターンを切り替え
+        tab1, tab2 = st.tabs(["📝 メンバー名で表示", "🔢 メンバーコードで表示"])
 
-        # ヒートマップ
-        pivot_table = df_member_factors.pivot_table(
-            index="メンバー",
-            columns="潜在因子",
-            values="重み",
-            aggfunc="mean"  # 万が一重複がある場合は平均を取る
-        )
+        with tab1:
+            # メンバー名でのヒートマップ
+            # 重複チェック
+            duplicates = df_member_factors[df_member_factors.duplicated(subset=["メンバー名", "潜在因子"], keep=False)]
+            if not duplicates.empty:
+                st.warning(f"⚠️ 重複データが検出されました（{len(duplicates)}件）。重複を削除します。")
+                df_member_factors_name = df_member_factors.drop_duplicates(subset=["メンバー名", "潜在因子"], keep="first")
+            else:
+                df_member_factors_name = df_member_factors.copy()
 
-        fig = px.imshow(
-            pivot_table,
-            labels=dict(x="潜在因子", y="メンバー", color="重み"),
-            title="メンバーの潜在因子分布ヒートマップ",
-            color_continuous_scale="Blues"
-        )
-        fig.update_layout(height=500)
-        st.plotly_chart(fig, use_container_width=True)
+            pivot_table_name = df_member_factors_name.pivot_table(
+                index="メンバー名",
+                columns="潜在因子",
+                values="重み",
+                aggfunc="mean"
+            )
+
+            fig_name = px.imshow(
+                pivot_table_name,
+                labels=dict(x="潜在因子", y="メンバー名", color="重み"),
+                title="メンバーの潜在因子分布ヒートマップ（メンバー名）",
+                color_continuous_scale="Blues"
+            )
+            fig_name.update_layout(height=500)
+            st.plotly_chart(fig_name, use_container_width=True)
+
+        with tab2:
+            # メンバーコードでのヒートマップ
+            # 重複チェック
+            duplicates_code = df_member_factors[df_member_factors.duplicated(subset=["メンバーコード", "潜在因子"], keep=False)]
+            if not duplicates_code.empty:
+                st.warning(f"⚠️ 重複データが検出されました（{len(duplicates_code)}件）。重複を削除します。")
+                df_member_factors_code = df_member_factors.drop_duplicates(subset=["メンバーコード", "潜在因子"], keep="first")
+            else:
+                df_member_factors_code = df_member_factors.copy()
+
+            pivot_table_code = df_member_factors_code.pivot_table(
+                index="メンバーコード",
+                columns="潜在因子",
+                values="重み",
+                aggfunc="mean"
+            )
+
+            fig_code = px.imshow(
+                pivot_table_code,
+                labels=dict(x="潜在因子", y="メンバーコード", color="重み"),
+                title="メンバーの潜在因子分布ヒートマップ（メンバーコード）",
+                color_continuous_scale="Blues"
+            )
+            fig_code.update_layout(height=500)
+            st.plotly_chart(fig_code, use_container_width=True)
 
     # 力量の潜在因子分布
     with st.expander("💡 力量の潜在因子分布"):
