@@ -184,19 +184,30 @@ if st.session_state.get("model_trained", False):
 
         # 各メンバーの潜在因子の重みを取得
         member_factors_data = []
-        for idx, member_code in zip(random_indices, member_codes):
+        for i, (idx, member_code) in enumerate(zip(random_indices, member_codes)):
             factors = mf_model.W[idx, :]
             for factor_idx, weight in enumerate(factors):
                 member_factors_data.append({
-                    "メンバー": member_names[member_codes.index(member_code)],
+                    "メンバー": member_names[i],  # インデックスで直接参照
                     "潜在因子": f"因子{factor_idx + 1}",
                     "重み": weight
                 })
 
         df_member_factors = pd.DataFrame(member_factors_data)
 
+        # 重複チェックとデバッグ情報
+        duplicates = df_member_factors[df_member_factors.duplicated(subset=["メンバー", "潜在因子"], keep=False)]
+        if not duplicates.empty:
+            st.warning(f"⚠️ 重複データが検出されました（{len(duplicates)}件）。重複を削除します。")
+            df_member_factors = df_member_factors.drop_duplicates(subset=["メンバー", "潜在因子"], keep="first")
+
         # ヒートマップ
-        pivot_table = df_member_factors.pivot(index="メンバー", columns="潜在因子", values="重み")
+        pivot_table = df_member_factors.pivot_table(
+            index="メンバー",
+            columns="潜在因子",
+            values="重み",
+            aggfunc="mean"  # 万が一重複がある場合は平均を取る
+        )
 
         fig = px.imshow(
             pivot_table,
@@ -226,19 +237,30 @@ if st.session_state.get("model_trained", False):
 
         # 各力量の潜在因子の重みを取得
         competence_factors_data = []
-        for idx, comp_code in zip(random_comp_indices, competence_codes):
+        for i, (idx, comp_code) in enumerate(zip(random_comp_indices, competence_codes)):
             factors = mf_model.H[:, idx]
             for factor_idx, weight in enumerate(factors):
                 competence_factors_data.append({
-                    "力量": competence_names[competence_codes.index(comp_code)],
+                    "力量": competence_names[i],  # インデックスで直接参照
                     "潜在因子": f"因子{factor_idx + 1}",
                     "重み": weight
                 })
 
         df_competence_factors = pd.DataFrame(competence_factors_data)
 
+        # 重複チェックとデバッグ情報
+        duplicates_comp = df_competence_factors[df_competence_factors.duplicated(subset=["力量", "潜在因子"], keep=False)]
+        if not duplicates_comp.empty:
+            st.warning(f"⚠️ 重複データが検出されました（{len(duplicates_comp)}件）。重複を削除します。")
+            df_competence_factors = df_competence_factors.drop_duplicates(subset=["力量", "潜在因子"], keep="first")
+
         # ヒートマップ
-        pivot_table_comp = df_competence_factors.pivot(index="力量", columns="潜在因子", values="重み")
+        pivot_table_comp = df_competence_factors.pivot_table(
+            index="力量",
+            columns="潜在因子",
+            values="重み",
+            aggfunc="mean"  # 万が一重複がある場合は平均を取る
+        )
 
         fig = px.imshow(
             pivot_table_comp,
