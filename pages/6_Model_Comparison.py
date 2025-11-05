@@ -166,6 +166,17 @@ def main():
         help="この人数以上の遷移のみ使用"
     )
 
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📊 グラフ可視化設定")
+
+    max_path_length = st.sidebar.slider(
+        "最大パス長",
+        min_value=2,
+        max_value=20,
+        value=10,
+        help="グラフで表示する最大パス長（中間ノード数）"
+    )
+
     # =========================================================
     # モデル学習
     # =========================================================
@@ -367,7 +378,8 @@ def main():
                                         fig = create_skill_transition_graph(
                                             graph_rec,
                                             target_member,
-                                            rec.skill_code
+                                            rec.skill_code,
+                                            max_path_length=max_path_length
                                         )
                                         st.plotly_chart(fig, use_container_width=True)
                                     except Exception as e:

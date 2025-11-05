@@ -820,7 +820,9 @@ def create_skill_transition_graph(
     recommended_skill: str,
     width: int = 900,
     height: int = 400,
-    max_paths: int = 1
+    max_paths: int = 1,
+    max_path_length: int = 10,
+    show_all_intermediate: bool = True
 ) -> go.Figure:
     """
     スキル遷移グラフの可視化（シンプルなパス表示）
@@ -832,6 +834,8 @@ def create_skill_transition_graph(
         width: 図の幅
         height: 図の高さ
         max_paths: 表示する最大パス数（デフォルト: 1 = 最短パスのみ）
+        max_path_length: 表示する最大パス長（デフォルト: 10）
+        show_all_intermediate: すべての中間ノードを表示するか（デフォルト: True）
 
     Returns:
         plotly.graph_objects.Figure
@@ -841,7 +845,7 @@ def create_skill_transition_graph(
     graph = graph_recommender.graph
     user_skills = graph_recommender.get_user_skills(member_code)
 
-    # 最短パスを見つける
+    # 指定された最大長以下の最短パスを見つける
     best_path = None
     best_length = float('inf')
 
@@ -849,15 +853,24 @@ def create_skill_transition_graph(
         try:
             if user_skill in graph and recommended_skill in graph:
                 path = nx.shortest_path(graph, user_skill, recommended_skill)
-                if len(path) < best_length:
+                # 最大パス長を超えない範囲で最短を選ぶ
+                if len(path) <= max_path_length and len(path) < best_length:
                     best_path = path
                     best_length = len(path)
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             pass
 
+    # パスが見つからない、または最大長を超える場合の処理
     if not best_path:
-        # パスが見つからない場合は直接推薦として表示
-        best_path = [user_skills[0] if user_skills else 'Unknown', recommended_skill]
+        # 直接接続を探す
+        for user_skill in user_skills:
+            if graph.has_edge(user_skill, recommended_skill):
+                best_path = [user_skill, recommended_skill]
+                break
+
+        # それでも見つからない場合は直接推薦として表示
+        if not best_path:
+            best_path = [user_skills[0] if user_skills else 'Unknown', recommended_skill]
 
     # 階層的レイアウト（左から右へ）
     pos = {}
