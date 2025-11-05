@@ -164,6 +164,13 @@ else:
                     help="探索する組み合わせの数。多いほど良い解が見つかる可能性が高まりますが、時間がかかります。"
                 )
 
+            # 探索範囲のデフォルト値を設定
+            n_comp_min, n_comp_max = 10, 30
+            alpha_w_min, alpha_w_max = 0.001, 0.5
+            alpha_h_min, alpha_h_max = 0.001, 0.5
+            l1_min, l1_max = 0.0, 1.0
+            iter_min, iter_max = 500, 1500
+
             # 探索範囲の設定
             with st.expander("🔍 探索範囲の詳細設定", expanded=False):
                 st.markdown("各パラメータの探索範囲を設定します。デフォルト値から変更する場合のみ調整してください。")
@@ -172,43 +179,43 @@ else:
 
                 with range_col1:
                     st.markdown("**潜在因子数 (n_components)**")
-                    n_comp_min = st.number_input("最小値", min_value=5, max_value=50, value=10, key="n_comp_min")
-                    n_comp_max = st.number_input("最大値", min_value=5, max_value=50, value=30, key="n_comp_max")
+                    n_comp_min = st.number_input("最小値", min_value=5, max_value=50, value=n_comp_min, key="n_comp_min")
+                    n_comp_max = st.number_input("最大値", min_value=5, max_value=50, value=n_comp_max, key="n_comp_max")
 
                     st.markdown("**正則化係数 W (alpha_W)**")
-                    alpha_w_min = st.number_input("最小値", min_value=0.0001, max_value=1.0, value=0.001, format="%.4f", key="alpha_w_min")
-                    alpha_w_max = st.number_input("最大値", min_value=0.0001, max_value=1.0, value=0.5, format="%.4f", key="alpha_w_max")
+                    alpha_w_min = st.number_input("最小値", min_value=0.0001, max_value=1.0, value=alpha_w_min, format="%.4f", key="alpha_w_min")
+                    alpha_w_max = st.number_input("最大値", min_value=0.0001, max_value=1.0, value=alpha_w_max, format="%.4f", key="alpha_w_max")
 
                 with range_col2:
                     st.markdown("**正則化係数 H (alpha_H)**")
-                    alpha_h_min = st.number_input("最小値", min_value=0.0001, max_value=1.0, value=0.001, format="%.4f", key="alpha_h_min")
-                    alpha_h_max = st.number_input("最大値", min_value=0.0001, max_value=1.0, value=0.5, format="%.4f", key="alpha_h_max")
+                    alpha_h_min = st.number_input("最小値", min_value=0.0001, max_value=1.0, value=alpha_h_min, format="%.4f", key="alpha_h_min")
+                    alpha_h_max = st.number_input("最大値", min_value=0.0001, max_value=1.0, value=alpha_h_max, format="%.4f", key="alpha_h_max")
 
                     st.markdown("**L1比率 (l1_ratio)**")
-                    l1_min = st.number_input("最小値", min_value=0.0, max_value=1.0, value=0.0, format="%.2f", key="l1_min")
-                    l1_max = st.number_input("最大値", min_value=0.0, max_value=1.0, value=1.0, format="%.2f", key="l1_max")
+                    l1_min = st.number_input("最小値", min_value=0.0, max_value=1.0, value=l1_min, format="%.2f", key="l1_min")
+                    l1_max = st.number_input("最大値", min_value=0.0, max_value=1.0, value=l1_max, format="%.2f", key="l1_max")
 
                 st.markdown("**最大イテレーション数 (max_iter)**")
                 iter_col1, iter_col2 = st.columns(2)
                 with iter_col1:
-                    iter_min = st.number_input("最小値", min_value=100, max_value=3000, value=500, step=100, key="iter_min")
+                    iter_min = st.number_input("最小値", min_value=100, max_value=3000, value=iter_min, step=100, key="iter_min")
                 with iter_col2:
-                    iter_max = st.number_input("最大値", min_value=100, max_value=3000, value=1500, step=100, key="iter_max")
+                    iter_max = st.number_input("最大値", min_value=100, max_value=3000, value=iter_max, step=100, key="iter_max")
 
-                # 探索空間を構築
-                custom_search_space = {
-                    'n_components': (n_comp_min, n_comp_max),
-                    'alpha_W': (alpha_w_min, alpha_w_max),
-                    'alpha_H': (alpha_h_min, alpha_h_max),
-                    'l1_ratio': (l1_min, l1_max),
-                    'max_iter': (iter_min, iter_max)
-                }
+            # 探索空間を構築（expanderの外で）
+            custom_search_space = {
+                'n_components': (int(n_comp_min), int(n_comp_max)),
+                'alpha_W': (float(alpha_w_min), float(alpha_w_max)),
+                'alpha_H': (float(alpha_h_min), float(alpha_h_max)),
+                'l1_ratio': (float(l1_min), float(l1_max)),
+                'max_iter': (int(iter_min), int(iter_max))
+            }
 
             st.info(f"""
             **選択した設定:**
             - 探索方法: {sampler_choice.upper()}
-            - 試行回数: {n_trials}回
-            - 推定時間: {n_trials * 0.1:.1f}〜{n_trials * 0.2:.1f}分
+            - 試行回数: {int(n_trials)}回
+            - 推定時間: {int(n_trials) * 0.1:.1f}〜{int(n_trials) * 0.2:.1f}分
             """)
             st.warning("⏱️ チューニングには時間がかかる場合があります。")
 
@@ -216,6 +223,10 @@ else:
     button_label = "🚀 MLモデル学習を実行（チューニングあり）" if use_tuning else "🚀 MLモデル学習を実行"
 
     if st.button(button_label, type="primary"):
+        # デバッグ情報を表示
+        if use_tuning:
+            st.info(f"🔧 チューニング設定: サンプラー={sampler_choice}, 試行回数={int(n_trials)}, 探索空間={custom_search_space}")
+
         # リアルタイム可視化用のプレースホルダー
         progress_placeholder = st.empty()
         chart_placeholder = st.empty()
@@ -233,14 +244,14 @@ else:
             })
 
             # プログレスバーを更新
-            progress_pct = (trial.number + 1) / n_trials if use_tuning else 1.0
+            progress_pct = (trial.number + 1) / int(n_trials) if use_tuning else 1.0
             progress_placeholder.progress(
                 progress_pct,
-                text=f"Trial {trial.number + 1}/{n_trials if use_tuning else 1} - 現在の誤差: {trial.value:.6f} - 最良: {study.best_value:.6f}"
+                text=f"Trial {trial.number + 1}/{int(n_trials) if use_tuning else 1} - 現在の誤差: {trial.value:.6f} - 最良: {study.best_value:.6f}"
             )
 
             # グラフを更新（5試行ごと、または最後の試行）
-            if len(trial_history) >= 5 or trial.number == (n_trials - 1 if use_tuning else 0):
+            if len(trial_history) >= 5 or trial.number == (int(n_trials) - 1 if use_tuning else 0):
                 import pandas as pd
                 import plotly.graph_objects as go
 
@@ -272,7 +283,7 @@ else:
                 # メトリクスを表示
                 col1, col2, col3 = metrics_placeholder.columns(3)
                 with col1:
-                    st.metric("現在の Trial", f"{trial.number + 1}/{n_trials if use_tuning else 1}")
+                    st.metric("現在の Trial", f"{trial.number + 1}/{int(n_trials) if use_tuning else 1}")
                 with col2:
                     st.metric("現在の誤差", f"{trial.value:.6f}")
                 with col3:
@@ -280,16 +291,24 @@ else:
 
         with st.spinner("MLモデルを学習中..." if not use_tuning else "ハイパーパラメータチューニング中..."):
             try:
+                # デバッグログ
+                if use_tuning:
+                    st.write(f"🔍 チューニング開始: n_trials={int(n_trials)}, sampler={sampler_choice}")
+
                 ml_recommender = build_ml_recommender(
                     st.session_state.transformed_data,
                     use_preprocessing=use_preprocessing,
                     use_tuning=use_tuning,
-                    tuning_n_trials=n_trials if use_tuning else None,
+                    tuning_n_trials=int(n_trials) if use_tuning else None,
                     tuning_timeout=None,
                     tuning_search_space=custom_search_space if use_tuning else None,
                     tuning_sampler=sampler_choice if use_tuning else None,
                     tuning_progress_callback=progress_callback if use_tuning else None
                 )
+
+                # チューニング完了のログ
+                if use_tuning:
+                    st.write(f"✅ チューニング完了: {len(trial_history)}回の試行")
 
                 # プレースホルダーをクリア
                 progress_placeholder.empty()
