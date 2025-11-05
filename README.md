@@ -559,19 +559,20 @@ uv pip install -e .
 
 ## ドキュメント
 
-### 🆕 v2.0.0 リファクタリング関連
+### 📚 開発者向けドキュメント
 
-- **[リファクタリングガイド (REFACTORING_GUIDE.md)](REFACTORING_GUIDE.md)** - **Phase 1-3の包括的なガイド**
-  - 新機能の詳細説明
-  - マイグレーションガイド
-  - 使用例とベストプラクティス
+- **[リファクタリングガイド (REFACTORING_GUIDE.md)](REFACTORING_GUIDE.md)** - エンタープライズグレード機能の実装ガイド
+  - 構造化ロギング、エラーハンドリング、リトライロジック
+  - Config管理、インターフェース定義
+  - 入力バリデーション、データ品質チェック
+  - マイグレーションガイドと使用例
 
 - **[アーキテクチャドキュメント (ARCHITECTURE.md)](ARCHITECTURE.md)** - システム設計ドキュメント
   - アーキテクチャ概要
   - モジュール構成
   - データフロー
 
-- **[APIリファレンス (API_REFERENCE.md)](API_REFERENCE.md)** - 新しいAPI使用方法
+- **[APIリファレンス (API_REFERENCE.md)](API_REFERENCE.md)** - API使用方法
   - 構造化ロギング
   - エラーハンドリング
   - Config管理
@@ -582,9 +583,9 @@ uv pip install -e .
   - コーディング規約
   - プルリクエストのガイドライン
 
-### 既存ドキュメント
+### 📖 ユーザー向けドキュメント
 
-- [Streamlitアプリガイド (docs/STREAMLIT_GUIDE.md)](docs/STREAMLIT_GUIDE.md) - **Webアプリケーション完全ガイド**
+- **[Streamlitアプリガイド (docs/STREAMLIT_GUIDE.md)](docs/STREAMLIT_GUIDE.md)** - Webアプリケーション完全ガイド
   - 起動方法と使い方
   - 既存メンバー・新規ユーザーへの推薦
   - ロールモデル機能
@@ -592,53 +593,58 @@ uv pip install -e .
   - CSVダウンロード
   - トラブルシューティング
 
-- [評価ガイド (docs/EVALUATION.md)](docs/EVALUATION.md) - 推薦システムの評価方法
+- **[クイックスタート (docs/QUICKSTART.md)](docs/QUICKSTART.md)** - コマンドライン使い方ガイド
+
+- **[データ永続化クイックスタート (docs/PERSISTENCE_QUICKSTART.md)](docs/PERSISTENCE_QUICKSTART.md)** - データ永続化機能の使い方
+
+### 🔬 技術ドキュメント
+
+- **[機械学習技術詳細 (docs/ML_TECHNICAL_DETAILS.md)](docs/ML_TECHNICAL_DETAILS.md)** - ML推薦システムの技術解説
+  - Matrix Factorization (NMF)
+  - 多様性再ランキング戦略
+  - 評価メトリクス
+  - パラメータチューニング
+
+- **[コード構造ガイド (docs/CODE_STRUCTURE.md)](docs/CODE_STRUCTURE.md)** - プロジェクト構造とモジュール説明
+
+- **[データ永続化 (docs/PERSISTENCE.md)](docs/PERSISTENCE.md)** - データベース設計と永続化アーキテクチャ
+
+- **[評価ガイド (docs/EVALUATION.md)](docs/EVALUATION.md)** - 推薦システムの評価方法
   - 時系列分割による評価
   - 評価メトリクス (Precision@K, Recall@K, NDCG@K, Hit Rate)
   - 多様性評価メトリクス
   - クロスバリデーション
-  - ベストプラクティス
 
-- [クイックスタート (docs/QUICKSTART.md)](docs/QUICKSTART.md) - コマンドライン使い方ガイド
+### 🧪 テストドキュメント
 
-- [テスト設計 (docs/TEST_DESIGN.md)](docs/TEST_DESIGN.md) - テストコードの設計書（100+テストケース）
+- **[テスト設計 (docs/TEST_DESIGN.md)](docs/TEST_DESIGN.md)** - テストコードの設計書（100+テストケース）
 
-- [テスト実装ガイド (docs/TESTING_QUICKSTART.md)](docs/TESTING_QUICKSTART.md) - テスト実装手順
+- **[テスト実装ガイド (docs/TESTING_QUICKSTART.md)](docs/TESTING_QUICKSTART.md)** - テスト実装手順
 
-- [新規ユーザーCSVテンプレート (templates/)](templates/) - 新規ユーザー用CSVテンプレートと使い方
+### 📊 プレゼンテーション
+
+- **[機械学習推薦システム - 営業向け資料 (docs/ML_PRESENTATION_SALES.md)](docs/ML_PRESENTATION_SALES.md)** - 非技術者向けプレゼンテーション
+
+### 🛠️ その他
+
+- **[新規ユーザーCSVテンプレート (templates/)](templates/)** - 新規ユーザー用CSVテンプレートと使い方
 
 ## バージョン履歴
 
-- **v2.0.0 (2025-11-05)** - **🚀 GAFA-Level Enterprise Refactoring**
-  - **Phase 1: 基盤強化**
-    - ✅ 構造化ロギング導入（structlog + JSON出力）
-    - ✅ エラーハンドリング体系化（エラーコード体系、リトライ可能性判定）
-    - ✅ リトライロジック実装（指数バックオフ、自動リトライ）
-  - **Phase 2: アーキテクチャ改善**
-    - ✅ Config管理リファクタリング（不変設計、環境分離 dev/staging/prod）
-    - ✅ 依存性注入パターン導入（Protocol、ABC）
-    - ✅ インターフェース定義（型安全性向上）
-  - **Phase 3: セキュリティ・品質**
-    - ✅ モデル保存形式変更（pickle → joblib + JSON、バージョン管理）
-    - ✅ 入力バリデーション強化（Pydantic、自動検証）
-    - ✅ データ品質チェック導入（欠損値・無限値・分布検証）
-  - **型安全性の強化**
-    - mypy strict mode有効化（disallow_untyped_defs = true）
-    - Pydanticによる実行時バリデーション
-  - **依存関係追加**
-    - structlog>=23.0.0, pydantic>=2.0.0, tenacity>=8.0.0, joblib>=1.3.0
-  - **ドキュメント整備**
-    - REFACTORING_GUIDE.md: 包括的なリファクタリングガイド
-    - ARCHITECTURE.md: システムアーキテクチャドキュメント
-    - API_REFERENCE.md: 新しいAPI使用方法
-    - CONTRIBUTING.md: 開発者向けガイド
-  - **後方互換性維持**: 既存コードはそのまま動作（段階的移行可能）
-
-- v1.2.0 (2025-10-24)
+- **v1.2.0 (2025-10-24)** - **機械学習推薦システム + エンタープライズ機能強化**
   - **機械学習ベース推薦システム追加** (skillnote_recommendation/ml/)
     - Matrix Factorization (NMF) による協調フィルタリング
     - 多様性再ランキング (MMR, Category, Type, Hybrid)
     - MLRecommender: ML推薦システムの統合インターフェース
+  - **エンタープライズグレードの機能追加**
+    - 構造化ロギング（structlog + JSON出力）
+    - エラーハンドリング体系化（エラーコード体系、リトライロジック）
+    - Config管理リファクタリング（不変設計、環境分離）
+    - 入力バリデーション強化（Pydantic v2）
+    - データ品質チェック導入
+    - モデル保存形式改善（joblib + JSON、バージョン管理）
+    - インターフェース定義（Protocol、ABC）
+    - データ正規化・バリデーションユーティリティ
   - **多様性評価メトリクス追加**
     - カテゴリ多様性、タイプ多様性、カバレッジ、リスト内多様性
     - evaluate_with_diversity() による統合評価
