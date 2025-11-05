@@ -29,6 +29,7 @@ class MatrixFactorizationModel:
         early_stopping: bool = False,
         early_stopping_patience: int = 5,
         early_stopping_min_delta: float = 1e-5,
+        early_stopping_batch_size: int = 50,
         **nmf_params
     ):
         """
@@ -42,6 +43,9 @@ class MatrixFactorizationModel:
             early_stopping: Early stoppingを使用するか
             early_stopping_patience: Early stopping用の待機回数（改善が見られないエポック数）
             early_stopping_min_delta: 改善とみなす最小の誤差減少量
+            early_stopping_batch_size: Early stopping用のイテレーションバッチサイズ（デフォルト: 50）
+                                       大きくすると高速化するが、Early stoppingの精度が下がる
+                                       推奨値: 50（標準）、100（高速）、200（最速）
             **nmf_params: NMFへの追加パラメータ
         """
         self.n_components = n_components
@@ -51,6 +55,7 @@ class MatrixFactorizationModel:
         self.early_stopping = early_stopping
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
+        self.early_stopping_batch_size = early_stopping_batch_size
         self.nmf_params = nmf_params
 
         # NMFモデル
@@ -130,7 +135,7 @@ class MatrixFactorizationModel:
         改善が止まったら早期終了する
         """
         max_iter_total = self.model.max_iter
-        batch_size = 50  # 50イテレーションずつ増やす
+        batch_size = self.early_stopping_batch_size
 
         best_error = float('inf')
         patience_counter = 0
