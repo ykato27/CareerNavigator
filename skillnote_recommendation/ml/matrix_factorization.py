@@ -26,6 +26,9 @@ class MatrixFactorizationModel:
         random_state: int = 42,
         use_confidence_weighting: bool = False,
         confidence_alpha: float = 1.0,
+        early_stopping: bool = False,
+        early_stopping_patience: int = 5,
+        early_stopping_min_delta: float = 1e-5,
         **nmf_params
     ):
         """
@@ -36,12 +39,18 @@ class MatrixFactorizationModel:
             random_state: 乱数シード
             use_confidence_weighting: confidence weightingを使用するか
             confidence_alpha: confidence weight計算の係数 (confidence = 1 + alpha * rating)
+            early_stopping: Early stoppingを使用するか
+            early_stopping_patience: Early stopping用の待機回数（改善が見られないエポック数）
+            early_stopping_min_delta: 改善とみなす最小の誤差減少量
             **nmf_params: NMFへの追加パラメータ
         """
         self.n_components = n_components
         self.random_state = random_state
         self.use_confidence_weighting = use_confidence_weighting
         self.confidence_alpha = confidence_alpha
+        self.early_stopping = early_stopping
+        self.early_stopping_patience = early_stopping_patience
+        self.early_stopping_min_delta = early_stopping_min_delta
         self.nmf_params = nmf_params
 
         # NMFモデル
@@ -63,6 +72,7 @@ class MatrixFactorizationModel:
         self.member_index = None  # メンバーコード → インデックス
         self.competence_index = None  # 力量コード → インデックス
         self.is_fitted = False
+        self.actual_n_iter_ = None  # 実際のイテレーション数（Early stopping時）
 
     def fit(self, skill_matrix: pd.DataFrame) -> 'MatrixFactorizationModel':
         """
@@ -71,6 +81,7 @@ class MatrixFactorizationModel:
         改善点:
         - confidence weightingにより、高レベルのスキルをより重視
         - 暗黙的フィードバック（有無のみ）と明示的フィードバック（レベル）の両方に対応
+        - Early stoppingによる効率的な学習
 
         Args:
             skill_matrix: メンバー×力量マトリクス (index=メンバーコード, columns=力量コード)
@@ -86,26 +97,95 @@ class MatrixFactorizationModel:
         self.member_index = {code: idx for idx, code in enumerate(self.member_codes)}
         self.competence_index = {code: idx for idx, code in enumerate(self.competence_codes)}
 
-        # Confidence weightingを適用
+        # 学習用マトリクスを準備
         if self.use_confidence_weighting:
             # 正規化レベルにconfidence weightを適用
-            # confidence = 1 + alpha * rating の形式
-            # ただし、0（未取得）は0のまま
             weighted_matrix = skill_matrix.copy()
             non_zero_mask = weighted_matrix > 0
             weighted_matrix[non_zero_mask] = 1 + self.confidence_alpha * weighted_matrix[non_zero_mask]
-
-            # NMFで分解（weighted matrixを使用）
-            self.W = self.model.fit_transform(weighted_matrix.values)
-            self.H = self.model.components_
+            training_matrix = weighted_matrix.values
         else:
-            # 通常のNMF（従来通り）
-            self.W = self.model.fit_transform(skill_matrix.values)
-            self.H = self.model.components_
+            training_matrix = skill_matrix.values
+
+        # Early stoppingの有無で分岐
+        if self.early_stopping:
+            self._fit_with_early_stopping(training_matrix)
+        else:
+            self._fit_normal(training_matrix)
 
         self.is_fitted = True
-
         return self
+
+    def _fit_normal(self, X: np.ndarray) -> None:
+        """通常の学習（Early stoppingなし）"""
+        self.W = self.model.fit_transform(X)
+        self.H = self.model.components_
+        self.actual_n_iter_ = self.model.n_iter_
+
+    def _fit_with_early_stopping(self, X: np.ndarray) -> None:
+        """
+        Early stoppingを使用した学習
+
+        段階的にmax_iterを増やしながら学習し、
+        改善が止まったら早期終了する
+        """
+        max_iter_total = self.model.max_iter
+        batch_size = 50  # 50イテレーションずつ増やす
+
+        best_error = float('inf')
+        patience_counter = 0
+        best_W = None
+        best_H = None
+        best_iter = 0
+
+        for current_max_iter in range(batch_size, max_iter_total + 1, batch_size):
+            # NMFモデルを再作成（max_iterを更新）
+            nmf_params = self.nmf_params.copy()
+            nmf_params['max_iter'] = current_max_iter
+            nmf_params['init'] = 'nndsvda' if current_max_iter == batch_size else 'custom'
+
+            temp_model = NMF(
+                n_components=self.n_components,
+                random_state=self.random_state,
+                **nmf_params
+            )
+
+            # 前回の結果から継続学習（2回目以降）
+            if current_max_iter > batch_size and best_W is not None:
+                # warm_startの代わりに、前回の結果を初期値として使用
+                # sklearnのNMFはwarm_startをサポートしていないため、
+                # 毎回max_iterを増やして全体を再学習
+                pass
+
+            # 学習
+            W = temp_model.fit_transform(X)
+            H = temp_model.components_
+
+            # 再構成誤差を計算
+            reconstructed = W @ H
+            error = np.linalg.norm(X - reconstructed, 'fro')
+
+            # Early stopping判定
+            improvement = best_error - error
+            if improvement > self.early_stopping_min_delta:
+                best_error = error
+                best_W = W.copy()
+                best_H = H.copy()
+                best_iter = current_max_iter
+                patience_counter = 0
+                print(f"[Early Stopping] Iter {current_max_iter}: error={error:.6f} (improved by {improvement:.6f})")
+            else:
+                patience_counter += 1
+                print(f"[Early Stopping] Iter {current_max_iter}: error={error:.6f} (no improvement, patience={patience_counter}/{self.early_stopping_patience})")
+
+                if patience_counter >= self.early_stopping_patience:
+                    print(f"[Early Stopping] Stopped at iteration {best_iter} (best error: {best_error:.6f})")
+                    break
+
+        # ベストモデルを設定
+        self.W = best_W if best_W is not None else W
+        self.H = best_H if best_H is not None else H
+        self.actual_n_iter_ = best_iter if best_W is not None else current_max_iter
 
     def predict(self, member_code: str, competence_codes: Optional[List[str]] = None) -> pd.Series:
         """

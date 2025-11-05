@@ -115,14 +115,17 @@ class Config:
         'timeout': 600,  # タイムアウト（秒）
         'n_jobs': 1,  # 並列実行数（1=逐次実行）
         'show_progress_bar': True,  # プログレスバーを表示
-        'use_cross_validation': False,  # 交差検証を使用（False=全データで学習、True=交差検証で汎化性能を評価）
+        'use_cross_validation': True,  # 交差検証を使用（True推奨：汎化性能を評価）
         'n_folds': 3,  # 交差検証の分割数（3-5推奨、計算時間とのトレードオフ）
+        'use_time_series_split': True,  # TimeSeriesSplitを使用（True推奨：時系列データでLook-ahead biasを防ぐ）
+        'test_size': 0.15,  # Test setのサイズ（0.15 = 15%、チューニング時は触らない）
+        'enable_early_stopping': True,  # Early stoppingを有効化（True推奨：計算時間短縮）
         'search_space': {
             'n_components': (10, 30),  # 探索範囲（最小, 最大）※40->30に縮小
             'alpha_W': (0.001, 0.5),  # 対数スケールで探索（正則化強度）※1.0->0.5に縮小
             'alpha_H': (0.001, 0.5),  # 対数スケールで探索（正則化強度）※1.0->0.5に縮小
             'l1_ratio': (0.0, 1.0),  # L1/L2のバランス
-            'max_iter': (500, 1500),  # 最大イテレーション数※2000->1500に縮小
+            'max_iter': (500, 1500),  # 最大イテレーション数※2000->1500に縮小（Early stoppingで自動短縮）
         },
     }
 

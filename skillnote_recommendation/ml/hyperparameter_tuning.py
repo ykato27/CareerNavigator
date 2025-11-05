@@ -13,7 +13,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Tuple, Optional, Callable
 import logging
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, TimeSeriesSplit
 
 try:
     import optuna
@@ -42,7 +42,10 @@ class NMFHyperparameterTuner:
         use_cross_validation: bool = True,
         n_folds: int = 3,
         sampler: str = "tpe",
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        use_time_series_split: bool = True,
+        test_size: float = 0.15,
+        enable_early_stopping: bool = True
     ):
         """
         初期化
@@ -58,6 +61,9 @@ class NMFHyperparameterTuner:
             n_folds: 交差検証の分割数（デフォルト: 3, 計算時間とのトレードオフ）
             sampler: サンプラー種別 ("tpe", "random", "cmaes")
             progress_callback: 進捗コールバック関数（trial, study を受け取る）
+            use_time_series_split: TimeSeriesSplitを使用するか（推奨: True, 時系列データの場合）
+            test_size: テストセットのサイズ（0.0-1.0）デフォルト15%
+            enable_early_stopping: Early stoppingを有効にするか
         """
         if not OPTUNA_AVAILABLE:
             raise ImportError(
@@ -65,7 +71,19 @@ class NMFHyperparameterTuner:
                 "pip install optuna でインストールしてください。"
             )
 
-        self.skill_matrix = skill_matrix
+        # Test setを分離（チューニング時は触らない）
+        if test_size > 0:
+            # 時系列順にソート（indexがメンバーコードの場合、取得日でソートできない）
+            # そのため、単純に後ろから切り取る（最近のデータがテスト）
+            split_idx = int(len(skill_matrix) * (1 - test_size))
+            self.skill_matrix = skill_matrix.iloc[:split_idx]  # Train + Validation
+            self.test_matrix = skill_matrix.iloc[split_idx:]   # Test (隔離)
+            print(f"[Data Split] Train+Val: {len(self.skill_matrix)}, Test: {len(self.test_matrix)} (Test ratio: {test_size:.1%})")
+        else:
+            self.skill_matrix = skill_matrix
+            self.test_matrix = None
+            print("[Data Split] No test set separation (test_size=0)")
+
         self.n_trials = n_trials
         self.timeout = timeout
         self.n_jobs = n_jobs
@@ -74,6 +92,9 @@ class NMFHyperparameterTuner:
         self.n_folds = n_folds
         self.sampler = sampler
         self.progress_callback = progress_callback
+        self.use_time_series_split = use_time_series_split
+        self.test_size = test_size
+        self.enable_early_stopping = enable_early_stopping
 
         # 最適化された探索空間（より狭い範囲で効率的に探索）
         self.search_space = search_space or {
@@ -87,6 +108,7 @@ class NMFHyperparameterTuner:
         self.best_params = None
         self.best_value = None
         self.study = None
+        self.test_score = None  # Test setでの最終評価スコア
 
     def objective(self, trial: 'optuna.Trial') -> float:
         """
@@ -112,19 +134,32 @@ class NMFHyperparameterTuner:
 
         try:
             if self.use_cross_validation:
-                print(f"[DEBUG] Trial {trial.number}: Using cross-validation with {self.n_folds} folds")
-                # 交差検証を使用
-                cv_errors = []
-                kfold = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_state)
+                # 交差検証の方法を選択
+                if self.use_time_series_split:
+                    print(f"[DEBUG] Trial {trial.number}: Using TimeSeriesSplit with {self.n_folds} folds")
+                    cv_splitter = TimeSeriesSplit(n_splits=self.n_folds)
+                    split_method = "TimeSeriesSplit"
+                else:
+                    print(f"[DEBUG] Trial {trial.number}: Using KFold with {self.n_folds} folds")
+                    cv_splitter = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_state)
+                    split_method = "KFold"
 
-                for fold_idx, (train_idx, val_idx) in enumerate(kfold.split(self.skill_matrix)):
+                # 交差検証を実行
+                cv_errors = []
+                for fold_idx, (train_idx, val_idx) in enumerate(cv_splitter.split(self.skill_matrix)):
                     print(f"[DEBUG] Trial {trial.number}, Fold {fold_idx+1}/{self.n_folds}: Training...")
                     # 訓練データと検証データに分割
                     train_matrix = self.skill_matrix.iloc[train_idx]
                     val_matrix = self.skill_matrix.iloc[val_idx]
 
-                    # モデルを学習（random_stateは固定）
-                    model = MatrixFactorizationModel(**params, random_state=self.random_state)
+                    # モデルを学習（random_stateは固定、Early stopping有効）
+                    model = MatrixFactorizationModel(
+                        **params,
+                        random_state=self.random_state,
+                        early_stopping=self.enable_early_stopping,
+                        early_stopping_patience=5,
+                        early_stopping_min_delta=1e-5
+                    )
                     model.fit(train_matrix)
 
                     # 検証データで評価
@@ -139,12 +174,13 @@ class NMFHyperparameterTuner:
                 std_cv_error = np.std(cv_errors)
 
                 logger.info(f"Trial {trial.number} CV error: {mean_cv_error:.6f} (±{std_cv_error:.6f})")
-                print(f"[DEBUG] Trial {trial.number} completed with CV error: {mean_cv_error:.6f}")
+                print(f"[DEBUG] Trial {trial.number} completed with CV error: {mean_cv_error:.6f} ({split_method})")
 
                 # 追加メトリクスをログ
                 trial.set_user_attr('cv_std', std_cv_error)
                 trial.set_user_attr('cv_errors', cv_errors)
                 trial.set_user_attr('random_state', self.random_state)
+                trial.set_user_attr('split_method', split_method)
 
                 return mean_cv_error
             else:
@@ -416,7 +452,42 @@ class NMFHyperparameterTuner:
 
         logger.info(f"最良モデル学習完了: reconstruction_error={model.get_reconstruction_error():.6f}")
 
+        # Test setが存在する場合、最終評価を実行
+        if self.test_matrix is not None:
+            self.test_score = self.evaluate_on_test_set(model)
+            logger.info(f"Test set evaluation: reconstruction_error={self.test_score:.6f}")
+            print(f"[Test Evaluation] Final test error: {self.test_score:.6f}")
+
         return model
+
+    def evaluate_on_test_set(self, model: MatrixFactorizationModel) -> float:
+        """
+        チューニング完了後、Test setで最終評価
+
+        重要: この評価は、ハイパーパラメータチューニング完了後に
+        1度だけ実行すべきです。Test setは絶対にチューニングに使用してはいけません。
+
+        Args:
+            model: 学習済みモデル
+
+        Returns:
+            Test setでの再構成誤差
+        """
+        if self.test_matrix is None:
+            raise ValueError("Test setが分離されていません。test_size > 0で初期化してください。")
+
+        print(f"[Test Evaluation] Evaluating on test set (size: {len(self.test_matrix)})")
+
+        # Test setで評価
+        test_error = self._calculate_validation_error(
+            model,
+            self.skill_matrix,  # Train+Valで学習したモデル
+            self.test_matrix    # Test setで評価
+        )
+
+        logger.info(f"Test set reconstruction error: {test_error:.6f}")
+
+        return test_error
 
     def get_optimization_history(self) -> pd.DataFrame:
         """
@@ -557,7 +628,10 @@ def tune_nmf_hyperparameters_from_config(
         use_cross_validation=optuna_params.get('use_cross_validation', True),
         n_folds=optuna_params.get('n_folds', 3),
         sampler=custom_sampler or "tpe",
-        progress_callback=progress_callback
+        progress_callback=progress_callback,
+        use_time_series_split=optuna_params.get('use_time_series_split', True),
+        test_size=optuna_params.get('test_size', 0.15),
+        enable_early_stopping=optuna_params.get('enable_early_stopping', True)
     )
 
     best_params, best_value = tuner.optimize(show_progress_bar=show_progress_bar)
