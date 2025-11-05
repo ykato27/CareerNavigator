@@ -120,6 +120,8 @@ class Config:
         'use_time_series_split': True,  # TimeSeriesSplitを使用（True推奨：時系列データでLook-ahead biasを防ぐ）
         'test_size': 0.15,  # Test setのサイズ（0.15 = 15%、チューニング時は触らない）
         'enable_early_stopping': True,  # Early stoppingを有効化（True推奨：計算時間短縮）
+        'early_stopping_patience': 5,  # Early stopping待機回数（改善が見られない回数、3-5推奨）
+        'early_stopping_batch_size': 50,  # Early stoppingのバッチサイズ（50=標準、100=高速、200=最速）
         'search_space': {
             'n_components': (10, 30),  # 探索範囲（最小, 最大）※40->30に縮小
             'alpha_W': (0.001, 0.5),  # 対数スケールで探索（正則化強度）※1.0->0.5に縮小

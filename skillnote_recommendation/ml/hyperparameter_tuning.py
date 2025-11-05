@@ -45,7 +45,9 @@ class NMFHyperparameterTuner:
         progress_callback: Optional[Callable] = None,
         use_time_series_split: bool = True,
         test_size: float = 0.15,
-        enable_early_stopping: bool = True
+        enable_early_stopping: bool = True,
+        early_stopping_patience: int = 5,
+        early_stopping_batch_size: int = 50
     ):
         """
         初期化
@@ -64,6 +66,9 @@ class NMFHyperparameterTuner:
             use_time_series_split: TimeSeriesSplitを使用するか（推奨: True, 時系列データの場合）
             test_size: テストセットのサイズ（0.0-1.0）デフォルト15%
             enable_early_stopping: Early stoppingを有効にするか
+            early_stopping_patience: Early stopping用の待機回数（デフォルト: 5）
+            early_stopping_batch_size: Early stopping用のバッチサイズ（デフォルト: 50）
+                                       大きくすると高速化（推奨: 100-200）
         """
         if not OPTUNA_AVAILABLE:
             raise ImportError(
@@ -95,6 +100,8 @@ class NMFHyperparameterTuner:
         self.use_time_series_split = use_time_series_split
         self.test_size = test_size
         self.enable_early_stopping = enable_early_stopping
+        self.early_stopping_patience = early_stopping_patience
+        self.early_stopping_batch_size = early_stopping_batch_size
 
         # 最適化された探索空間（より狭い範囲で効率的に探索）
         self.search_space = search_space or {
@@ -151,8 +158,9 @@ class NMFHyperparameterTuner:
                         **params,
                         random_state=self.random_state,
                         early_stopping=self.enable_early_stopping,
-                        early_stopping_patience=5,
-                        early_stopping_min_delta=1e-5
+                        early_stopping_patience=self.early_stopping_patience,
+                        early_stopping_min_delta=1e-5,
+                        early_stopping_batch_size=self.early_stopping_batch_size
                     )
                     model.fit(train_matrix)
 
@@ -537,7 +545,14 @@ class NMFHyperparameterTuner:
         logger.info(f"最良モデルの学習: params={params}, random_state={self.random_state}")
 
         # モデルを学習（全データで、固定されたrandom_stateを使用）
-        model = MatrixFactorizationModel(**params, random_state=self.random_state)
+        model = MatrixFactorizationModel(
+            **params,
+            random_state=self.random_state,
+            early_stopping=self.enable_early_stopping,
+            early_stopping_patience=self.early_stopping_patience,
+            early_stopping_min_delta=1e-5,
+            early_stopping_batch_size=self.early_stopping_batch_size
+        )
         model.fit(self.skill_matrix)
 
         logger.info(f"最良モデル学習完了: reconstruction_error={model.get_reconstruction_error():.6f}")
@@ -721,7 +736,9 @@ def tune_nmf_hyperparameters_from_config(
         progress_callback=progress_callback,
         use_time_series_split=optuna_params.get('use_time_series_split', True),
         test_size=optuna_params.get('test_size', 0.15),
-        enable_early_stopping=optuna_params.get('enable_early_stopping', True)
+        enable_early_stopping=optuna_params.get('enable_early_stopping', True),
+        early_stopping_patience=optuna_params.get('early_stopping_patience', 5),
+        early_stopping_batch_size=optuna_params.get('early_stopping_batch_size', 50)
     )
 
     best_params, best_value = tuner.optimize(show_progress_bar=show_progress_bar)
