@@ -87,20 +87,26 @@ class NMFHyperparameterTuner:
         logger.info(f"Trial {trial.number}: {params}")
 
         try:
+            # 重要：各トライアルで異なるrandom_stateを使用
+            # NMFは非凸最適化なので、異なる初期値から探索することで
+            # より良い局所最適解を見つけられる可能性がある
+            trial_random_state = self.random_state + trial.number
+
             # モデルを学習
-            model = MatrixFactorizationModel(**params, random_state=self.random_state)
+            model = MatrixFactorizationModel(**params, random_state=trial_random_state)
             model.fit(self.skill_matrix)
 
             # 再構成誤差を取得
             reconstruction_error = model.get_reconstruction_error()
 
             # デバッグ：再構成誤差をログ出力
-            logger.info(f"Trial {trial.number} reconstruction error: {reconstruction_error:.6f}")
+            logger.info(f"Trial {trial.number} reconstruction error: {reconstruction_error:.6f} (random_state={trial_random_state})")
 
             # 追加メトリクスをログ
             trial.set_user_attr('n_iter', model.model.n_iter_)
             trial.set_user_attr('sparsity_W', np.sum(model.W == 0) / model.W.size)
             trial.set_user_attr('sparsity_H', np.sum(model.H == 0) / model.H.size)
+            trial.set_user_attr('random_state', trial_random_state)
 
             return reconstruction_error
 
@@ -228,8 +234,14 @@ class NMFHyperparameterTuner:
         params['solver'] = 'cd'
         params['tol'] = 1e-5
 
-        # モデルを学習
-        model = MatrixFactorizationModel(**params, random_state=self.random_state)
+        # 最良トライアルで使われたrandom_stateを取得
+        best_trial = self.study.best_trial
+        best_random_state = best_trial.user_attrs.get('random_state', self.random_state)
+
+        logger.info(f"最良モデルの学習: random_state={best_random_state}")
+
+        # モデルを学習（最良トライアルと同じrandom_stateを使用）
+        model = MatrixFactorizationModel(**params, random_state=best_random_state)
         model.fit(self.skill_matrix)
 
         return model
