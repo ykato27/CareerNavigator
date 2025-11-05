@@ -176,32 +176,121 @@ def main():
 
     with col1:
         if st.button("🕸️ Graph-basedモデルを学習", type="primary"):
-            with st.spinner("Graph-basedモデルを学習中..."):
-                start_time = time.time()
+            # プログレスバーと経過時間の表示用プレースホルダー
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            time_text = st.empty()
+
+            start_time = time.time()
+
+            try:
+                # Step 1: 初期化 (10%)
+                status_text.text("🔧 モデルを初期化中...")
+                progress_bar.progress(10)
+                elapsed = time.time() - start_time
+                time_text.text(f"⏱️ 経過時間: {elapsed:.1f}秒")
 
                 graph_recommender = SkillTransitionGraphRecommender(
                     time_window_days=time_window,
                     min_transition_count=min_transitions
                 )
+                time.sleep(0.1)  # UI更新のための短い待機
 
-                try:
-                    graph_recommender.fit(member_competence, competence_master)
-                    train_time = time.time() - start_time
+                # Step 2: グラフ構築開始 (20%)
+                status_text.text("🕸️ スキル遷移グラフを構築中...")
+                progress_bar.progress(20)
+                elapsed = time.time() - start_time
+                time_text.text(f"⏱️ 経過時間: {elapsed:.1f}秒")
 
-                    # セッションステートに保存
-                    st.session_state['graph_recommender'] = graph_recommender
-                    st.session_state['graph_train_time'] = train_time
+                # グラフ構築のみを実行（fitの前半部分）
+                # 実際のfit処理
+                graph_recommender.member_competence = member_competence.copy()
+                graph_recommender.competence_master = competence_master.copy()
+                time.sleep(0.1)  # UI更新のための短い待機
 
-                    st.success(f"✅ 学習完了！ (所要時間: {train_time:.2f}秒)")
+                # Step 3: グラフ構築中 (40%)
+                status_text.text("📊 学習遷移パターンを抽出中...")
+                progress_bar.progress(40)
+                elapsed = time.time() - start_time
+                time_text.text(f"⏱️ 経過時間: {elapsed:.1f}秒")
 
-                    # グラフ統計
-                    stats = graph_recommender.get_graph_statistics()
-                    st.metric("グラフノード数", f"{stats['num_nodes']}")
-                    st.metric("グラフエッジ数", f"{stats['num_edges']}")
+                graph_recommender.graph = graph_recommender._build_transition_graph()
 
-                except Exception as e:
-                    st.error(f"❌ 学習エラー: {e}")
-                    st.exception(e)
+                # Step 4: グラフ構築完了 (60%)
+                elapsed = time.time() - start_time
+                status_text.text(f"✅ グラフ構築完了 ({graph_recommender.graph.number_of_nodes()}ノード, {graph_recommender.graph.number_of_edges()}エッジ)")
+                progress_bar.progress(60)
+                time_text.text(f"⏱️ 経過時間: {elapsed:.1f}秒")
+                time.sleep(0.2)  # ユーザーが結果を確認できるように
+
+                # Step 5: Node2Vec学習 (80%)
+                if graph_recommender.graph.number_of_nodes() > 1:
+                    status_text.text("🧮 Node2Vec埋め込みを学習中（ランダムウォーク生成）...")
+                    progress_bar.progress(70)
+                    elapsed = time.time() - start_time
+                    time_text.text(f"⏱️ 経過時間: {elapsed:.1f}秒")
+                    time.sleep(0.1)
+
+                    # Node2Vec学習開始
+                    status_text.text("🧮 Node2Vec埋め込みを学習中（モデル学習）...")
+                    progress_bar.progress(80)
+                    elapsed = time.time() - start_time
+                    time_text.text(f"⏱️ 経過時間: {elapsed:.1f}秒")
+
+                    graph_recommender._train_node2vec()
+
+                    # Node2Vec完了
+                    elapsed = time.time() - start_time
+                    status_text.text("✅ Node2Vec埋め込み学習完了")
+                    progress_bar.progress(95)
+                    time_text.text(f"⏱️ 経過時間: {elapsed:.1f}秒")
+                    time.sleep(0.2)
+                else:
+                    status_text.warning("⚠️ グラフのノード数が不足。Node2Vecをスキップ")
+                    progress_bar.progress(95)
+
+                # Step 6: 完了処理 (100%)
+                graph_recommender.is_fitted = True
+                graph_recommender.metadata = {
+                    'num_nodes': graph_recommender.graph.number_of_nodes(),
+                    'num_edges': graph_recommender.graph.number_of_edges(),
+                    'time_window_days': graph_recommender.time_window_days,
+                    'min_transition_count': graph_recommender.min_transition_count,
+                    'has_embeddings': graph_recommender.node2vec_model is not None
+                }
+
+                status_text.text("✅ 学習完了！")
+                progress_bar.progress(100)
+
+                train_time = time.time() - start_time
+                time_text.text(f"⏱️ 総学習時間: {train_time:.2f}秒")
+
+                # セッションステートに保存
+                st.session_state['graph_recommender'] = graph_recommender
+                st.session_state['graph_train_time'] = train_time
+
+                # 成功メッセージ
+                st.success(f"🎉 学習完了！ (所要時間: {train_time:.2f}秒)")
+
+                # グラフ統計
+                stats = graph_recommender.get_graph_statistics()
+
+                col_stat1, col_stat2, col_stat3 = st.columns(3)
+                with col_stat1:
+                    st.metric("グラフノード数", f"{stats['num_nodes']:,}")
+                with col_stat2:
+                    st.metric("グラフエッジ数", f"{stats['num_edges']:,}")
+                with col_stat3:
+                    st.metric("グラフ密度", f"{stats['density']:.4f}")
+
+            except Exception as e:
+                status_text.text("❌ 学習エラー")
+                progress_bar.progress(0)
+                elapsed = time.time() - start_time
+                time_text.text(f"⏱️ 経過時間: {elapsed:.2f}秒")
+
+                st.error(f"❌ 学習エラー: {e}")
+                st.exception(e)
 
     with col2:
         # NMFモデルはすでに学習済みと仮定
