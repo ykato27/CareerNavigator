@@ -235,6 +235,136 @@ def create_positioning_plot(
     return fig
 
 
+def create_positioning_plot_with_patterns(
+    position_df: pd.DataFrame,
+    target_member_code: str,
+    similar_career_codes: List[str],
+    different_career1_codes: List[str],
+    different_career2_codes: List[str],
+    x_col: str,
+    y_col: str,
+    title: str,
+    height: int = 500
+) -> go.Figure:
+    """
+    Create an interactive scatter plot with career pattern-based coloring.
+
+    Members are color-coded as:
+    - Target member (red, large marker)
+    - Similar career (blue, medium marker)
+    - Different career 1 (green, medium marker)
+    - Different career 2 (orange, medium marker)
+    - Other members (gray, small marker)
+
+    Args:
+        position_df: DataFrame with member positioning data
+        target_member_code: Code of the target member to highlight
+        similar_career_codes: List of similar career person codes
+        different_career1_codes: List of different career 1 person codes
+        different_career2_codes: List of different career 2 person codes
+        x_col: Column name to use for X axis
+        y_col: Column name to use for Y axis
+        title: Plot title
+        height: Plot height in pixels (default: 500)
+
+    Returns:
+        Plotly Figure object with the scatter plot
+    """
+    # Classify member types
+    df = position_df.copy()
+    df["メンバータイプ"] = "その他"
+    df.loc[df["メンバーコード"] == target_member_code, "メンバータイプ"] = "あなた"
+    df.loc[
+        df["メンバーコード"].isin(similar_career_codes),
+        "メンバータイプ"
+    ] = "💼 類似キャリア"
+    df.loc[
+        df["メンバーコード"].isin(different_career1_codes),
+        "メンバータイプ"
+    ] = "🌟 異なるキャリア1"
+    df.loc[
+        df["メンバーコード"].isin(different_career2_codes),
+        "メンバータイプ"
+    ] = "🚀 異なるキャリア2"
+
+    # Map colors and sizes
+    color_map = {
+        "あなた": COLOR_TARGET_MEMBER,  # 赤
+        "💼 類似キャリア": "#4B8BFF",  # 青
+        "🌟 異なるキャリア1": "#4CAF50",  # 緑
+        "🚀 異なるキャリア2": "#FF9800",  # オレンジ
+        "その他": COLOR_OTHER_MEMBER  # グレー
+    }
+
+    size_map = {
+        "あなた": MARKER_SIZE_TARGET,
+        "💼 類似キャリア": MARKER_SIZE_REFERENCE,
+        "🌟 異なるキャリア1": MARKER_SIZE_REFERENCE,
+        "🚀 異なるキャリア2": MARKER_SIZE_REFERENCE,
+        "その他": MARKER_SIZE_OTHER
+    }
+
+    df["color"] = df["メンバータイプ"].map(color_map)
+    df["size"] = df["メンバータイプ"].map(size_map)
+
+    # Adjust plot order (others -> different2 -> different1 -> similar -> target)
+    df["plot_order"] = df["メンバータイプ"].map({
+        "その他": 1,
+        "🚀 異なるキャリア2": 2,
+        "🌟 異なるキャリア1": 3,
+        "💼 類似キャリア": 4,
+        "あなた": 5
+    })
+    df = df.sort_values("plot_order")
+
+    # Create scatter plot
+    fig = go.Figure()
+
+    for member_type in ["その他", "🚀 異なるキャリア2", "🌟 異なるキャリア1", "💼 類似キャリア", "あなた"]:
+        df_subset = df[df["メンバータイプ"] == member_type]
+
+        if len(df_subset) == 0:
+            continue
+
+        fig.add_trace(go.Scatter(
+            x=df_subset[x_col],
+            y=df_subset[y_col],
+            mode="markers",
+            name=member_type,
+            marker=dict(
+                size=df_subset["size"],
+                color=df_subset["color"],
+                line=dict(width=1, color="white")
+            ),
+            text=df_subset["メンバー名"],
+            customdata=df_subset["メンバーコード"],
+            hovertemplate=(
+                "<b>%{text}</b><br>" +
+                "コード: %{customdata}<br>" +
+                f"{x_col}: %{{x:.1f}}<br>" +
+                f"{y_col}: %{{y:.2f}}<br>" +
+                "<extra></extra>"
+            )
+        ))
+
+    fig.update_layout(
+        title=title,
+        xaxis_title=x_col,
+        yaxis_title=y_col,
+        hovermode="closest",
+        height=height,
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        )
+    )
+
+    return fig
+
+
 def prepare_positioning_display_dataframe(
     position_df: pd.DataFrame,
     target_member_code: str,
