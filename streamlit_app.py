@@ -186,6 +186,18 @@ if all_uploaded:
                 # DataTransformerで変換済みデータを構築
                 transformed_data = build_transformed_data(raw_data)
 
+                # データの検証
+                if transformed_data['member_competence'].empty:
+                    st.error("❌ メンバーの習得力量データが空です。")
+                    st.warning(
+                        "以下を確認してください:\n"
+                        "1. **保有力量データ (acquiredCompetenceLevel.csv)** にデータが含まれているか\n"
+                        "2. 必須カラムが存在するか: メンバーコード、力量コード、力量タイプ、レベル\n"
+                        "3. メンバーマスタに有効なメンバーが登録されているか"
+                    )
+                    st.info("詳細なログ情報はターミナルまたはログファイルを確認してください。")
+                    st.stop()
+
                 # Knowledge Graphを構築
                 from skillnote_recommendation.graph import CompetenceKnowledgeGraph
 

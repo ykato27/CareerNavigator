@@ -221,6 +221,21 @@ class CompetenceKnowledgeGraph:
             threshold: 類似度の閾値（この値以上のペアにエッジを張る）
             top_k: 各メンバーに対して上位K人までエッジを張る
         """
+        # メンバー習得力量データの存在確認
+        if self.member_competence_df.empty:
+            logger.warning("  ⚠ メンバー習得力量データが空のため、類似度エッジをスキップします")
+            return
+
+        # 必要なカラムの存在確認
+        required_columns = ['メンバーコード', '力量コード', '正規化レベル']
+        missing_columns = [col for col in required_columns if col not in self.member_competence_df.columns]
+        if missing_columns:
+            logger.warning(
+                "  ⚠ 必要なカラムが不足しているため、類似度エッジをスキップします: %s",
+                missing_columns
+            )
+            return
+
         # メンバー×力量マトリクスを作成
         member_comp_matrix = self.member_competence_df.pivot_table(
             index='メンバーコード',
@@ -228,6 +243,21 @@ class CompetenceKnowledgeGraph:
             values='正規化レベル',
             fill_value=0
         )
+
+        # マトリクスが空でないか確認
+        if member_comp_matrix.empty or member_comp_matrix.shape[0] == 0 or member_comp_matrix.shape[1] == 0:
+            logger.warning(
+                "  ⚠ メンバー×力量マトリクスが空のため、類似度エッジをスキップします "
+                "(メンバー数: %d, 力量数: %d)",
+                member_comp_matrix.shape[0] if len(member_comp_matrix.shape) > 0 else 0,
+                member_comp_matrix.shape[1] if len(member_comp_matrix.shape) > 1 else 0
+            )
+            return
+
+        # メンバーが1人以下の場合は類似度計算不要
+        if member_comp_matrix.shape[0] < 2:
+            logger.info("  メンバーが1人以下のため、類似度エッジの追加をスキップします")
+            return
 
         # コサイン類似度を計算
         similarity_matrix = cosine_similarity(member_comp_matrix.values)
