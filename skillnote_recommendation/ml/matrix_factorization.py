@@ -142,20 +142,14 @@ class MatrixFactorizationModel:
             # NMFモデルを再作成（max_iterを更新）
             nmf_params = self.nmf_params.copy()
             nmf_params['max_iter'] = current_max_iter
-            nmf_params['init'] = 'nndsvda' if current_max_iter == batch_size else 'custom'
+            # 常にnndsvdaを使用（customは初期値W,Hが必要で複雑になるため）
+            nmf_params['init'] = 'nndsvda'
 
             temp_model = NMF(
                 n_components=self.n_components,
                 random_state=self.random_state,
                 **nmf_params
             )
-
-            # 前回の結果から継続学習（2回目以降）
-            if current_max_iter > batch_size and best_W is not None:
-                # warm_startの代わりに、前回の結果を初期値として使用
-                # sklearnのNMFはwarm_startをサポートしていないため、
-                # 毎回max_iterを増やして全体を再学習
-                pass
 
             # 学習
             W = temp_model.fit_transform(X)
