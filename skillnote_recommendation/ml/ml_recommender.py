@@ -118,17 +118,24 @@ class MLRecommender:
             mf_params = Config.MF_PARAMS.copy()
             n_components = mf_params.pop('n_components')
             random_state = mf_params.pop('random_state')
+            use_confidence_weighting = mf_params.pop('use_confidence_weighting', False)
+            confidence_alpha = mf_params.pop('confidence_alpha', 1.0)
 
             # NMFモデルを学習
             mf_model = MatrixFactorizationModel(
                 n_components=n_components,
                 random_state=random_state,
+                use_confidence_weighting=use_confidence_weighting,
+                confidence_alpha=confidence_alpha,
                 **mf_params
             )
             mf_model.fit(skill_matrix)
 
             print(f"\n✅ 学習完了")
             print(f"潜在因子数: {mf_model.n_components}")
+            print(f"Confidence Weighting: {mf_model.use_confidence_weighting}")
+            if mf_model.use_confidence_weighting:
+                print(f"Confidence Alpha: {mf_model.confidence_alpha}")
             print(f"イテレーション数: {mf_model.model.n_iter_}")
             print(f"再構成誤差: {mf_model.get_reconstruction_error():.6f}")
 

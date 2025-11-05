@@ -2,12 +2,18 @@
 Optunaベースのハイパーパラメータチューニングモジュール
 
 NMFモデルのハイパーパラメータをベイズ最適化で探索
+
+改善内容:
+1. random_state固定化（パラメータの効果と初期値の効果を分離）
+2. K-Fold交差検証の導入（過学習の検出）
+3. 探索空間の最適化（効率的な探索）
 """
 
 import pandas as pd
 import numpy as np
 from typing import Dict, Tuple, Optional, Callable
 import logging
+from sklearn.model_selection import KFold
 
 try:
     import optuna
@@ -32,7 +38,9 @@ class NMFHyperparameterTuner:
         timeout: Optional[int] = 600,
         n_jobs: int = 1,
         random_state: int = 42,
-        search_space: Optional[Dict] = None
+        search_space: Optional[Dict] = None,
+        use_cross_validation: bool = True,
+        n_folds: int = 3
     ):
         """
         初期化
@@ -42,8 +50,10 @@ class NMFHyperparameterTuner:
             n_trials: 試行回数
             timeout: タイムアウト（秒）
             n_jobs: 並列実行数
-            random_state: 乱数シード
+            random_state: 乱数シード（固定化により再現性を確保）
             search_space: 探索空間の辞書
+            use_cross_validation: 交差検証を使用するか（推奨: True）
+            n_folds: 交差検証の分割数（デフォルト: 3, 計算時間とのトレードオフ）
         """
         if not OPTUNA_AVAILABLE:
             raise ImportError(
@@ -56,14 +66,16 @@ class NMFHyperparameterTuner:
         self.timeout = timeout
         self.n_jobs = n_jobs
         self.random_state = random_state
+        self.use_cross_validation = use_cross_validation
+        self.n_folds = n_folds
 
-        # デフォルトの探索空間
+        # 最適化された探索空間（より狭い範囲で効率的に探索）
         self.search_space = search_space or {
-            'n_components': (10, 40),
-            'alpha_W': (0.001, 1.0),  # 対数スケールで探索（0.001で有効化）
-            'alpha_H': (0.001, 1.0),  # 対数スケールで探索（0.001で有効化）
+            'n_components': (10, 30),  # 40 -> 30に縮小（計算効率改善）
+            'alpha_W': (0.001, 0.5),   # 1.0 -> 0.5に縮小（過度な正則化を避ける）
+            'alpha_H': (0.001, 0.5),   # 1.0 -> 0.5に縮小
             'l1_ratio': (0.0, 1.0),
-            'max_iter': (500, 2000),
+            'max_iter': (500, 1500),   # 2000 -> 1500に縮小（計算効率改善）
         }
 
         self.best_params = None
@@ -72,13 +84,18 @@ class NMFHyperparameterTuner:
 
     def objective(self, trial: 'optuna.Trial') -> float:
         """
-        Optunaの目的関数（再構成誤差を最小化）
+        Optunaの目的関数（交差検証による再構成誤差を最小化）
+
+        改善点:
+        1. random_stateを固定（パラメータの効果のみを評価）
+        2. 交差検証による汎化性能の評価
+        3. より詳細なメトリクスの記録
 
         Args:
             trial: Optunaのtrialオブジェクト
 
         Returns:
-            再構成誤差
+            交差検証による平均再構成誤差、またはfull-data再構成誤差
         """
         # ハイパーパラメータをサンプリング
         params = self._suggest_params(trial)
@@ -87,33 +104,117 @@ class NMFHyperparameterTuner:
         logger.info(f"Trial {trial.number}: {params}")
 
         try:
-            # 重要：各トライアルで異なるrandom_stateを使用
-            # NMFは非凸最適化なので、異なる初期値から探索することで
-            # より良い局所最適解を見つけられる可能性がある
-            trial_random_state = self.random_state + trial.number
+            if self.use_cross_validation:
+                # 交差検証を使用
+                cv_errors = []
+                kfold = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_state)
 
-            # モデルを学習
-            model = MatrixFactorizationModel(**params, random_state=trial_random_state)
-            model.fit(self.skill_matrix)
+                for fold_idx, (train_idx, val_idx) in enumerate(kfold.split(self.skill_matrix)):
+                    # 訓練データと検証データに分割
+                    train_matrix = self.skill_matrix.iloc[train_idx]
+                    val_matrix = self.skill_matrix.iloc[val_idx]
 
-            # 再構成誤差を取得
-            reconstruction_error = model.get_reconstruction_error()
+                    # モデルを学習（random_stateは固定）
+                    model = MatrixFactorizationModel(**params, random_state=self.random_state)
+                    model.fit(train_matrix)
 
-            # デバッグ：再構成誤差をログ出力
-            logger.info(f"Trial {trial.number} reconstruction error: {reconstruction_error:.6f} (random_state={trial_random_state})")
+                    # 検証データで評価
+                    val_error = self._calculate_validation_error(model, train_matrix, val_matrix)
+                    cv_errors.append(val_error)
 
-            # 追加メトリクスをログ
-            trial.set_user_attr('n_iter', model.model.n_iter_)
-            trial.set_user_attr('sparsity_W', np.sum(model.W == 0) / model.W.size)
-            trial.set_user_attr('sparsity_H', np.sum(model.H == 0) / model.H.size)
-            trial.set_user_attr('random_state', trial_random_state)
+                    logger.debug(f"  Fold {fold_idx+1}/{self.n_folds}: error={val_error:.6f}")
 
-            return reconstruction_error
+                # 平均誤差を計算
+                mean_cv_error = np.mean(cv_errors)
+                std_cv_error = np.std(cv_errors)
+
+                logger.info(f"Trial {trial.number} CV error: {mean_cv_error:.6f} (±{std_cv_error:.6f})")
+
+                # 追加メトリクスをログ
+                trial.set_user_attr('cv_std', std_cv_error)
+                trial.set_user_attr('cv_errors', cv_errors)
+
+                return mean_cv_error
+            else:
+                # 交差検証なし（従来の方法、ただしrandom_stateは固定）
+                model = MatrixFactorizationModel(**params, random_state=self.random_state)
+                model.fit(self.skill_matrix)
+
+                # 再構成誤差を取得
+                reconstruction_error = model.get_reconstruction_error()
+
+                logger.info(f"Trial {trial.number} reconstruction error: {reconstruction_error:.6f}")
+
+                # 追加メトリクスをログ
+                trial.set_user_attr('n_iter', model.model.n_iter_)
+                trial.set_user_attr('sparsity_W', np.sum(model.W == 0) / model.W.size)
+                trial.set_user_attr('sparsity_H', np.sum(model.H == 0) / model.H.size)
+
+                return reconstruction_error
 
         except Exception as e:
             logger.warning(f"Trial {trial.number} failed: {e}")
             # 失敗した場合は大きな値を返す
             return float('inf')
+
+    def _calculate_validation_error(
+        self,
+        model: MatrixFactorizationModel,
+        train_matrix: pd.DataFrame,
+        val_matrix: pd.DataFrame
+    ) -> float:
+        """
+        検証データでの再構成誤差を計算
+
+        検証データのメンバーのうち、訓練データに存在するメンバーのみを対象に、
+        力量の予測精度を評価します。
+
+        Args:
+            model: 学習済みモデル
+            train_matrix: 訓練データ
+            val_matrix: 検証データ
+
+        Returns:
+            検証データでの再構成誤差（Frobenius norm）
+        """
+        total_squared_error = 0.0
+        total_elements = 0
+
+        for member_code in val_matrix.index:
+            # 訓練データに存在するメンバーのみ評価可能
+            if member_code not in model.member_index:
+                continue
+
+            # 予測スコアを取得
+            try:
+                pred_scores = model.predict(member_code)
+            except ValueError:
+                continue
+
+            # 実際の値
+            actual_scores = val_matrix.loc[member_code]
+
+            # 共通の力量コードのみを比較
+            common_codes = list(set(pred_scores.index) & set(actual_scores.index))
+
+            if not common_codes:
+                continue
+
+            # 二乗誤差を計算
+            pred_values = pred_scores[common_codes].values
+            actual_values = actual_scores[common_codes].values
+
+            squared_error = np.sum((pred_values - actual_values) ** 2)
+            total_squared_error += squared_error
+            total_elements += len(common_codes)
+
+        # Frobenius norm（平方根を取る）
+        if total_elements == 0:
+            return float('inf')
+
+        reconstruction_error = np.sqrt(total_squared_error)
+
+        return reconstruction_error
 
     def _suggest_params(self, trial: 'optuna.Trial') -> Dict:
         """
@@ -222,6 +323,8 @@ class NMFHyperparameterTuner:
         """
         最適なパラメータで学習したモデルを取得
 
+        改善点: random_stateを固定（self.random_state）し、全データで学習
+
         Returns:
             学習済みMatrixFactorizationModel
         """
@@ -234,15 +337,13 @@ class NMFHyperparameterTuner:
         params['solver'] = 'cd'
         params['tol'] = 1e-5
 
-        # 最良トライアルで使われたrandom_stateを取得
-        best_trial = self.study.best_trial
-        best_random_state = best_trial.user_attrs.get('random_state', self.random_state)
+        logger.info(f"最良モデルの学習: params={params}, random_state={self.random_state}")
 
-        logger.info(f"最良モデルの学習: random_state={best_random_state}")
-
-        # モデルを学習（最良トライアルと同じrandom_stateを使用）
-        model = MatrixFactorizationModel(**params, random_state=best_random_state)
+        # モデルを学習（全データで、固定されたrandom_stateを使用）
+        model = MatrixFactorizationModel(**params, random_state=self.random_state)
         model.fit(self.skill_matrix)
+
+        logger.info(f"最良モデル学習完了: reconstruction_error={model.get_reconstruction_error():.6f}")
 
         return model
 
@@ -371,7 +472,9 @@ def tune_nmf_hyperparameters_from_config(
         timeout=optuna_params['timeout'],
         n_jobs=optuna_params['n_jobs'],
         random_state=config.MF_PARAMS['random_state'],
-        search_space=optuna_params['search_space']
+        search_space=optuna_params['search_space'],
+        use_cross_validation=optuna_params.get('use_cross_validation', True),
+        n_folds=optuna_params.get('n_folds', 3)
     )
 
     best_params, best_value = tuner.optimize(show_progress_bar=show_progress_bar)
