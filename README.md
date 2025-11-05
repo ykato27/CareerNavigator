@@ -559,6 +559,31 @@ uv pip install -e .
 
 ## ドキュメント
 
+### 🆕 v2.0.0 リファクタリング関連
+
+- **[リファクタリングガイド (REFACTORING_GUIDE.md)](REFACTORING_GUIDE.md)** - **Phase 1-3の包括的なガイド**
+  - 新機能の詳細説明
+  - マイグレーションガイド
+  - 使用例とベストプラクティス
+
+- **[アーキテクチャドキュメント (ARCHITECTURE.md)](ARCHITECTURE.md)** - システム設計ドキュメント
+  - アーキテクチャ概要
+  - モジュール構成
+  - データフロー
+
+- **[APIリファレンス (API_REFERENCE.md)](API_REFERENCE.md)** - 新しいAPI使用方法
+  - 構造化ロギング
+  - エラーハンドリング
+  - Config管理
+  - データバリデーション
+
+- **[コントリビューションガイド (CONTRIBUTING.md)](CONTRIBUTING.md)** - 開発者向けガイド
+  - 開発環境のセットアップ
+  - コーディング規約
+  - プルリクエストのガイドライン
+
+### 既存ドキュメント
+
 - [Streamlitアプリガイド (docs/STREAMLIT_GUIDE.md)](docs/STREAMLIT_GUIDE.md) - **Webアプリケーション完全ガイド**
   - 起動方法と使い方
   - 既存メンバー・新規ユーザーへの推薦
@@ -583,6 +608,31 @@ uv pip install -e .
 - [新規ユーザーCSVテンプレート (templates/)](templates/) - 新規ユーザー用CSVテンプレートと使い方
 
 ## バージョン履歴
+
+- **v2.0.0 (2025-11-05)** - **🚀 GAFA-Level Enterprise Refactoring**
+  - **Phase 1: 基盤強化**
+    - ✅ 構造化ロギング導入（structlog + JSON出力）
+    - ✅ エラーハンドリング体系化（エラーコード体系、リトライ可能性判定）
+    - ✅ リトライロジック実装（指数バックオフ、自動リトライ）
+  - **Phase 2: アーキテクチャ改善**
+    - ✅ Config管理リファクタリング（不変設計、環境分離 dev/staging/prod）
+    - ✅ 依存性注入パターン導入（Protocol、ABC）
+    - ✅ インターフェース定義（型安全性向上）
+  - **Phase 3: セキュリティ・品質**
+    - ✅ モデル保存形式変更（pickle → joblib + JSON、バージョン管理）
+    - ✅ 入力バリデーション強化（Pydantic、自動検証）
+    - ✅ データ品質チェック導入（欠損値・無限値・分布検証）
+  - **型安全性の強化**
+    - mypy strict mode有効化（disallow_untyped_defs = true）
+    - Pydanticによる実行時バリデーション
+  - **依存関係追加**
+    - structlog>=23.0.0, pydantic>=2.0.0, tenacity>=8.0.0, joblib>=1.3.0
+  - **ドキュメント整備**
+    - REFACTORING_GUIDE.md: 包括的なリファクタリングガイド
+    - ARCHITECTURE.md: システムアーキテクチャドキュメント
+    - API_REFERENCE.md: 新しいAPI使用方法
+    - CONTRIBUTING.md: 開発者向けガイド
+  - **後方互換性維持**: 既存コードはそのまま動作（段階的移行可能）
 
 - v1.2.0 (2025-10-24)
   - **機械学習ベース推薦システム追加** (skillnote_recommendation/ml/)
