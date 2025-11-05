@@ -134,11 +134,22 @@ else:
             )
 
         with col2:
+            # Optunaが利用可能かチェック
+            try:
+                import optuna
+                optuna_available = True
+            except ImportError:
+                optuna_available = False
+
             use_tuning = st.checkbox(
                 "ハイパーパラメータチューニング (Optuna)",
                 value=False,
-                help="ベイズ最適化でハイパーパラメータを自動調整します。時間がかかりますが、最良のモデルを構築できます。"
+                help="ベイズ最適化でハイパーパラメータを自動調整します。時間がかかりますが、最良のモデルを構築できます。",
+                disabled=not optuna_available
             )
+
+            if not optuna_available:
+                st.error("⚠️ Optunaがインストールされていません。`uv pip install --system optuna` を実行してください。")
 
         if use_preprocessing:
             st.markdown("""
@@ -147,7 +158,7 @@ else:
             - 正規化: Min-Maxスケーリング（0-1範囲に正規化）
             """)
 
-        if use_tuning:
+        if use_tuning and optuna_available:
             st.markdown("---")
             st.markdown("### ⚙️ チューニング詳細設定")
 
@@ -234,6 +245,15 @@ else:
     button_label = "🚀 MLモデル学習を実行（チューニングあり）" if use_tuning else "🚀 MLモデル学習を実行"
 
     if st.button(button_label, type="primary"):
+        # Optunaチェック（チューニング有効時）
+        if use_tuning:
+            try:
+                import optuna
+            except ImportError:
+                st.error("❌ Optunaがインストールされていません。ハイパーパラメータチューニングを実行できません。")
+                st.info("💡 以下のコマンドでインストールしてください:\n```bash\nuv pip install --system optuna\n```")
+                st.stop()
+
         # デバッグ情報をsession_stateに初期化
         st.session_state.debug_messages = []
         st.session_state.show_debug_info = True
