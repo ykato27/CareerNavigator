@@ -18,6 +18,10 @@ from skillnote_recommendation.utils.streamlit_helpers import (
     check_data_loaded,
     display_error_details
 )
+from skillnote_recommendation.utils.ui_components import (
+    apply_rich_ui_styles,
+    render_gradient_header
+)
 
 
 def create_severity_distribution_chart(report):
@@ -156,10 +160,17 @@ def main():
         layout="wide"
     )
 
-    st.title("🔍 データ品質モニタリング")
-    st.markdown("""
-    このページでは、スキルノートデータの品質をチェックし、潜在的な問題を検出します。
+    # Apply rich UI styles
+    apply_rich_ui_styles()
 
+    # リッチなヘッダー
+    render_gradient_header(
+        title="データ品質モニタリング",
+        icon="🔍",
+        description="スキルノートデータの品質をチェックし、潜在的な問題を検出します"
+    )
+
+    st.markdown("""
     **チェック項目:**
     - ✅ **完全性（Completeness）**: 欠損値の検出
     - ✅ **一貫性（Consistency）**: 論理的整合性の検証

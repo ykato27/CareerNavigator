@@ -20,6 +20,10 @@ from skillnote_recommendation.utils.streamlit_helpers import (
     check_data_loaded,
     display_error_details
 )
+from skillnote_recommendation.utils.ui_components import (
+    apply_rich_ui_styles,
+    render_gradient_header
+)
 
 # =========================================================
 # ページ設定
@@ -31,63 +35,15 @@ st.set_page_config(
     layout="wide"
 )
 
-# カスタムCSS
-st.markdown("""
-<style>
-    .main {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    }
+# Apply rich UI styles
+apply_rich_ui_styles()
 
-    .card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 15px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin: 1rem 0;
-    }
-
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1rem;
-        border-radius: 10px;
-        text-align: center;
-        margin: 0.5rem 0;
-    }
-
-    .badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: bold;
-        margin: 0.25rem;
-    }
-
-    .badge-strong {
-        background: #dc3545;
-        color: white;
-    }
-
-    .badge-medium {
-        background: #ffc107;
-        color: black;
-    }
-
-    .badge-weak {
-        background: #6c757d;
-        color: white;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# ヘッダー
-st.markdown("""
-<div class="card">
-    <h1>🔗 スキル依存関係分析</h1>
-    <p>時系列データから学習順序パターンを抽出し、推奨される学習パスを表示します</p>
-</div>
-""", unsafe_allow_html=True)
+# リッチなヘッダー
+render_gradient_header(
+    title="スキル依存関係分析",
+    icon="🔗",
+    description="時系列データから学習順序パターンを抽出し、推奨される学習パスを表示します"
+)
 
 # =========================================================
 # 前提条件チェック
