@@ -203,23 +203,53 @@ if all_uploaded:
                     )
 
                     # デバッグ情報を表示
-                    with st.expander("🔍 詳細なデバッグ情報"):
+                    with st.expander("🔍 詳細なデバッグ情報", expanded=True):
                         st.markdown("### メンバーマスタ")
                         members_df = transformed_data['members_clean']
                         st.write(f"**有効なメンバー数**: {len(members_df)}名")
                         if not members_df.empty:
+                            st.write("**メンバーコードの例（先頭10件）:**")
+                            member_codes = members_df['メンバーコード'].head(10).tolist()
+                            for i, code in enumerate(member_codes, 1):
+                                st.code(f"{i}. [{type(code).__name__}] '{code}' (長さ: {len(str(code))})")
                             st.dataframe(members_df.head())
                         else:
                             st.warning("有効なメンバーが見つかりません")
 
+                        st.markdown("---")
                         st.markdown("### 保有力量データ（生データ）")
                         acquired_raw = raw_data.get('acquired', pd.DataFrame())
                         st.write(f"**総行数**: {len(acquired_raw)}件")
                         st.write(f"**カラム**: {list(acquired_raw.columns)}")
                         if not acquired_raw.empty:
+                            st.write("**メンバーコードの例（ユニークな先頭10件）:**")
+                            acquired_codes = acquired_raw['メンバーコード'].dropna().unique()[:10]
+                            for i, code in enumerate(acquired_codes, 1):
+                                st.code(f"{i}. [{type(code).__name__}] '{code}' (長さ: {len(str(code))})")
                             st.dataframe(acquired_raw.head())
                         else:
                             st.warning("保有力量データが空です")
+
+                        # メンバーコードの一致チェック
+                        if not members_df.empty and not acquired_raw.empty:
+                            st.markdown("---")
+                            st.markdown("### 🔍 メンバーコードの一致確認")
+                            member_codes_set = set(members_df['メンバーコード'].unique())
+                            acquired_codes_set = set(acquired_raw['メンバーコード'].dropna().unique())
+                            matching_codes = member_codes_set & acquired_codes_set
+
+                            st.write(f"**メンバーマスタのユニークなメンバーコード数**: {len(member_codes_set)}")
+                            st.write(f"**保有力量データのユニークなメンバーコード数**: {len(acquired_codes_set)}")
+                            st.write(f"**一致するメンバーコード数**: {len(matching_codes)}")
+
+                            if len(matching_codes) == 0:
+                                st.error("⚠️ メンバーコードが1つも一致していません！")
+                                st.write("**型や形式の違いを確認してください：**")
+                                st.write("- メンバーマスタのメンバーコード型:", type(list(member_codes_set)[0]).__name__ if member_codes_set else "N/A")
+                                st.write("- 保有力量データのメンバーコード型:", type(list(acquired_codes_set)[0]).__name__ if acquired_codes_set else "N/A")
+                            else:
+                                st.success(f"✅ {len(matching_codes)}件のメンバーコードが一致しています")
+                                st.write("**一致例（先頭5件）:**", list(matching_codes)[:5])
 
                     st.info("💡 より詳細なログ情報はターミナルまたはログファイルを確認してください。")
                     st.stop()

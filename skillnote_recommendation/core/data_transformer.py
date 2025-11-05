@@ -16,7 +16,33 @@ logger = logging.getLogger(__name__)
 
 class DataTransformer:
     """データ変換クラス"""
-    
+
+    @staticmethod
+    def normalize_member_code(code) -> str:
+        """
+        メンバーコードを正規化
+
+        Args:
+            code: 元のメンバーコード
+
+        Returns:
+            正規化されたメンバーコード（文字列）
+        """
+        if pd.isna(code):
+            return ""
+
+        # 文字列に変換
+        code_str = str(code)
+
+        # 前後の空白を削除
+        code_str = code_str.strip()
+
+        # 全角英数字を半角に変換
+        import unicodedata
+        code_str = unicodedata.normalize('NFKC', code_str)
+
+        return code_str
+
     @staticmethod
     def normalize_level(level_value, competence_type: str) -> int:
         """
@@ -137,7 +163,7 @@ class DataTransformer:
         logger.info("=" * 80)
 
         # 習得力量データの確認
-        acquired_df = data['acquired']
+        acquired_df = data['acquired'].copy()
         logger.info("\n保有力量データ:")
         logger.info("  総行数: %d", len(acquired_df))
         logger.info("  カラム: %s", list(acquired_df.columns))
@@ -150,10 +176,18 @@ class DataTransformer:
             logger.error("  利用可能なカラム: %s", list(acquired_df.columns))
             raise ValueError(f"保有力量データに必須カラムが不足しています: {missing_columns}")
 
+        # メンバーコードを正規化
+        logger.info("\nメンバーコードを正規化中...")
+        acquired_df['メンバーコード'] = acquired_df['メンバーコード'].apply(self.normalize_member_code)
+        logger.info("  保有力量データのメンバーコードを正規化しました")
+
         # 有効なメンバーを抽出
-        valid_members = data['members'][
-            (~data['members']['メンバー名'].str.contains('削除|テスト|test', case=False, na=False)) &
-            (data['members']['メンバーコード'].notna())
+        members_df = data['members'].copy()
+        members_df['メンバーコード'] = members_df['メンバーコード'].apply(self.normalize_member_code)
+
+        valid_members = members_df[
+            (~members_df['メンバー名'].str.contains('削除|テスト|test', case=False, na=False)) &
+            (members_df['メンバーコード'] != "")
         ]['メンバーコード'].unique()
 
         logger.info("\n有効なメンバー数: %d名", len(valid_members))
@@ -256,23 +290,28 @@ class DataTransformer:
     def clean_members_data(self, data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """
         メンバーマスタをクリーンにする
-        
+
         Args:
             data: 読み込んだデータの辞書
-            
+
         Returns:
             クリーンなメンバーマスタ
         """
-        members_clean = data['members'][
-            (~data['members']['メンバー名'].str.contains('削除|テスト|test', case=False, na=False)) &
-            (data['members']['メンバーコード'].notna())
+        members_df = data['members'].copy()
+
+        # メンバーコードを正規化
+        members_df['メンバーコード'] = members_df['メンバーコード'].apply(self.normalize_member_code)
+
+        members_clean = members_df[
+            (~members_df['メンバー名'].str.contains('削除|テスト|test', case=False, na=False)) &
+            (members_df['メンバーコード'] != "")
         ].copy()
-        
+
         # 必要なカラムのみ抽出
         columns = ['メンバーコード', 'メンバー名', 'よみがな', '生年月日', '性別',
                   '入社年月日', '社員区分', '役職', '職能・等級']
-        
+
         # 存在するカラムのみ選択
         available_columns = [col for col in columns if col in members_clean.columns]
-        
+
         return members_clean[available_columns]
