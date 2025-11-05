@@ -45,6 +45,30 @@ class Config:
         'similarity_sample_size': 100  # 類似度計算のサンプル数
     }
 
+    # キャリアパターン別推薦パラメータ
+    CAREER_PATTERN_PARAMS = {
+        # 類似度の閾値（3段階分類）
+        'similar_career_threshold': 0.7,      # この値以上：類似キャリア
+        'different_career1_threshold': 0.4,   # この値以上：異なるキャリア1
+        # 0.4未満：異なるキャリア2
+
+        # 各パターンの推薦件数
+        'similar_career_top_k': 5,            # 類似キャリアからの推薦件数
+        'different_career1_top_k': 5,         # 異なるキャリア1からの推薦件数
+        'different_career2_top_k': 5,         # 異なるキャリア2からの推薦件数
+
+        # 各パターンの参考人物数
+        'similar_career_ref_persons': 5,      # 類似キャリアの参考人物数（最大）
+        'different_career1_ref_persons': 5,   # 異なるキャリア1の参考人物数（最大）
+        'different_career2_ref_persons': 5,   # 異なるキャリア2の参考人物数（最大）
+
+        # 参考人物の最小数（この数未満の場合は表示しない）
+        'min_ref_persons': 3,
+
+        # 参考人物選定基準
+        'ref_person_selection': 'top_similar',  # 'top_similar': 類似度上位, 'random': ランダム
+    }
+
     # Knowledge Graph パラメータ
     GRAPH_PARAMS = {
         'member_similarity_threshold': 0.3,  # メンバー類似度の閾値
