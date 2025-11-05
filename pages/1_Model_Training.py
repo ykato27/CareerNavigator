@@ -223,9 +223,25 @@ else:
     button_label = "🚀 MLモデル学習を実行（チューニングあり）" if use_tuning else "🚀 MLモデル学習を実行"
 
     if st.button(button_label, type="primary"):
-        # デバッグ情報を表示
-        if use_tuning:
-            st.info(f"🔧 チューニング設定: サンプラー={sampler_choice}, 試行回数={int(n_trials)}, 探索空間={custom_search_space}")
+        # デバッグ情報専用のコンテナ
+        debug_container = st.container()
+
+        with debug_container:
+            st.markdown("### 🔍 デバッグ情報")
+            debug_info = st.empty()
+
+            # 初期設定を表示
+            debug_messages = []
+            debug_messages.append(f"✅ データ読み込み完了")
+            debug_messages.append(f"✅ use_tuning={use_tuning}")
+            debug_messages.append(f"✅ use_preprocessing={use_preprocessing}")
+
+            if use_tuning:
+                debug_messages.append(f"✅ sampler_choice={sampler_choice}")
+                debug_messages.append(f"✅ n_trials={int(n_trials)} (型: {type(n_trials)})")
+                debug_messages.append(f"✅ custom_search_space={custom_search_space}")
+
+            debug_info.code("\n".join(debug_messages))
 
         # リアルタイム可視化用のプレースホルダー
         progress_placeholder = st.empty()
@@ -234,9 +250,12 @@ else:
 
         # チューニング進捗を保存するためのリスト
         trial_history = []
+        callback_counter = [0]  # コールバックが呼ばれた回数
 
         def progress_callback(trial, study):
             """チューニングの進捗をリアルタイムで表示"""
+            callback_counter[0] += 1
+
             trial_history.append({
                 'trial': trial.number,
                 'value': trial.value,
@@ -291,9 +310,13 @@ else:
 
         with st.spinner("MLモデルを学習中..." if not use_tuning else "ハイパーパラメータチューニング中..."):
             try:
-                # デバッグログ
+                # 追加のデバッグ情報
                 if use_tuning:
-                    st.write(f"🔍 チューニング開始: n_trials={int(n_trials)}, sampler={sampler_choice}")
+                    debug_messages.append(f"⏳ チューニング開始...")
+                    debug_messages.append(f"   - n_trials={int(n_trials)}")
+                    debug_messages.append(f"   - sampler={sampler_choice}")
+                    debug_messages.append(f"   - callback設定={progress_callback is not None}")
+                    debug_info.code("\n".join(debug_messages))
 
                 ml_recommender = build_ml_recommender(
                     st.session_state.transformed_data,
@@ -308,7 +331,15 @@ else:
 
                 # チューニング完了のログ
                 if use_tuning:
-                    st.write(f"✅ チューニング完了: {len(trial_history)}回の試行")
+                    debug_messages.append(f"✅ チューニング完了")
+                    debug_messages.append(f"   - 実行された試行数: {len(trial_history)}")
+                    debug_messages.append(f"   - コールバック呼び出し回数: {callback_counter[0]}")
+                    if ml_recommender.tuning_results:
+                        debug_messages.append(f"   - 最良パラメータ: {ml_recommender.tuning_results['best_params']}")
+                        debug_messages.append(f"   - 最小誤差: {ml_recommender.tuning_results['best_value']:.6f}")
+                    else:
+                        debug_messages.append(f"   ⚠️ tuning_resultsがNone")
+                    debug_info.code("\n".join(debug_messages))
 
                 # プレースホルダーをクリア
                 progress_placeholder.empty()

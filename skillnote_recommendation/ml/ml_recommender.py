@@ -97,9 +97,16 @@ class MLRecommender:
         tuning_results = None
         if use_tuning:
             print("\n--- ハイパーパラメータチューニング実行 ---")
+            print(f"[DEBUG] tuning_n_trials: {tuning_n_trials} (型: {type(tuning_n_trials)})")
+            print(f"[DEBUG] tuning_timeout: {tuning_timeout}")
+            print(f"[DEBUG] tuning_search_space: {tuning_search_space}")
+            print(f"[DEBUG] tuning_sampler: {tuning_sampler}")
+            print(f"[DEBUG] progress_callback設定: {tuning_progress_callback is not None}")
+
             from skillnote_recommendation.ml.hyperparameter_tuning import tune_nmf_hyperparameters_from_config
 
             try:
+                print("[DEBUG] Calling tune_nmf_hyperparameters_from_config...")
                 best_params, best_value, mf_model, tuner = tune_nmf_hyperparameters_from_config(
                     skill_matrix=skill_matrix,
                     config=Config,
@@ -114,6 +121,7 @@ class MLRecommender:
                 print(f"\n✅ チューニング完了")
                 print(f"最適パラメータ: {best_params}")
                 print(f"最小再構成誤差: {best_value:.6f}")
+                print(f"[DEBUG] 実行された試行数: {len(tuner.study.trials)}")
 
                 # チューニング結果を保存
                 tuning_results = {
@@ -126,6 +134,11 @@ class MLRecommender:
                 print(f"⚠️ Optunaがインストールされていません: {e}")
                 print("通常の学習に切り替えます。")
                 use_tuning = False
+            except Exception as e:
+                import traceback
+                print(f"❌ チューニング中にエラーが発生: {type(e).__name__}: {e}")
+                print(f"[ERROR] Traceback:\n{traceback.format_exc()}")
+                raise
 
         if not use_tuning:
             print("\n--- 通常学習実行 ---")

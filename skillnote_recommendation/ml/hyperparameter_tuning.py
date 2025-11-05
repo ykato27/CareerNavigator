@@ -108,14 +108,17 @@ class NMFHyperparameterTuner:
 
         # デバッグ：パラメータをログ出力
         logger.info(f"Trial {trial.number}: {params}")
+        print(f"[DEBUG] Trial {trial.number} started with params: {params}")
 
         try:
             if self.use_cross_validation:
+                print(f"[DEBUG] Trial {trial.number}: Using cross-validation with {self.n_folds} folds")
                 # 交差検証を使用
                 cv_errors = []
                 kfold = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_state)
 
                 for fold_idx, (train_idx, val_idx) in enumerate(kfold.split(self.skill_matrix)):
+                    print(f"[DEBUG] Trial {trial.number}, Fold {fold_idx+1}/{self.n_folds}: Training...")
                     # 訓練データと検証データに分割
                     train_matrix = self.skill_matrix.iloc[train_idx]
                     val_matrix = self.skill_matrix.iloc[val_idx]
@@ -129,37 +132,50 @@ class NMFHyperparameterTuner:
                     cv_errors.append(val_error)
 
                     logger.debug(f"  Fold {fold_idx+1}/{self.n_folds}: error={val_error:.6f}")
+                    print(f"[DEBUG] Trial {trial.number}, Fold {fold_idx+1}/{self.n_folds}: error={val_error:.6f}")
 
                 # 平均誤差を計算
                 mean_cv_error = np.mean(cv_errors)
                 std_cv_error = np.std(cv_errors)
 
                 logger.info(f"Trial {trial.number} CV error: {mean_cv_error:.6f} (±{std_cv_error:.6f})")
+                print(f"[DEBUG] Trial {trial.number} completed with CV error: {mean_cv_error:.6f}")
 
                 # 追加メトリクスをログ
                 trial.set_user_attr('cv_std', std_cv_error)
                 trial.set_user_attr('cv_errors', cv_errors)
+                trial.set_user_attr('random_state', self.random_state)
 
                 return mean_cv_error
             else:
+                print(f"[DEBUG] Trial {trial.number}: Using full data (no cross-validation)")
                 # 交差検証なし（従来の方法、ただしrandom_stateは固定）
                 model = MatrixFactorizationModel(**params, random_state=self.random_state)
+
+                print(f"[DEBUG] Trial {trial.number}: Fitting model...")
                 model.fit(self.skill_matrix)
 
                 # 再構成誤差を取得
                 reconstruction_error = model.get_reconstruction_error()
 
                 logger.info(f"Trial {trial.number} reconstruction error: {reconstruction_error:.6f}")
+                print(f"[DEBUG] Trial {trial.number} completed with error: {reconstruction_error:.6f}")
 
                 # 追加メトリクスをログ
                 trial.set_user_attr('n_iter', model.model.n_iter_)
+                trial.set_user_attr('random_state', self.random_state)
                 trial.set_user_attr('sparsity_W', np.sum(model.W == 0) / model.W.size)
                 trial.set_user_attr('sparsity_H', np.sum(model.H == 0) / model.H.size)
 
                 return reconstruction_error
 
         except Exception as e:
-            logger.warning(f"Trial {trial.number} failed: {e}")
+            import traceback
+            error_msg = f"Trial {trial.number} failed: {type(e).__name__}: {e}"
+            logger.error(error_msg)
+            logger.error(traceback.format_exc())
+            print(f"[ERROR] {error_msg}")
+            print(f"[ERROR] Traceback:\n{traceback.format_exc()}")
             # 失敗した場合は大きな値を返す
             return float('inf')
 
@@ -296,6 +312,13 @@ class NMFHyperparameterTuner:
         if self.n_trials <= 0:
             raise ValueError(f"n_trials must be positive, got: {self.n_trials}")
 
+        print(f"[DEBUG] Optimize started with n_trials={self.n_trials}")
+        print(f"[DEBUG] skill_matrix shape: {self.skill_matrix.shape}")
+        print(f"[DEBUG] timeout: {self.timeout}")
+        print(f"[DEBUG] n_jobs: {self.n_jobs}")
+        print(f"[DEBUG] use_cross_validation: {self.use_cross_validation}")
+        print(f"[DEBUG] progress_callback is set: {self.progress_callback is not None}")
+
         # Optunaのログレベルを調整（INFOレベルで詳細を表示）
         optuna.logging.set_verbosity(optuna.logging.INFO)
 
@@ -303,38 +326,55 @@ class NMFHyperparameterTuner:
         if self.sampler == "tpe":
             sampler_instance = TPESampler(seed=self.random_state)
             logger.info("サンプラー: TPE (Tree-structured Parzen Estimator)")
+            print("[DEBUG] Sampler: TPE")
         elif self.sampler == "random":
             sampler_instance = RandomSampler(seed=self.random_state)
             logger.info("サンプラー: Random Sampler")
+            print("[DEBUG] Sampler: Random")
         elif self.sampler == "cmaes":
             sampler_instance = CmaEsSampler(seed=self.random_state)
             logger.info("サンプラー: CMA-ES (Covariance Matrix Adaptation Evolution Strategy)")
+            print("[DEBUG] Sampler: CMA-ES")
         else:
             sampler_instance = TPESampler(seed=self.random_state)
             logger.warning(f"不明なサンプラー '{self.sampler}'。TPEを使用します。")
+            print(f"[DEBUG] Unknown sampler '{self.sampler}', using TPE")
 
         # Studyを作成
+        print("[DEBUG] Creating Optuna study...")
         self.study = optuna.create_study(
             direction='minimize',  # 再構成誤差を最小化
             sampler=sampler_instance
         )
+        print("[DEBUG] Study created successfully")
 
         # プログレスコールバックを設定
         all_callbacks = callbacks or []
         if self.progress_callback:
+            print("[DEBUG] Adding progress callback")
             def progress_wrapper(study, trial):
                 self.progress_callback(trial, study)
             all_callbacks.append(progress_wrapper)
 
         # 最適化実行
-        self.study.optimize(
-            self.objective,
-            n_trials=self.n_trials,
-            timeout=self.timeout,
-            n_jobs=self.n_jobs,
-            show_progress_bar=show_progress_bar,
-            callbacks=all_callbacks if all_callbacks else None
-        )
+        print(f"[DEBUG] Starting study.optimize with n_trials={self.n_trials}")
+        try:
+            self.study.optimize(
+                self.objective,
+                n_trials=self.n_trials,
+                timeout=self.timeout,
+                n_jobs=self.n_jobs,
+                show_progress_bar=show_progress_bar,
+                callbacks=all_callbacks if all_callbacks else None
+            )
+            print(f"[DEBUG] Study.optimize completed. Total trials: {len(self.study.trials)}")
+        except Exception as e:
+            import traceback
+            print(f"[ERROR] Study.optimize failed: {type(e).__name__}: {e}")
+            print(f"[ERROR] Traceback:\n{traceback.format_exc()}")
+            logger.error(f"Study.optimize failed: {e}")
+            logger.error(traceback.format_exc())
+            raise
 
         # 最良の結果を取得
         self.best_params = self.study.best_params
