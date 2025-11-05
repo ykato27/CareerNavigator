@@ -414,3 +414,397 @@ def prepare_positioning_display_dataframe(
     df = df[cols]
 
     return df
+
+
+# =========================================================
+# Skill Dependency Graph Visualization
+# =========================================================
+
+def create_dependency_graph(
+    graph_data: dict,
+    highlight_competence: Optional[str] = None,
+    layout_type: str = "force",
+    width: int = 1000,
+    height: int = 800
+) -> go.Figure:
+    """
+    スキル依存関係グラフを作成
+
+    Args:
+        graph_data: ノードとエッジを含む辞書
+        highlight_competence: ハイライトする力量コード
+        layout_type: レイアウトタイプ ('force', 'hierarchical')
+        width: グラフの幅
+        height: グラフの高さ
+
+    Returns:
+        Plotly Figure
+    """
+    nodes = graph_data.get('nodes', [])
+    edges = graph_data.get('edges', [])
+
+    if not nodes:
+        # 空のグラフを返す
+        fig = go.Figure()
+        fig.update_layout(
+            title="依存関係データがありません",
+            width=width,
+            height=height
+        )
+        return fig
+
+    # ノード位置の計算（簡易的な力学ベースレイアウト）
+    node_positions = _calculate_node_positions(nodes, edges, layout_type)
+
+    # エッジのトレースを作成
+    edge_traces = []
+    for edge in edges:
+        source = edge['source']
+        target = edge['target']
+
+        if source not in node_positions or target not in node_positions:
+            continue
+
+        x0, y0 = node_positions[source]
+        x1, y1 = node_positions[target]
+
+        # 依存強度に応じて色を変える
+        strength = edge.get('strength', 'なし')
+        if strength == '強':
+            color = 'rgba(255, 0, 0, 0.6)'
+            width_val = 3
+        elif strength == '中':
+            color = 'rgba(255, 165, 0, 0.5)'
+            width_val = 2
+        elif strength == '弱':
+            color = 'rgba(100, 100, 100, 0.4)'
+            width_val = 1
+        else:
+            color = 'rgba(200, 200, 200, 0.3)'
+            width_val = 1
+
+        # エッジ（矢印付き）
+        edge_trace = go.Scatter(
+            x=[x0, x1, None],
+            y=[y0, y1, None],
+            mode='lines',
+            line=dict(width=width_val, color=color),
+            hoverinfo='text',
+            hovertext=f"{edge.get('evidence', '')}<br>平均学習間隔: {edge.get('time_gap_days', 0)}日",
+            showlegend=False
+        )
+        edge_traces.append(edge_trace)
+
+        # 矢印を追加
+        arrow_trace = _create_arrow(x0, y0, x1, y1, color)
+        edge_traces.append(arrow_trace)
+
+    # ノードのトレースを作成
+    node_x = []
+    node_y = []
+    node_text = []
+    node_colors = []
+    node_sizes = []
+
+    for node in nodes:
+        node_id = node['id']
+        if node_id not in node_positions:
+            continue
+
+        x, y = node_positions[node_id]
+        node_x.append(x)
+        node_y.append(y)
+
+        label = node['label']
+        node_type = node.get('type', '')
+        node_text.append(f"{label}<br>({node_type})")
+
+        # ハイライト
+        if highlight_competence and node_id == highlight_competence:
+            node_colors.append('red')
+            node_sizes.append(20)
+        else:
+            # タイプに応じて色分け
+            if node_type == 'SKILL':
+                node_colors.append('lightblue')
+            elif node_type == 'EDUCATION':
+                node_colors.append('lightgreen')
+            elif node_type == 'LICENSE':
+                node_colors.append('lightyellow')
+            else:
+                node_colors.append('lightgray')
+            node_sizes.append(15)
+
+    node_trace = go.Scatter(
+        x=node_x,
+        y=node_y,
+        mode='markers+text',
+        text=[node['label'] for node in nodes if node['id'] in node_positions],
+        textposition='top center',
+        textfont=dict(size=10),
+        hovertext=node_text,
+        hoverinfo='text',
+        marker=dict(
+            size=node_sizes,
+            color=node_colors,
+            line=dict(width=2, color='white')
+        ),
+        showlegend=False
+    )
+
+    # グラフを作成
+    fig = go.Figure(data=edge_traces + [node_trace])
+
+    fig.update_layout(
+        title={
+            'text': "スキル依存関係グラフ<br><sub>矢印の向きが学習順序を示します（赤=強い依存関係、橙=中程度、灰=弱い）</sub>",
+            'x': 0.5,
+            'xanchor': 'center'
+        },
+        showlegend=False,
+        hovermode='closest',
+        width=width,
+        height=height,
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        plot_bgcolor='rgba(240, 240, 240, 0.5)'
+    )
+
+    return fig
+
+
+def _calculate_node_positions(
+    nodes: List[dict],
+    edges: List[dict],
+    layout_type: str = "force"
+) -> dict:
+    """
+    ノード位置を計算（簡易的な力学ベースレイアウト）
+
+    Args:
+        nodes: ノードリスト
+        edges: エッジリスト
+        layout_type: レイアウトタイプ
+
+    Returns:
+        {node_id: (x, y)} の辞書
+    """
+    import random
+    import math
+
+    # ノード数が少ない場合は円形配置
+    if len(nodes) <= 10:
+        positions = {}
+        radius = 100
+        for i, node in enumerate(nodes):
+            angle = 2 * math.pi * i / len(nodes)
+            x = radius * math.cos(angle)
+            y = radius * math.sin(angle)
+            positions[node['id']] = (x, y)
+        return positions
+
+    # 初期位置をランダムに配置
+    positions = {}
+    for node in nodes:
+        positions[node['id']] = (random.uniform(-100, 100), random.uniform(-100, 100))
+
+    # 簡易的な力学シミュレーション（Spring-Electric model）
+    iterations = 50
+    k = 50  # 理想的なばね長
+    c = 0.1  # クーロン力定数
+
+    for _ in range(iterations):
+        forces = {node['id']: [0, 0] for node in nodes}
+
+        # ばね力（エッジで結ばれたノード間）
+        for edge in edges:
+            source = edge['source']
+            target = edge['target']
+
+            if source not in positions or target not in positions:
+                continue
+
+            x1, y1 = positions[source]
+            x2, y2 = positions[target]
+
+            dx = x2 - x1
+            dy = y2 - y1
+            distance = math.sqrt(dx**2 + dy**2) + 0.01
+
+            # フックの法則
+            force = (distance - k) / distance
+
+            forces[source][0] += force * dx
+            forces[source][1] += force * dy
+            forces[target][0] -= force * dx
+            forces[target][1] -= force * dy
+
+        # 反発力（全ノード間）
+        for i, node1 in enumerate(nodes):
+            for node2 in nodes[i+1:]:
+                id1 = node1['id']
+                id2 = node2['id']
+
+                if id1 not in positions or id2 not in positions:
+                    continue
+
+                x1, y1 = positions[id1]
+                x2, y2 = positions[id2]
+
+                dx = x2 - x1
+                dy = y2 - y1
+                distance = math.sqrt(dx**2 + dy**2) + 0.01
+
+                # クーロンの法則
+                force = c / (distance ** 2)
+
+                forces[id1][0] -= force * dx / distance
+                forces[id1][1] -= force * dy / distance
+                forces[id2][0] += force * dx / distance
+                forces[id2][1] += force * dy / distance
+
+        # 位置を更新
+        for node in nodes:
+            node_id = node['id']
+            if node_id in positions:
+                x, y = positions[node_id]
+                fx, fy = forces[node_id]
+                # ダンピング
+                damping = 0.9
+                positions[node_id] = (x + fx * damping, y + fy * damping)
+
+    return positions
+
+
+def _create_arrow(x0: float, y0: float, x1: float, y1: float, color: str) -> go.Scatter:
+    """
+    矢印アノテーションを作成
+
+    Args:
+        x0, y0: 始点
+        x1, y1: 終点
+        color: 色
+
+    Returns:
+        矢印のScatterトレース
+    """
+    import math
+
+    # 矢印の先端を計算
+    dx = x1 - x0
+    dy = y1 - y0
+    length = math.sqrt(dx**2 + dy**2)
+
+    if length < 0.01:
+        return go.Scatter(x=[], y=[], mode='markers', showlegend=False)
+
+    # 矢印の位置（エッジの80%の位置）
+    arrow_pos = 0.8
+    ax = x0 + dx * arrow_pos
+    ay = y0 + dy * arrow_pos
+
+    # 矢印の向き
+    angle = math.atan2(dy, dx)
+
+    # 矢印の大きさ
+    arrow_length = 5
+    arrow_angle = math.pi / 6  # 30度
+
+    # 矢印の両端
+    x_left = ax - arrow_length * math.cos(angle + arrow_angle)
+    y_left = ay - arrow_length * math.sin(angle + arrow_angle)
+    x_right = ax - arrow_length * math.cos(angle - arrow_angle)
+    y_right = ay - arrow_length * math.sin(angle - arrow_angle)
+
+    arrow_trace = go.Scatter(
+        x=[x_left, ax, x_right],
+        y=[y_left, ay, y_right],
+        mode='lines',
+        line=dict(width=2, color=color),
+        hoverinfo='skip',
+        showlegend=False
+    )
+
+    return arrow_trace
+
+
+def create_learning_path_timeline(
+    learning_path: "LearningPath",
+    width: int = 1000,
+    height: int = 400
+) -> go.Figure:
+    """
+    学習パスのタイムライン可視化
+
+    Args:
+        learning_path: LearningPathオブジェクト
+        width: グラフの幅
+        height: グラフの高さ
+
+    Returns:
+        Plotly Figure
+    """
+    prerequisites = learning_path.recommended_prerequisites
+
+    if not prerequisites:
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"{learning_path.competence_name}には前提スキルはありません",
+            width=width,
+            height=height
+        )
+        return fig
+
+    # 前提スキルを時間順に並べる
+    sorted_prereqs = sorted(
+        prerequisites,
+        key=lambda x: x.get('average_time_gap_days', 0),
+        reverse=True
+    )
+
+    # タイムラインデータを作成
+    y_positions = list(range(len(sorted_prereqs)))
+    skill_names = [p['skill_name'] for p in sorted_prereqs]
+    time_gaps = [p.get('average_time_gap_days', 0) for p in sorted_prereqs]
+    confidences = [p.get('confidence', 0) for p in sorted_prereqs]
+
+    # バーチャート
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        y=skill_names,
+        x=time_gaps,
+        orientation='h',
+        marker=dict(
+            color=confidences,
+            colorscale='RdYlGn',
+            showscale=True,
+            colorbar=dict(title="信頼度")
+        ),
+        text=[f"{gap}日前" for gap in time_gaps],
+        textposition='auto',
+        hovertemplate='<b>%{y}</b><br>平均学習間隔: %{x}日<extra></extra>'
+    ))
+
+    # ターゲットスキルを追加
+    fig.add_trace(go.Scatter(
+        x=[0],
+        y=[learning_path.competence_name],
+        mode='markers+text',
+        marker=dict(size=20, color='red', symbol='star'),
+        text=['目標スキル'],
+        textposition='top center',
+        showlegend=False,
+        hovertemplate=f'<b>{learning_path.competence_name}</b><br>（習得目標）<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title=f"{learning_path.competence_name} への学習パス",
+        xaxis_title="平均学習間隔（日）",
+        yaxis_title="スキル",
+        width=width,
+        height=height,
+        hovermode='closest'
+    )
+
+    return fig
