@@ -99,9 +99,20 @@ st.subheader("🎓 MLモデル学習")
 if st.session_state.get("model_trained", False):
     st.success("✅ MLモデルは既に学習済みです。")
 
+    # デバッグ情報を表示（学習後も保持）
+    if st.session_state.get("show_debug_info", False) and st.session_state.get("debug_messages"):
+        with st.expander("🔍 デバッグ情報（前回の学習）", expanded=True):
+            st.code("\n".join(st.session_state.debug_messages))
+
+            # デバッグ情報をクリアするボタン
+            if st.button("🗑️ デバッグ情報をクリア"):
+                st.session_state.show_debug_info = False
+                st.rerun()
+
     if st.button("🔄 モデルを再学習する"):
         st.session_state.model_trained = False
         st.session_state.ml_recommender = None
+        st.session_state.show_debug_info = False
         st.rerun()
 else:
     st.info("📚 NMF（非負値行列分解）を使用して、メンバーの力量習得パターンを学習します。")
@@ -223,6 +234,10 @@ else:
     button_label = "🚀 MLモデル学習を実行（チューニングあり）" if use_tuning else "🚀 MLモデル学習を実行"
 
     if st.button(button_label, type="primary"):
+        # デバッグ情報をsession_stateに初期化
+        st.session_state.debug_messages = []
+        st.session_state.show_debug_info = True
+
         # デバッグ情報専用のコンテナ
         debug_container = st.container()
 
@@ -242,6 +257,7 @@ else:
                 debug_messages.append(f"✅ custom_search_space={custom_search_space}")
 
             debug_info.code("\n".join(debug_messages))
+            st.session_state.debug_messages = debug_messages.copy()
 
         # リアルタイム可視化用のプレースホルダー
         progress_placeholder = st.empty()
@@ -317,6 +333,7 @@ else:
                     debug_messages.append(f"   - sampler={sampler_choice}")
                     debug_messages.append(f"   - callback設定={progress_callback is not None}")
                     debug_info.code("\n".join(debug_messages))
+                    st.session_state.debug_messages = debug_messages.copy()
 
                 ml_recommender = build_ml_recommender(
                     st.session_state.transformed_data,
@@ -340,6 +357,8 @@ else:
                     else:
                         debug_messages.append(f"   ⚠️ tuning_resultsがNone")
                     debug_info.code("\n".join(debug_messages))
+                    # session_stateに最終結果を保存
+                    st.session_state.debug_messages = debug_messages.copy()
 
                 # プレースホルダーをクリア
                 progress_placeholder.empty()
@@ -387,10 +406,21 @@ else:
                 st.rerun()
             except Exception as e:
                 import traceback
+                # エラー情報をデバッグメッセージに追加
+                debug_messages.append(f"\n❌ エラー発生")
+                debug_messages.append(f"   - エラータイプ: {type(e).__name__}")
+                debug_messages.append(f"   - エラーメッセージ: {e}")
+                debug_messages.append(f"\n--- トレースバック ---")
+                debug_messages.append(traceback.format_exc())
+                st.session_state.debug_messages = debug_messages.copy()
+
                 st.error(f"❌ エラーが発生しました: {type(e).__name__}: {e}")
                 st.code(traceback.format_exc())
                 st.info("デバッグ情報:")
                 st.write("transformed_data keys:", list(st.session_state.transformed_data.keys()))
+
+                # エラー時もデバッグ情報を表示
+                st.warning("⚠️ 詳細なデバッグ情報は上記の「🔍 デバッグ情報」セクションに保存されています。")
 
 
 # =========================================================
