@@ -640,14 +640,21 @@ st.subheader("🎯 推薦手法の選択")
 
 recommendation_method = st.radio(
     "使用する推薦手法を選択してください",
-    options=["NMF推薦", "グラフベース推薦", "ハイブリッド推薦"],
+    options=["キャリアパターン別推薦", "NMF推薦", "グラフベース推薦", "ハイブリッド推薦"],
     index=0,
-    help="推薦手法を選択します。NMFは高速、グラフベースは説明可能性が高い、ハイブリッドは両方の良いところを組み合わせます。",
+    help="推薦手法を選択します。キャリアパターン別推薦は3つの異なるキャリアから推薦、NMFは高速、グラフベースは説明可能性が高い、ハイブリッドは両方の良いところを組み合わせます。",
     horizontal=True
 )
 
 # 選択された手法の説明を表示
-if recommendation_method == "NMF推薦":
+if recommendation_method == "キャリアパターン別推薦":
+    st.info("""
+    🎨 **キャリアパターン別推薦**: 3つの異なるキャリアパターンから推薦を生成します。
+    - **💼 類似キャリア**: あなたと類似したキャリアパスを持つメンバーが習得している力量
+    - **🌟 異なるキャリア1**: やや異なるキャリアパスを持つメンバーの力量（キャリアの幅を広げる）
+    - **🚀 異なるキャリア2**: 大きく異なるキャリアパスを持つメンバーの力量（新領域への挑戦）
+    """)
+elif recommendation_method == "NMF推薦":
     st.info("📊 **NMF推薦（機械学習ベース）**: 協調フィルタリングに基づく高速な推薦。メンバー間の類似性から推薦を生成します。")
 elif recommendation_method == "グラフベース推薦":
     st.info("🔗 **グラフベース推薦（RWR）**: 知識グラフ構造を活用した推薦。推薦パスを可視化でき、説明可能性が高いです。")
@@ -698,7 +705,52 @@ if st.button("推薦を実行", type="primary"):
             start_time = time.time()
 
             # 選択された推薦手法のみを実行
-            if recommendation_method == "NMF推薦":
+            if recommendation_method == "キャリアパターン別推薦":
+                # キャリアパターン別推薦
+                from skillnote_recommendation.core.config import Config
+                from skillnote_recommendation.ml.career_pattern_classifier import create_classifier_from_config
+                from skillnote_recommendation.ml.multi_pattern_recommender import create_multi_pattern_recommender
+
+                # キャリアパターン分類器を作成
+                classifier = create_classifier_from_config(
+                    member_competence=td["member_competence"],
+                    member_master=td["members_clean"],
+                    mf_model=recommender.mf_model,
+                    config=Config
+                )
+
+                # マルチパターン推薦器を作成
+                multi_recommender = create_multi_pattern_recommender(
+                    classifier=classifier,
+                    competence_master=td["competence_master"],
+                    member_competence=td["member_competence"],
+                    mf_model=recommender.mf_model
+                )
+
+                # 各パターンでの推薦件数
+                top_k_per_pattern = {
+                    'similar': Config.CAREER_PATTERN_PARAMS['similar_career_top_k'],
+                    'different1': Config.CAREER_PATTERN_PARAMS['different_career1_top_k'],
+                    'different2': Config.CAREER_PATTERN_PARAMS['different_career2_top_k']
+                }
+
+                # パターン別推薦を実行
+                pattern_recommendations = multi_recommender.recommend_by_patterns(
+                    target_member_code=selected_member_code,
+                    top_k_per_pattern=top_k_per_pattern
+                )
+
+                # セッションステートに保存
+                st.session_state.pattern_recommendations = pattern_recommendations
+
+                # recsには全パターンの推薦を統合（CSV出力用）
+                recs = []
+                for pattern_name, pattern_rec in pattern_recommendations.items():
+                    recs.extend(pattern_rec.recommendations)
+
+                graph_recommendations = None
+
+            elif recommendation_method == "NMF推薦":
                 # NMF推薦のみ
                 recs = recommender.recommend(
                     member_code=selected_member_code,
@@ -710,6 +762,9 @@ if st.button("推薦を実行", type="primary"):
                 )
                 # グラフ情報はなし
                 graph_recommendations = None
+                # パターン別推薦情報をクリア
+                if 'pattern_recommendations' in st.session_state:
+                    del st.session_state['pattern_recommendations']
 
             elif recommendation_method in ["グラフベース推薦", "ハイブリッド推薦"]:
                 # Knowledge Graphの確認
@@ -816,8 +871,64 @@ if st.button("推薦を実行", type="primary"):
                 # 推薦結果の表示
                 st.markdown("---")
 
+                # キャリアパターン別推薦の場合
+                if recommendation_method == "キャリアパターン別推薦":
+                    pattern_recs = st.session_state.get('pattern_recommendations', {})
+
+                    if pattern_recs:
+                        # 3つのパターンそれぞれを表示
+                        for pattern_name in ['similar', 'different1', 'different2']:
+                            if pattern_name not in pattern_recs:
+                                continue
+
+                            pattern_rec = pattern_recs[pattern_name]
+
+                            # セクション区切り
+                            st.markdown("---")
+                            st.markdown(f"## {pattern_rec.pattern_label}")
+
+                            # メッセージがある場合（参考人物が少ないなど）
+                            if pattern_rec.message:
+                                st.warning(pattern_rec.message)
+                                continue
+
+                            # 参考人物を表示
+                            if pattern_rec.reference_persons:
+                                st.markdown("### 👥 参考人物（共通）")
+
+                                ref_person_names = []
+                                for ref_person in pattern_rec.reference_persons:
+                                    name_with_sim = f"{ref_person['name']} (類似度: {ref_person['similarity']})"
+                                    ref_person_names.append(name_with_sim)
+
+                                st.markdown("、".join(ref_person_names))
+                                st.markdown("")  # 空行
+
+                            # 推薦力量を表示
+                            if pattern_rec.recommendations:
+                                st.markdown("### 📋 推薦力量")
+
+                                for idx, rec in enumerate(pattern_rec.recommendations, 1):
+                                    with st.expander(f"**推薦 {idx}**: {rec.competence_name} (スコア: {rec.priority_score:.2f})"):
+                                        # 力量情報
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            st.markdown(f"**力量タイプ**: {rec.competence_type}")
+                                        with col2:
+                                            st.markdown(f"**カテゴリ**: {rec.category}")
+
+                                        # 推薦理由
+                                        st.markdown("---")
+                                        st.markdown("**推薦理由**")
+                                        st.markdown(rec.reason)
+                            else:
+                                st.info("このパターンからの推薦はありません。")
+
+                    else:
+                        st.error("キャリアパターン別推薦の結果が見つかりません。")
+
                 # NMF推薦の場合
-                if recommendation_method == "NMF推薦":
+                elif recommendation_method == "NMF推薦":
                     # 推薦結果の詳細表示
                     for idx, rec in enumerate(recs, 1):
                         display_recommendation_details(rec, idx)
