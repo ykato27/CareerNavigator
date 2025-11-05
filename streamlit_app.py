@@ -190,12 +190,38 @@ if all_uploaded:
                 if transformed_data['member_competence'].empty:
                     st.error("❌ メンバーの習得力量データが空です。")
                     st.warning(
-                        "以下を確認してください:\n"
+                        "**以下を確認してください:**\n\n"
                         "1. **保有力量データ (acquiredCompetenceLevel.csv)** にデータが含まれているか\n"
-                        "2. 必須カラムが存在するか: メンバーコード、力量コード、力量タイプ、レベル\n"
-                        "3. メンバーマスタに有効なメンバーが登録されているか"
+                        "2. **必須カラム**が存在するか:\n"
+                        "   - メンバーコード\n"
+                        "   - 力量コード\n"
+                        "   - 力量タイプ\n"
+                        "   - レベル\n"
+                        "3. **メンバーマスタ**に有効なメンバー（削除・テストユーザー以外）が登録されているか\n"
+                        "4. **メンバーコードの一致**: メンバーマスタと保有力量データのメンバーコードが一致しているか\n"
+                        "   - 全角/半角、スペース、大文字/小文字などに注意"
                     )
-                    st.info("詳細なログ情報はターミナルまたはログファイルを確認してください。")
+
+                    # デバッグ情報を表示
+                    with st.expander("🔍 詳細なデバッグ情報"):
+                        st.markdown("### メンバーマスタ")
+                        members_df = transformed_data['members_clean']
+                        st.write(f"**有効なメンバー数**: {len(members_df)}名")
+                        if not members_df.empty:
+                            st.dataframe(members_df.head())
+                        else:
+                            st.warning("有効なメンバーが見つかりません")
+
+                        st.markdown("### 保有力量データ（生データ）")
+                        acquired_raw = raw_data.get('acquired', pd.DataFrame())
+                        st.write(f"**総行数**: {len(acquired_raw)}件")
+                        st.write(f"**カラム**: {list(acquired_raw.columns)}")
+                        if not acquired_raw.empty:
+                            st.dataframe(acquired_raw.head())
+                        else:
+                            st.warning("保有力量データが空です")
+
+                    st.info("💡 より詳細なログ情報はターミナルまたはログファイルを確認してください。")
                     st.stop()
 
                 # Knowledge Graphを構築
