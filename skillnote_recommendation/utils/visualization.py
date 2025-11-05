@@ -203,8 +203,10 @@ def create_positioning_plot(
                 line=dict(width=1, color="white")
             ),
             text=df_subset["メンバー名"],
+            customdata=df_subset["メンバーコード"],
             hovertemplate=(
                 "<b>%{text}</b><br>" +
+                "コード: %{customdata}<br>" +
                 f"{x_col}: %{{x:.1f}}<br>" +
                 f"{y_col}: %{{y:.2f}}<br>" +
                 "<extra></extra>"
@@ -272,7 +274,7 @@ def prepare_positioning_display_dataframe(
 
     # Reorder columns for better display
     cols = [
-        "タイプ", "メンバー名", "総合スキルレベル",
+        "タイプ", "メンバー名", "メンバーコード", "総合スキルレベル",
         "保有力量数", "平均レベル", "潜在因子1", "潜在因子2"
     ]
     df = df[cols]
