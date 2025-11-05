@@ -4,6 +4,7 @@
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -35,14 +36,25 @@ if not st.session_state.get("data_loaded", False):
 # =========================================================
 # 補助関数
 # =========================================================
-def build_ml_recommender(transformed_data: dict) -> MLRecommender:
+def build_ml_recommender(
+    transformed_data: dict,
+    use_preprocessing: bool = True,
+    use_tuning: bool = False
+) -> MLRecommender:
     """
     MLRecommenderを学習済みの状態で作成する
+
+    Args:
+        transformed_data: 変換済みデータ
+        use_preprocessing: データ前処理を使用するか
+        use_tuning: ハイパーパラメータチューニングを使用するか
     """
     recommender = MLRecommender.build(
         member_competence=transformed_data["member_competence"],
         competence_master=transformed_data["competence_master"],
-        member_master=transformed_data["members_clean"]
+        member_master=transformed_data["members_clean"],
+        use_preprocessing=use_preprocessing,
+        use_tuning=use_tuning
     )
     return recommender
 
@@ -62,11 +74,50 @@ if st.session_state.get("model_trained", False):
 else:
     st.info("📚 NMF（非負値行列分解）を使用して、メンバーの力量習得パターンを学習します。")
 
-    if st.button("🚀 MLモデル学習を実行", type="primary"):
-        with st.spinner("MLモデルを学習中..."):
+    # 学習オプション
+    with st.expander("⚙️ 学習オプション", expanded=True):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            use_preprocessing = st.checkbox(
+                "データ前処理を使用",
+                value=True,
+                help="外れ値除去と正規化を行います。再構成誤差の改善に効果的です。"
+            )
+
+        with col2:
+            use_tuning = st.checkbox(
+                "ハイパーパラメータチューニング (Optuna)",
+                value=False,
+                help="ベイズ最適化でハイパーパラメータを自動調整します。時間がかかりますが、最良のモデルを構築できます。"
+            )
+
+        if use_preprocessing:
+            st.markdown("""
+            **データ前処理の内容:**
+            - 外れ値除去: 力量数が極端に少ないメンバー/保有者が少ない力量を除外
+            - 正規化: Min-Maxスケーリング（0-1範囲に正規化）
+            """)
+
+        if use_tuning:
+            st.markdown("""
+            **ハイパーパラメータチューニングの内容:**
+            - 探索方法: TPE（Tree-structured Parzen Estimator）ベイズ最適化
+            - 探索パラメータ: 潜在因子数、正則化パラメータ、最大イテレーション数など
+            - 試行回数: 50回（約5-10分）
+            """)
+            st.warning("⏱️ チューニングには5-10分程度かかる場合があります。")
+
+    # 学習実行ボタン
+    button_label = "🚀 MLモデル学習を実行（チューニングあり）" if use_tuning else "🚀 MLモデル学習を実行"
+
+    if st.button(button_label, type="primary"):
+        with st.spinner("MLモデルを学習中..." if not use_tuning else "ハイパーパラメータチューニング中..."):
             try:
                 ml_recommender = build_ml_recommender(
-                    st.session_state.transformed_data
+                    st.session_state.transformed_data,
+                    use_preprocessing=use_preprocessing,
+                    use_tuning=use_tuning
                 )
                 st.session_state.ml_recommender = ml_recommender
                 st.session_state.model_trained = True
@@ -328,13 +379,62 @@ if st.session_state.get("model_trained", False):
 
         st.metric("再構成誤差（Frobenius ノルム）", f"{error:.6f}")
 
-        st.markdown(
-            "**再構成誤差が低いほど、モデルは元のデータをよく再現できています。**\n\n"
-            "- 誤差が0.1以下: 非常に良好\n"
-            "- 誤差が0.1-0.3: 良好\n"
-            "- 誤差が0.3-0.5: 許容範囲\n"
-            "- 誤差が0.5以上: 改善の余地あり（潜在因子数の調整を推奨）"
-        )
+        # 評価基準と改善提案
+        if error < 0.1:
+            st.success("✅ **非常に良好なモデルです**")
+            st.markdown("再構成誤差が0.1以下で、モデルは元のデータを非常によく再現しています。")
+        elif error < 0.3:
+            st.success("✅ **良好なモデルです**")
+            st.markdown("再構成誤差が0.3以下で、モデルは元のデータをよく再現しています。")
+        elif error < 0.5:
+            st.warning("⚠️ **許容範囲ですが、改善の余地があります**")
+            st.markdown("再構成誤差が0.5以下で許容範囲内ですが、さらなる改善が可能です。")
+        else:
+            st.error("❌ **改善が必要です**")
+            st.markdown("再構成誤差が0.5以上で、モデルの精度向上が推奨されます。")
+
+        # 改善提案（誤差が0.3以上の場合）
+        if error >= 0.3:
+            st.markdown("---")
+            st.markdown("### 💡 改善提案")
+
+            current_components = mf_model.n_components
+
+            st.info(f"""
+            **推奨される改善策:**
+
+            1. **ハイパーパラメータチューニング**:
+               - 上記の「学習オプション」で「ハイパーパラメータチューニング (Optuna)」を有効にしてモデルを再学習してください
+               - ベイズ最適化により最適なパラメータが自動的に探索されます
+
+            2. **データ前処理の有効化**:
+               - 「データ前処理を使用」を有効にすることで、外れ値の除去と正規化が行われます
+               - スパースなデータに対して特に効果的です
+
+            3. **手動でのパラメータ調整** (config.py):
+               - 潜在因子数: 現在 {current_components} → 25〜35 に増加を検討
+               - 正則化強度: alpha_W, alpha_H を 0.05〜0.1 に調整
+               - 最大イテレーション数: max_iter を 1500〜2000 に増加
+
+            詳細は `docs/NMF_RECONSTRUCTION_ERROR_IMPROVEMENTS.md` を参照してください。
+            """)
+
+        # 追加メトリクス
+        st.markdown("---")
+        st.markdown("### 📊 追加メトリクス")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("イテレーション数", mf_model.model.n_iter_)
+
+        with col2:
+            sparsity_W = np.sum(mf_model.W == 0) / mf_model.W.size * 100
+            st.metric("メンバー因子のスパース性", f"{sparsity_W:.2f}%")
+
+        with col3:
+            sparsity_H = np.sum(mf_model.H == 0) / mf_model.H.size * 100
+            st.metric("力量因子のスパース性", f"{sparsity_H:.2f}%")
 
     st.markdown("---")
     st.success("✅ 学習結果の分析が完了しました。")
