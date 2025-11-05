@@ -26,14 +26,12 @@ CareerNavigator/
 │
 ├── skillnote_recommendation/      # パッケージ
 │   ├── __init__.py
-│   ├── core/                      # コアモジュール（ルールベース推薦） → [詳細](skillnote_recommendation/core/README.md)
+│   ├── core/                      # コアモジュール → [詳細](skillnote_recommendation/core/README.md)
 │   │   ├── config.py              # 設定管理
 │   │   ├── models.py              # データモデル
 │   │   ├── data_loader.py         # データ読み込み
 │   │   ├── data_transformer.py    # データ変換
-│   │   ├── similarity_calculator.py  # 類似度計算
-│   │   ├── recommendation_engine.py  # ルールベース推薦エンジン
-│   │   ├── recommendation_system.py  # 推薦システム
+│   │   ├── reference_persons.py   # 参考人物検索
 │   │   └── evaluator.py           # 評価器（時系列分割・メトリクス・多様性評価）
 │   ├── ml/                        # 機械学習モジュール → [詳細](skillnote_recommendation/ml/README.md)
 │   │   ├── __init__.py
@@ -44,18 +42,12 @@ CareerNavigator/
 │   │   ├── knowledge_graph.py     # 知識グラフ
 │   │   ├── hybrid_recommender.py  # ハイブリッド推薦
 │   │   └── career_path.py         # キャリアパス
-│   └── scripts/                   # 実行スクリプト
-│       ├── convert_data.py        # データ変換
-│       └── run_recommendation.py  # 推薦実行
+│   └── scripts/                   # 実行スクリプト（現在未使用）
 │
-├── tests/                         # テストコード（253テスト）
-│   ├── test_basic.py
+├── tests/                         # テストコード
 │   ├── test_data_loader.py
 │   ├── test_directory_scan.py
 │   ├── test_data_transformer.py
-│   ├── test_similarity_calculator.py
-│   ├── test_recommendation_engine.py
-│   ├── test_recommendation_system.py
 │   ├── test_evaluator.py
 │   ├── test_matrix_factorization.py
 │   ├── test_diversity.py
@@ -201,59 +193,14 @@ uv run streamlit run streamlit_app.py
 
 - ✅ CSVファイルのドラッグ&ドロップアップロード
 - ✅ 既存メンバー・新規ユーザーへの推薦
-- ✅ ルールベースとML両方の推薦を比較
+- ✅ 機械学習ベースの推薦システム
 - ✅ ロールモデル（参考となるメンバー）の表示
 - ✅ 多様性メトリクスの可視化
 - ✅ 推薦結果のCSVダウンロード
 
 **詳細**: [Streamlitアプリガイド](docs/STREAMLIT_GUIDE.md)
 
-### コマンドラインから実行
-
-```bash
-# データ変換
-uv run skillnote-convert
-
-# 推薦実行
-uv run skillnote-recommend
-```
-
-または、直接Pythonモジュールとして実行:
-
-```bash
-# データ変換
-uv run python -m skillnote_recommendation.scripts.convert_data
-
-# 推薦実行
-uv run python -m skillnote_recommendation.scripts.run_recommendation
-```
-
 ### Pythonコードから利用
-
-#### ルールベース推薦システム
-
-```python
-from skillnote_recommendation import RecommendationSystem
-
-# 推薦システム初期化
-system = RecommendationSystem()
-
-# 特定のメンバーに推薦
-system.print_recommendations('m48', top_n=10)
-
-# SKILLタイプのみ推薦
-recommendations = system.recommend_competences(
-    'm48',
-    competence_type='SKILL',
-    top_n=5
-)
-
-for rec in recommendations:
-    print(f"{rec.competence_name}: {rec.priority_score:.2f}")
-
-# CSV出力
-system.export_recommendations('m48', 'recommendations_m48.csv', top_n=20)
-```
 
 #### 機械学習ベース推薦システム
 
@@ -379,19 +326,7 @@ deactivate
 
 ## 推薦アルゴリズム
 
-本システムは**ルールベース**と**機械学習ベース**の2つの推薦手法を提供します。
-
-### ルールベース推薦
-
-```
-優先度スコア = (カテゴリ重要度 × 0.4) + (習得容易性 × 0.3) + (人気度 × 0.3)
-```
-
-#### 評価要素
-
-1. **カテゴリ重要度**: カテゴリ内での習得者数に基づく重要度
-2. **習得容易性**: 類似力量を保有している場合の習得しやすさ
-3. **人気度**: 全体での習得率
+本システムは**機械学習ベースの推薦システム**を提供します。
 
 ### 機械学習ベース推薦
 
@@ -426,27 +361,16 @@ ML予測スコアに基づく推薦結果を多様性の観点から再ランキ
 
 ### パラメータ調整
 
-`skillnote_recommendation/core/config.py` の `RECOMMENDATION_PARAMS` で調整:
+`skillnote_recommendation/core/config.py` でMLモデルのパラメータを調整:
 
 ```python
-RECOMMENDATION_PARAMS = {
-    'category_importance_weight': 0.4,
-    'acquisition_ease_weight': 0.3,
-    'popularity_weight': 0.3,
-    'similarity_threshold': 0.3,
-    'similarity_sample_size': 100
+MF_PARAMS = {
+    'n_components': 20,  # 潜在因子数
+    'random_state': 42,
+    'max_iter': 200,
+    'use_confidence_weighting': False,
+    'confidence_alpha': 1.0
 }
-```
-
-### 推薦エンジンの拡張
-
-```python
-from skillnote_recommendation.core.recommendation_engine import RecommendationEngine
-
-class CustomEngine(RecommendationEngine):
-    def calculate_custom_score(self, member_code, competence_code):
-        # カスタムロジック
-        pass
 ```
 
 ## トラブルシューティング

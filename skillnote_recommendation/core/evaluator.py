@@ -2,6 +2,7 @@
 推薦システム評価
 
 時系列分割による評価とメトリクス計算を提供
+（機械学習ベースの推薦システム専用）
 """
 
 import logging
@@ -10,23 +11,22 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 from collections import defaultdict
-from skillnote_recommendation.core.recommendation_engine import RecommendationEngine
 
 
 logger = logging.getLogger(__name__)
 
 
 class RecommendationEvaluator:
-    """推薦システム評価クラス"""
+    """推薦システム評価クラス（機械学習ベース専用）"""
 
-    def __init__(self, engine: RecommendationEngine = None):
+    def __init__(self, recommender = None):
         """
         初期化
 
         Args:
-            engine: 推薦エンジン（オプション）
+            recommender: ML推薦エンジン（MLRecommenderインスタンス、オプション）
         """
-        self.engine = engine
+        self.recommender = recommender
 
     def temporal_train_test_split(
         self,
@@ -113,26 +113,26 @@ class RecommendationEvaluator:
             # テストデータで習得記録があるメンバー
             member_sample = test_data['メンバーコード'].unique().tolist()
 
-        # エンジンの準備
-        if self.engine is None:
-            # 類似度データの準備
-            if similarity_data is None:
-                similarity_data = pd.DataFrame(columns=['力量1', '力量2', '類似度'])
+        # MLレコメンダーの準備
+        if self.recommender is None:
+            # MLRecommenderをインポート
+            from skillnote_recommendation.ml.ml_recommender import MLRecommender
 
             # メンバーマスタの準備（メンバーコードのみ）
             members_data = pd.DataFrame({
                 'メンバーコード': train_data['メンバーコード'].unique()
             })
 
-            # 推薦エンジンを作成
-            engine = RecommendationEngine(
-                df_members=members_data,
-                df_competence_master=competence_master,
-                df_member_competence=train_data,
-                df_similarity=similarity_data
+            # MLモデルを学習
+            recommender = MLRecommender.build(
+                member_competence=train_data,
+                competence_master=competence_master,
+                member_master=members_data,
+                use_preprocessing=False,
+                use_tuning=False
             )
         else:
-            engine = self.engine
+            recommender = self.recommender
 
         # メトリクス集計用
         precision_scores = []
@@ -156,10 +156,15 @@ class RecommendationEvaluator:
             total_members += 1
 
             # 学習データを使って推薦を生成
-            recommendations = engine.recommend(
-                member_code=member_code,
-                top_n=top_k
-            )
+            try:
+                recommendations = recommender.recommend(
+                    member_code=member_code,
+                    top_n=top_k,
+                    use_diversity=False
+                )
+            except Exception:
+                # コールドスタート等のエラーの場合はスキップ
+                continue
 
             # 推薦された力量コード
             recommended_codes = [rec.competence_code for rec in recommendations]
@@ -733,25 +738,23 @@ class RecommendationEvaluator:
         if member_sample is None:
             member_sample = test_data['メンバーコード'].unique().tolist()
 
-        # エンジンの準備
-        if self.engine is None:
-            from skillnote_recommendation.core.recommendation_engine import RecommendationEngine
-
-            if similarity_data is None:
-                similarity_data = pd.DataFrame(columns=['力量1', '力量2', '類似度'])
+        # MLレコメンダーの準備
+        if self.recommender is None:
+            from skillnote_recommendation.ml.ml_recommender import MLRecommender
 
             members_data = pd.DataFrame({
                 'メンバーコード': train_data['メンバーコード'].unique()
             })
 
-            engine = RecommendationEngine(
-                df_members=members_data,
-                df_competence_master=competence_master,
-                df_member_competence=train_data,
-                df_similarity=similarity_data
+            recommender = MLRecommender.build(
+                member_competence=train_data,
+                competence_master=competence_master,
+                member_master=members_data,
+                use_preprocessing=False,
+                use_tuning=False
             )
         else:
-            engine = self.engine
+            recommender = self.recommender
 
         # 各メンバーの推薦結果を収集
         recommendations_list = []
@@ -763,10 +766,15 @@ class RecommendationEvaluator:
             if len(actual_acquired) == 0:
                 continue
 
-            recommendations = engine.recommend(
-                member_code=member_code,
-                top_n=top_k
-            )
+            try:
+                recommendations = recommender.recommend(
+                    member_code=member_code,
+                    top_n=top_k,
+                    use_diversity=False
+                )
+            except Exception:
+                # コールドスタート等のエラーの場合はスキップ
+                continue
 
             if len(recommendations) > 0:
                 recommendations_list.append(recommendations)
