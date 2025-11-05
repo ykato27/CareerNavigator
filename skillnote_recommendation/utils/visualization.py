@@ -808,3 +808,245 @@ def create_learning_path_timeline(
     )
 
     return fig
+
+
+# =========================================================
+# Graph-based Recommendation Visualization
+# =========================================================
+
+def create_skill_transition_graph(
+    graph_recommender,
+    member_code: str,
+    recommended_skill: str,
+    width: int = 1000,
+    height: int = 700
+) -> go.Figure:
+    """
+    スキル遷移グラフの可視化（推薦パス強調）
+
+    Args:
+        graph_recommender: SkillTransitionGraphRecommenderインスタンス
+        member_code: メンバーコード
+        recommended_skill: 推薦されたスキルコード
+        width: 図の幅
+        height: 図の高さ
+
+    Returns:
+        plotly.graph_objects.Figure
+    """
+    import networkx as nx
+
+    graph = graph_recommender.graph
+    user_skills = graph_recommender.get_user_skills(member_code)
+
+    # サブグラフを抽出（ユーザースキル + 推薦スキル + パス）
+    relevant_nodes = set(user_skills) | {recommended_skill}
+
+    # 中間ノード（パス上のスキル）も含める
+    for user_skill in user_skills:
+        try:
+            if user_skill in graph and recommended_skill in graph:
+                path = nx.shortest_path(graph, user_skill, recommended_skill)
+                relevant_nodes.update(path)
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            pass
+
+    # サブグラフ作成
+    subgraph = graph.subgraph(relevant_nodes)
+
+    # レイアウト計算（階層的レイアウト）
+    try:
+        # Spring layoutを使用
+        pos = nx.spring_layout(subgraph, k=1.5, iterations=50, seed=42)
+    except Exception:
+        # フォールバック: 簡易レイアウト
+        pos = {node: (i, 0) for i, node in enumerate(subgraph.nodes())}
+
+    # エッジの描画
+    edge_traces = []
+    for edge in subgraph.edges(data=True):
+        source, target, data = edge
+        x0, y0 = pos[source]
+        x1, y1 = pos[target]
+        weight = data.get('weight', 1)
+
+        # エッジの太さと色
+        width_val = min(weight / 2, 10)
+
+        edge_trace = go.Scatter(
+            x=[x0, x1, None],
+            y=[y0, y1, None],
+            mode='lines',
+            line=dict(width=width_val, color='rgba(125,125,125,0.5)'),
+            hoverinfo='text',
+            text=f"{graph_recommender.get_skill_name(source)} → "
+                 f"{graph_recommender.get_skill_name(target)}<br>"
+                 f"遷移人数: {weight}人",
+            showlegend=False
+        )
+        edge_traces.append(edge_trace)
+
+    # ノードの描画
+    node_x, node_y, node_text, node_color, node_size = [], [], [], [], []
+    for node in subgraph.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+
+        skill_name = graph_recommender.get_skill_name(node)
+        node_text.append(skill_name)
+
+        # 色分け
+        if node in user_skills:
+            node_color.append('#4A90E2')  # 青: 習得済み
+            node_size.append(25)
+        elif node == recommended_skill:
+            node_color.append('#E24A4A')  # 赤: 推薦スキル
+            node_size.append(30)
+        else:
+            node_color.append('#95A5A6')  # グレー: 中間スキル
+            node_size.append(20)
+
+    node_trace = go.Scatter(
+        x=node_x,
+        y=node_y,
+        mode='markers+text',
+        text=node_text,
+        textposition='top center',
+        textfont=dict(size=10),
+        marker=dict(
+            size=node_size,
+            color=node_color,
+            line=dict(width=2, color='white')
+        ),
+        hoverinfo='text',
+        hovertext=node_text,
+        showlegend=False
+    )
+
+    # 凡例用のダミートレース
+    legend_traces = [
+        go.Scatter(
+            x=[None], y=[None],
+            mode='markers',
+            marker=dict(size=15, color='#4A90E2'),
+            name='習得済みスキル',
+            showlegend=True
+        ),
+        go.Scatter(
+            x=[None], y=[None],
+            mode='markers',
+            marker=dict(size=15, color='#E24A4A'),
+            name='推薦スキル',
+            showlegend=True
+        ),
+        go.Scatter(
+            x=[None], y=[None],
+            mode='markers',
+            marker=dict(size=15, color='#95A5A6'),
+            name='学習パス上のスキル',
+            showlegend=True
+        )
+    ]
+
+    # レイアウト
+    fig = go.Figure(data=edge_traces + [node_trace] + legend_traces)
+
+    fig.update_layout(
+        title=dict(
+            text=f'スキル遷移グラフ: {graph_recommender.get_skill_name(recommended_skill)}への学習パス',
+            x=0.5,
+            xanchor='center'
+        ),
+        showlegend=True,
+        hovermode='closest',
+        width=width,
+        height=height,
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        plot_bgcolor='white',
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        )
+    )
+
+    return fig
+
+
+def create_graph_statistics_chart(
+    graph_recommender,
+    chart_type: str = 'degree_distribution'
+) -> go.Figure:
+    """
+    グラフ統計情報の可視化
+
+    Args:
+        graph_recommender: SkillTransitionGraphRecommenderインスタンス
+        chart_type: チャートタイプ ('degree_distribution', 'top_skills')
+
+    Returns:
+        plotly.graph_objects.Figure
+    """
+    stats = graph_recommender.get_graph_statistics()
+    graph = graph_recommender.graph
+
+    if chart_type == 'degree_distribution':
+        # 次数分布
+        in_degrees = [d for n, d in graph.in_degree()]
+        out_degrees = [d for n, d in graph.out_degree()]
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Histogram(
+            x=in_degrees,
+            name='入次数（学ばれる回数）',
+            opacity=0.7,
+            marker_color='#4A90E2'
+        ))
+
+        fig.add_trace(go.Histogram(
+            x=out_degrees,
+            name='出次数（次に学ぶ回数）',
+            opacity=0.7,
+            marker_color='#E24A4A'
+        ))
+
+        fig.update_layout(
+            title='スキル遷移の次数分布',
+            xaxis_title='次数',
+            yaxis_title='スキル数',
+            barmode='overlay',
+            hovermode='x'
+        )
+
+    elif chart_type == 'top_skills':
+        # トップスキルの表示
+        fig = go.Figure()
+
+        if 'top_target_skills' in stats:
+            skills = [s[0] for s in stats['top_target_skills']]
+            degrees = [s[1] for s in stats['top_target_skills']]
+
+            fig.add_trace(go.Bar(
+                y=skills,
+                x=degrees,
+                orientation='h',
+                name='最も学ばれるスキル',
+                marker_color='#4A90E2'
+            ))
+
+        fig.update_layout(
+            title='最も学ばれるスキル Top 5',
+            xaxis_title='遷移回数',
+            yaxis_title='スキル',
+            height=400
+        )
+
+    else:
+        # デフォルト: 基本統計
+        fig = go.Figure()
+
+    return fig
