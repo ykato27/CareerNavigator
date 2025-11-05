@@ -41,12 +41,24 @@ class MLRecommender:
         cls,
         member_competence: pd.DataFrame,
         competence_master: pd.DataFrame,
-        member_master: pd.DataFrame
+        member_master: pd.DataFrame,
+        use_preprocessing: bool = True,
+        use_tuning: bool = False
     ):
         """
         member_competence（会員習得力量データ）から会員×力量マトリクスを生成し、
         MatrixFactorizationModel（NMF）を学習。
+
+        Args:
+            member_competence: メンバー習得力量データ
+            competence_master: 力量マスタ
+            member_master: メンバーマスタ
+            use_preprocessing: データ前処理を使用するか（デフォルト: True）
+            use_tuning: ハイパーパラメータチューニングを使用するか（デフォルト: False）
         """
+        from skillnote_recommendation.core.config import Config
+        from skillnote_recommendation.ml.data_preprocessing import create_preprocessor_from_config
+
         print("\n" + "=" * 80)
         print("MLモデル学習開始（NMF）")
         print("=" * 80)
@@ -59,13 +71,63 @@ class MLRecommender:
             fill_value=0
         )
 
-        # NMFモデルを学習
-        mf_model = MatrixFactorizationModel(n_components=20, random_state=42)
-        mf_model.fit(skill_matrix)
+        print(f"元の会員数: {skill_matrix.shape[0]}")
+        print(f"元の力量数: {skill_matrix.shape[1]}")
 
-        print(f"会員数: {skill_matrix.shape[0]}")
-        print(f"力量数: {skill_matrix.shape[1]}")
-        print(f"再構成誤差: {mf_model.get_reconstruction_error():.4f}")
+        # データ前処理
+        preprocessing_stats = None
+        if use_preprocessing and Config.DATA_PREPROCESSING_PARAMS['enable_preprocessing']:
+            print("\n--- データ前処理実行 ---")
+            preprocessor = create_preprocessor_from_config(Config)
+            skill_matrix, preprocessing_stats = preprocessor.preprocess(skill_matrix, verbose=True)
+
+        # ハイパーパラメータチューニングまたは通常学習
+        if use_tuning:
+            print("\n--- ハイパーパラメータチューニング実行 ---")
+            from skillnote_recommendation.ml.hyperparameter_tuning import tune_nmf_hyperparameters_from_config
+
+            try:
+                best_params, best_value, mf_model = tune_nmf_hyperparameters_from_config(
+                    skill_matrix=skill_matrix,
+                    config=Config,
+                    show_progress_bar=True
+                )
+                print(f"\n✅ チューニング完了")
+                print(f"最適パラメータ: {best_params}")
+                print(f"最小再構成誤差: {best_value:.6f}")
+            except ImportError as e:
+                print(f"⚠️ Optunaがインストールされていません: {e}")
+                print("通常の学習に切り替えます。")
+                use_tuning = False
+
+        if not use_tuning:
+            print("\n--- 通常学習実行 ---")
+            # Configからパラメータを読み込み
+            mf_params = Config.MF_PARAMS.copy()
+            n_components = mf_params.pop('n_components')
+            random_state = mf_params.pop('random_state')
+
+            # NMFモデルを学習
+            mf_model = MatrixFactorizationModel(
+                n_components=n_components,
+                random_state=random_state,
+                **mf_params
+            )
+            mf_model.fit(skill_matrix)
+
+            print(f"\n✅ 学習完了")
+            print(f"潜在因子数: {mf_model.n_components}")
+            print(f"イテレーション数: {mf_model.model.n_iter_}")
+            print(f"再構成誤差: {mf_model.get_reconstruction_error():.6f}")
+
+        # 前処理統計を表示
+        if preprocessing_stats:
+            print(f"\n--- 前処理統計 ---")
+            print(f"除外メンバー数: {preprocessing_stats['removed_members']}")
+            print(f"除外力量数: {preprocessing_stats['removed_competences']}")
+            print(f"元のスパース性: {preprocessing_stats['original_sparsity']:.2f}%")
+            print(f"最終スパース性: {preprocessing_stats['final_sparsity']:.2f}%")
+
         print("=" * 80)
 
         # 参考人物検索エンジンを初期化

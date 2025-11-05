@@ -53,9 +53,47 @@ class Config:
 
     # Matrix Factorization パラメータ
     MF_PARAMS = {
-        'n_components': 10,  # 潜在因子の数
-        'max_iter': 200,  # 最大イテレーション数
+        # 基本パラメータ
+        'n_components': 20,  # 潜在因子の数（10-30推奨）
+        'max_iter': 1000,  # 最大イテレーション数（500-2000推奨）
         'random_state': 42,  # 再現性のための乱数シード
+
+        # 収束パラメータ
+        'tol': 1e-5,  # 収束判定の閾値（1e-4 → 1e-5で精度向上）
+
+        # 初期化戦略
+        'init': 'nndsvda',  # 'nndsvda' (sparse data向け), 'nndsvd', 'random'
+
+        # 正則化パラメータ（過学習防止）
+        'alpha_W': 0.01,  # メンバー因子行列のL1/L2正則化（0.0-0.1推奨）
+        'alpha_H': 0.01,  # 力量因子行列のL1/L2正則化（0.0-0.1推奨）
+        'l1_ratio': 0.5,  # L1正則化の割合（0.0=L2のみ, 1.0=L1のみ）
+
+        # ソルバー
+        'solver': 'cd',  # 'cd' (coordinate descent) or 'mu' (multiplicative update)
+    }
+
+    # データ前処理パラメータ
+    DATA_PREPROCESSING_PARAMS = {
+        'min_competences_per_member': 3,  # メンバーが保有すべき最小力量数（外れ値除去用）
+        'min_members_per_competence': 3,  # 力量を保有すべき最小メンバー数（外れ値除去用）
+        'normalization_method': 'minmax',  # 'minmax', 'standard', 'l2', None
+        'enable_preprocessing': True,  # 前処理を有効にするか
+    }
+
+    # Optunaハイパーパラメータチューニングパラメータ
+    OPTUNA_PARAMS = {
+        'n_trials': 50,  # 試行回数
+        'timeout': 600,  # タイムアウト（秒）
+        'n_jobs': 1,  # 並列実行数（1=逐次実行）
+        'show_progress_bar': True,  # プログレスバーを表示
+        'search_space': {
+            'n_components': (10, 40),  # 探索範囲（最小, 最大）
+            'alpha_W': (0.0, 0.2),  # 対数スケールで探索
+            'alpha_H': (0.0, 0.2),
+            'l1_ratio': (0.0, 1.0),
+            'max_iter': (500, 2000),
+        },
     }
 
     # データ検証パラメータ
