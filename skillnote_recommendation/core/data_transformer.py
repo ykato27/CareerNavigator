@@ -120,41 +120,63 @@ class DataTransformer:
         
         return category_names
     
-    def create_member_competence(self, data: Dict[str, pd.DataFrame], 
+    def create_member_competence(self, data: Dict[str, pd.DataFrame],
                                  competence_master: pd.DataFrame) -> Tuple[pd.DataFrame, list]:
         """
         メンバー習得力量データを作成
-        
+
         Args:
             data: 読み込んだデータの辞書
             competence_master: 統合力量マスタ
-            
+
         Returns:
             (メンバー習得力量データ, 有効なメンバーコードリスト)
         """
         logger.info("\n" + "=" * 80)
         logger.info("メンバー習得力量データ作成")
         logger.info("=" * 80)
-        
+
+        # 習得力量データの確認
+        acquired_df = data['acquired']
+        logger.info("\n保有力量データ:")
+        logger.info("  総行数: %d", len(acquired_df))
+        logger.info("  カラム: %s", list(acquired_df.columns))
+
+        # 必須カラムの確認
+        required_columns = ['メンバーコード', '力量コード', '力量タイプ', 'レベル']
+        missing_columns = [col for col in required_columns if col not in acquired_df.columns]
+        if missing_columns:
+            logger.error("  ⚠ 必須カラムが不足しています: %s", missing_columns)
+            logger.error("  利用可能なカラム: %s", list(acquired_df.columns))
+            raise ValueError(f"保有力量データに必須カラムが不足しています: {missing_columns}")
+
         # 有効なメンバーを抽出
         valid_members = data['members'][
             (~data['members']['メンバー名'].str.contains('削除|テスト|test', case=False, na=False)) &
             (data['members']['メンバーコード'].notna())
         ]['メンバーコード'].unique()
-        
+
         logger.info("\n有効なメンバー数: %d名", len(valid_members))
-        
+
         # 習得力量データ
-        member_competence = data['acquired'][
-            data['acquired']['メンバーコード'].isin(valid_members)
+        member_competence = acquired_df[
+            acquired_df['メンバーコード'].isin(valid_members)
         ].copy()
-        
+
+        logger.info("有効メンバーでフィルタ後: %d件", len(member_competence))
+
+        if member_competence.empty:
+            logger.warning("  ⚠ 有効なメンバーの習得力量データがありません")
+            logger.warning("  保有力量データの先頭5件:")
+            logger.warning("\n%s", acquired_df.head().to_string())
+            return member_competence, valid_members.tolist()
+
         # レベル正規化
         member_competence['正規化レベル'] = member_competence.apply(
             lambda row: self.normalize_level(row['レベル'], row['力量タイプ']),
             axis=1
         )
-        
+
         # 力量マスタと結合
         member_competence = member_competence.merge(
             competence_master[['力量コード', '力量名', '力量タイプ', '力量カテゴリー名']],
@@ -163,9 +185,9 @@ class DataTransformer:
             how='left',
             suffixes=('', '_master')
         )
-        
-        logger.info("習得記録数: %d件", len(member_competence))
-        
+
+        logger.info("力量マスタと結合後: %d件", len(member_competence))
+
         return member_competence, valid_members.tolist()
     
     def create_skill_matrix(self, member_competence: pd.DataFrame) -> pd.DataFrame:
