@@ -23,7 +23,8 @@ class MLRecommender:
         member_competence: pd.DataFrame,
         member_master: pd.DataFrame,
         diversity_reranker: Optional[DiversityReranker] = None,
-        reference_person_finder: Optional[ReferencePersonFinder] = None
+        reference_person_finder: Optional[ReferencePersonFinder] = None,
+        tuning_results: Optional[dict] = None
     ):
         self.mf_model = mf_model
         self.competence_master = competence_master
@@ -32,6 +33,7 @@ class MLRecommender:
         self.diversity_reranker = diversity_reranker or DiversityReranker()
         self.reference_person_finder = reference_person_finder
         self._member_acquired_cache = {}
+        self.tuning_results = tuning_results  # チューニング結果を保存
 
     # =========================================================
     # 学習
@@ -82,19 +84,29 @@ class MLRecommender:
             skill_matrix, preprocessing_stats = preprocessor.preprocess(skill_matrix, verbose=True)
 
         # ハイパーパラメータチューニングまたは通常学習
+        tuning_results = None
         if use_tuning:
             print("\n--- ハイパーパラメータチューニング実行 ---")
             from skillnote_recommendation.ml.hyperparameter_tuning import tune_nmf_hyperparameters_from_config
 
             try:
-                best_params, best_value, mf_model = tune_nmf_hyperparameters_from_config(
+                best_params, best_value, mf_model, tuner = tune_nmf_hyperparameters_from_config(
                     skill_matrix=skill_matrix,
                     config=Config,
-                    show_progress_bar=True
+                    show_progress_bar=True,
+                    return_tuner=True  # Tunerオブジェクトも返す
                 )
                 print(f"\n✅ チューニング完了")
                 print(f"最適パラメータ: {best_params}")
                 print(f"最小再構成誤差: {best_value:.6f}")
+
+                # チューニング結果を保存
+                tuning_results = {
+                    'best_params': best_params,
+                    'best_value': best_value,
+                    'tuner': tuner,
+                    'default_params': Config.MF_PARAMS.copy()
+                }
             except ImportError as e:
                 print(f"⚠️ Optunaがインストールされていません: {e}")
                 print("通常の学習に切り替えます。")
@@ -143,7 +155,8 @@ class MLRecommender:
             member_competence=member_competence,
             member_master=member_master,
             diversity_reranker=DiversityReranker(),
-            reference_person_finder=reference_finder
+            reference_person_finder=reference_finder,
+            tuning_results=tuning_results  # チューニング結果を渡す
         )
 
     # =========================================================

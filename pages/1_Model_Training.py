@@ -436,6 +436,76 @@ if st.session_state.get("model_trained", False):
             sparsity_H = np.sum(mf_model.H == 0) / mf_model.H.size * 100
             st.metric("力量因子のスパース性", f"{sparsity_H:.2f}%")
 
+    # ハイパーパラメータチューニング結果の表示
+    if recommender.tuning_results is not None:
+        with st.expander("🎯 ハイパーパラメータチューニング結果", expanded=True):
+            tuning_results = recommender.tuning_results
+
+            st.markdown("### 📊 チューニングサマリー")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("#### デフォルトパラメータ")
+                default_params = tuning_results['default_params']
+                for key, value in default_params.items():
+                    if key in ['n_components', 'max_iter', 'alpha_W', 'alpha_H', 'l1_ratio']:
+                        st.text(f"{key}: {value}")
+
+            with col2:
+                st.markdown("#### 最適パラメータ")
+                best_params = tuning_results['best_params']
+                for key, value in best_params.items():
+                    if isinstance(value, float):
+                        st.text(f"{key}: {value:.4f}")
+                    else:
+                        st.text(f"{key}: {value}")
+
+            st.markdown("---")
+            st.markdown("### 📈 最適化履歴")
+
+            # 最適化履歴をプロット
+            tuner = tuning_results['tuner']
+
+            try:
+                fig_history = tuner.plot_optimization_history()
+                if fig_history:
+                    st.plotly_chart(fig_history, use_container_width=True)
+
+                st.markdown("### 🔍 パラメータの重要度")
+                fig_importance = tuner.plot_param_importances()
+                if fig_importance:
+                    st.plotly_chart(fig_importance, use_container_width=True)
+
+                st.info("""
+                **パラメータの重要度**は、各パラメータが再構成誤差に与える影響の大きさを示しています。
+                重要度が高いパラメータほど、モデル性能に大きく影響します。
+                """)
+
+            except Exception as e:
+                st.warning(f"グラフの表示中にエラーが発生しました: {e}")
+
+            # 詳細な試行結果を表示
+            with st.expander("📋 全試行の詳細結果"):
+                try:
+                    trials_df = tuner.get_optimization_history()
+                    # 必要な列のみを表示
+                    display_cols = ['number', 'value', 'params_n_components', 'params_alpha_W',
+                                   'params_alpha_H', 'params_l1_ratio', 'params_max_iter', 'state']
+                    available_cols = [col for col in display_cols if col in trials_df.columns]
+
+                    if available_cols:
+                        st.dataframe(
+                            trials_df[available_cols].sort_values('value'),
+                            use_container_width=True,
+                            height=400
+                        )
+                    else:
+                        st.dataframe(trials_df, use_container_width=True, height=400)
+
+                except Exception as e:
+                    st.warning(f"試行結果の表示中にエラーが発生しました: {e}")
+
     st.markdown("---")
     st.success("✅ 学習結果の分析が完了しました。")
     st.info("👉 サイドバーから「推論」ページに移動して、推薦を実行してください。")

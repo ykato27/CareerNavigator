@@ -329,8 +329,9 @@ class NMFHyperparameterTuner:
 def tune_nmf_hyperparameters_from_config(
     skill_matrix: pd.DataFrame,
     config,
-    show_progress_bar: bool = True
-) -> Tuple[Dict, float, MatrixFactorizationModel]:
+    show_progress_bar: bool = True,
+    return_tuner: bool = False
+) -> Tuple:
     """
     Configを使ってハイパーパラメータチューニングを実行
 
@@ -338,9 +339,11 @@ def tune_nmf_hyperparameters_from_config(
         skill_matrix: メンバー×力量マトリクス
         config: Configクラスインスタンス
         show_progress_bar: プログレスバーを表示するか
+        return_tuner: Tunerオブジェクトも返すか
 
     Returns:
-        (最適パラメータ, 最小再構成誤差, 最良モデル)
+        return_tuner=False: (最適パラメータ, 最小再構成誤差, 最良モデル)
+        return_tuner=True: (最適パラメータ, 最小再構成誤差, 最良モデル, Tuner)
     """
     optuna_params = config.OPTUNA_PARAMS
 
@@ -356,4 +359,7 @@ def tune_nmf_hyperparameters_from_config(
     best_params, best_value = tuner.optimize(show_progress_bar=show_progress_bar)
     best_model = tuner.get_best_model()
 
-    return best_params, best_value, best_model
+    if return_tuner:
+        return best_params, best_value, best_model, tuner
+    else:
+        return best_params, best_value, best_model
