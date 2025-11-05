@@ -461,6 +461,12 @@ if st.session_state.get("model_trained", False):
                     else:
                         st.text(f"{key}: {value}")
 
+                # 最良トライアルのrandom_stateを表示
+                tuner = tuning_results['tuner']
+                best_trial = tuner.study.best_trial
+                best_random_state = best_trial.user_attrs.get('random_state', 'N/A')
+                st.text(f"random_state: {best_random_state}")
+
             st.markdown("---")
             st.markdown("### 📈 最適化履歴")
 
@@ -517,6 +523,54 @@ if st.session_state.get("model_trained", False):
                     - **標準偏差**が大きい：広い範囲を探索している（良い兆候）
                     - **標準偏差**が小さい：狭い範囲に集中している（探索が不十分な可能性）
                     """)
+
+                # パラメータ分布のヒストグラムを表示
+                with st.expander("📊 パラメータ分布のヒストグラム"):
+                    import plotly.graph_objects as go
+                    from plotly.subplots import make_subplots
+
+                    # alpha_W と alpha_H のヒストグラムを作成（対数スケール重要）
+                    fig = make_subplots(
+                        rows=2, cols=2,
+                        subplot_titles=('alpha_W (対数スケール)', 'alpha_H (対数スケール)',
+                                       'l1_ratio', 'n_components')
+                    )
+
+                    if 'params_alpha_W' in trials_df.columns:
+                        fig.add_trace(
+                            go.Histogram(x=trials_df['params_alpha_W'], name='alpha_W', nbinsx=20),
+                            row=1, col=1
+                        )
+                        fig.update_xaxes(type="log", row=1, col=1)
+
+                    if 'params_alpha_H' in trials_df.columns:
+                        fig.add_trace(
+                            go.Histogram(x=trials_df['params_alpha_H'], name='alpha_H', nbinsx=20),
+                            row=1, col=2
+                        )
+                        fig.update_xaxes(type="log", row=1, col=2)
+
+                    if 'params_l1_ratio' in trials_df.columns:
+                        fig.add_trace(
+                            go.Histogram(x=trials_df['params_l1_ratio'], name='l1_ratio', nbinsx=20),
+                            row=2, col=1
+                        )
+
+                    if 'params_n_components' in trials_df.columns:
+                        fig.add_trace(
+                            go.Histogram(x=trials_df['params_n_components'], name='n_components', nbinsx=20),
+                            row=2, col=2
+                        )
+
+                    fig.update_layout(height=600, showlegend=False, title_text="パラメータ分布（全トライアル）")
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    st.info("""
+                    **ヒストグラム**で、Optunaが各パラメータをどれだけ広く探索したか確認できます。
+                    - 対数スケールのパラメータ（alpha_W, alpha_H）は広い範囲（0.001～1.0）を探索
+                    - 分布が偏っている場合、探索範囲の調整が必要な可能性
+                    """)
+
             except Exception as e:
                 st.warning(f"統計情報の計算中にエラーが発生しました: {e}")
 
@@ -524,19 +578,33 @@ if st.session_state.get("model_trained", False):
             with st.expander("📋 全試行の詳細結果"):
                 try:
                     trials_df = tuner.get_optimization_history()
-                    # 必要な列のみを表示
+                    # 必要な列のみを表示（random_stateも追加）
                     display_cols = ['number', 'value', 'params_n_components', 'params_alpha_W',
-                                   'params_alpha_H', 'params_l1_ratio', 'params_max_iter', 'state']
+                                   'params_alpha_H', 'params_l1_ratio', 'params_max_iter',
+                                   'user_attrs_random_state', 'user_attrs_n_iter', 'state']
                     available_cols = [col for col in display_cols if col in trials_df.columns]
 
                     if available_cols:
+                        # 再構成誤差でソートして表示
+                        display_df = trials_df[available_cols].sort_values('value')
                         st.dataframe(
-                            trials_df[available_cols].sort_values('value'),
+                            display_df,
                             use_container_width=True,
                             height=400
                         )
+
+                        # 最良トライアルの詳細を強調表示
+                        best_trial_num = display_df.iloc[0]['number']
+                        best_value = display_df.iloc[0]['value']
+                        st.success(f"✨ 最良トライアル: #{int(best_trial_num)} (再構成誤差: {best_value:.6f})")
+
                     else:
                         st.dataframe(trials_df, use_container_width=True, height=400)
+
+                    st.info("""
+                    **user_attrs_random_state**: 各トライアルで使用されたrandom_state（異なる値で探索）
+                    **user_attrs_n_iter**: 収束までのイテレーション数
+                    """)
 
                 except Exception as e:
                     st.warning(f"試行結果の表示中にエラーが発生しました: {e}")
