@@ -9,17 +9,21 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from typing import List, Optional
+
 from skillnote_recommendation.ml.matrix_factorization import MatrixFactorizationModel
+from skillnote_recommendation.core.config import Config
 
 
 # =========================================================
-# Color Scheme Constants
+# Configuration-based Constants
 # =========================================================
 
-COLOR_TARGET_MEMBER = "#FF4B4B"  # Red for target member
-COLOR_REFERENCE_PERSON = "#4B8BFF"  # Blue for reference persons
-COLOR_OTHER_MEMBER = "#CCCCCC"  # Gray for others
+# Get colors from configuration
+COLOR_TARGET_MEMBER = Config.VISUALIZATION_PARAMS['color_target_member']
+COLOR_REFERENCE_PERSON = Config.VISUALIZATION_PARAMS['color_reference_person']
+COLOR_OTHER_MEMBER = Config.VISUALIZATION_PARAMS['color_other_member']
 
+# Marker sizes
 MARKER_SIZE_TARGET = 20
 MARKER_SIZE_REFERENCE = 15
 MARKER_SIZE_OTHER = 8
