@@ -29,6 +29,7 @@ from skillnote_recommendation.utils.visualization import (
     prepare_positioning_display_dataframe,
 )
 from skillnote_recommendation.core.models import Recommendation
+from skillnote_recommendation.core.persistence.streamlit_integration import StreamlitPersistenceManager
 
 
 # =========================================================
@@ -68,6 +69,22 @@ st.set_page_config(
     page_icon="🎯",
     layout="wide"
 )
+
+
+# =========================================================
+# 永続化マネージャーの初期化
+# =========================================================
+@st.cache_resource
+def get_persistence_manager():
+    """永続化マネージャーのシングルトンインスタンスを取得"""
+    return StreamlitPersistenceManager()
+
+
+persistence_manager = get_persistence_manager()
+persistence_manager.initialize_session()
+
+# ユーザーログインUI
+persistence_manager.render_user_login()
 
 # カスタムCSSでリッチなUIを実現
 st.markdown("""
@@ -920,6 +937,50 @@ if st.button("推薦を実行", type="primary"):
                 df_result = convert_recommendations_to_dataframe(recs)
                 st.session_state.last_recommendations_df = df_result
                 st.session_state.last_recommendations = recs
+
+                # 推薦履歴を保存（ログイン済みユーザーのみ）
+                current_user = persistence_manager.get_current_user()
+                if current_user:
+                    try:
+                        # メンバー名を取得
+                        member_info = td["members_clean"][
+                            td["members_clean"]["メンバーコード"] == selected_member_code
+                        ]
+                        member_name = member_info.iloc[0]["メンバー名"] if len(member_info) > 0 else selected_member_code
+
+                        # 推薦結果をdictに変換
+                        recommendations_list = [
+                            {
+                                "competence_code": r.competence_code,
+                                "competence_name": r.competence_name,
+                                "competence_type": r.competence_type,
+                                "category": r.category,
+                                "priority_score": float(r.priority_score),
+                                "reason": r.reason,
+                            }
+                            for r in recs
+                        ]
+
+                        # パラメータを保存
+                        parameters = {
+                            "top_n": top_n,
+                            "competence_type": competence_type,
+                            "diversity_strategy": diversity_strategy if recommendation_method == "NMF推薦" else None,
+                            "rwr_weight": rwr_weight if recommendation_method in ["グラフベース推薦", "ハイブリッド推薦"] else None,
+                        }
+
+                        # 履歴を保存
+                        persistence_manager.save_recommendation_history(
+                            member_code=selected_member_code,
+                            member_name=member_name,
+                            method=recommendation_method,
+                            recommendations=recommendations_list,
+                            parameters=parameters,
+                            execution_time=elapsed_time
+                        )
+                    except Exception as save_error:
+                        # 履歴保存エラーは表示するが、推薦結果表示は継続
+                        st.warning(f"⚠️ 履歴の保存に失敗しました: {save_error}")
 
                 # リッチな成功メッセージ（実行時間を表示）
                 st.markdown(f"""
