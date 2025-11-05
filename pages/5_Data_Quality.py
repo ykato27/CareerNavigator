@@ -10,10 +10,13 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 
-from skillnote_recommendation.core.data_loader import DataLoader
 from skillnote_recommendation.core.data_quality_monitor import (
     DataQualityMonitor,
     Severity
+)
+from skillnote_recommendation.utils.streamlit_helpers import (
+    check_data_loaded,
+    display_error_details
 )
 
 
@@ -166,6 +169,22 @@ def main():
 
     st.markdown("---")
 
+    # =========================================================
+    # 前提条件チェック
+    # =========================================================
+
+    check_data_loaded()
+
+    # =========================================================
+    # データ準備
+    # =========================================================
+
+    td = st.session_state.transformed_data
+    member_competence = td["member_competence"]
+    competence_master = td["competence_master"]
+
+    st.success(f"✅ データ読み込み完了: {len(member_competence):,}件のレコード")
+
     # サイドバー設定
     st.sidebar.header("⚙️ モニタリング設定")
 
@@ -193,199 +212,184 @@ def main():
         help="この数を超えると異常な高速習得として警告します"
     )
 
-    # データ読み込み
-    try:
-        with st.spinner("データを読み込んでいます..."):
-            loader = DataLoader()
-            member_competence = loader.load_member_competence()
-            competence_master = loader.load_competence_master()
-            members = loader.load_members()
+    # データ品質チェック実行
+    st.markdown("---")
+    st.header("📊 品質チェック実行")
 
-        st.success(f"✅ データ読み込み完了: {len(member_competence):,}件のレコード")
+    if st.button("🔍 データ品質チェックを実行", type="primary"):
+        with st.spinner("データ品質をチェック中..."):
+            # スキル依存関係を設定（オプション）
+            # 必要に応じて実際の依存関係を設定
+            skill_dependencies = {}
 
-        # データ品質チェック実行
+            monitor = DataQualityMonitor(
+                missing_threshold=missing_threshold,
+                staleness_days=staleness_days,
+                max_skills_per_week=max_skills_per_week,
+                skill_dependencies=skill_dependencies
+            )
+
+            # membersデータがあれば取得
+            members = td.get("members", None)
+
+            report = monitor.check_all(
+                member_competence=member_competence,
+                competence_master=competence_master,
+                members=members
+            )
+
+            # セッションステートに保存
+            st.session_state['quality_report'] = report
+
+    # レポート表示
+    if 'quality_report' in st.session_state:
+        report = st.session_state['quality_report']
+
         st.markdown("---")
-        st.header("📊 品質チェック実行")
+        st.header("📈 チェック結果")
 
-        if st.button("🔍 データ品質チェックを実行", type="primary"):
-            with st.spinner("データ品質をチェック中..."):
-                # スキル依存関係を設定（オプション）
-                # 必要に応じて実際の依存関係を設定
-                skill_dependencies = {}
+        # サマリー表示
+        col1, col2, col3, col4 = st.columns(4)
 
-                monitor = DataQualityMonitor(
-                    missing_threshold=missing_threshold,
-                    staleness_days=staleness_days,
-                    max_skills_per_week=max_skills_per_week,
-                    skill_dependencies=skill_dependencies
-                )
+        with col1:
+            st.metric(
+                label="総レコード数",
+                value=f"{report.total_records:,}"
+            )
 
-                report = monitor.check_all(
-                    member_competence=member_competence,
-                    competence_master=competence_master,
-                    members=members
-                )
+        with col2:
+            st.metric(
+                label="検出された問題",
+                value=report.total_issues
+            )
 
-                # セッションステートに保存
-                st.session_state['quality_report'] = report
+        with col3:
+            critical_count = report.issues_by_severity.get('CRITICAL', 0)
+            high_count = report.issues_by_severity.get('HIGH', 0)
+            st.metric(
+                label="高優先度の問題",
+                value=critical_count + high_count,
+                delta=f"CRITICAL: {critical_count}, HIGH: {high_count}",
+                delta_color="inverse"
+            )
 
-        # レポート表示
-        if 'quality_report' in st.session_state:
-            report = st.session_state['quality_report']
+        with col4:
+            if report.total_issues == 0:
+                health_score = 100
+                health_status = "優良"
+                health_color = "green"
+            else:
+                critical = report.issues_by_severity.get('CRITICAL', 0)
+                high = report.issues_by_severity.get('HIGH', 0)
+                medium = report.issues_by_severity.get('MEDIUM', 0)
+                low = report.issues_by_severity.get('LOW', 0)
 
-            st.markdown("---")
-            st.header("📈 チェック結果")
+                # スコア計算（重み付け）
+                penalty = (critical * 25) + (high * 10) + (medium * 3) + (low * 1)
+                health_score = max(0, 100 - penalty)
 
-            # サマリー表示
-            col1, col2, col3, col4 = st.columns(4)
-
-            with col1:
-                st.metric(
-                    label="総レコード数",
-                    value=f"{report.total_records:,}"
-                )
-
-            with col2:
-                st.metric(
-                    label="検出された問題",
-                    value=report.total_issues
-                )
-
-            with col3:
-                critical_count = report.issues_by_severity.get('CRITICAL', 0)
-                high_count = report.issues_by_severity.get('HIGH', 0)
-                st.metric(
-                    label="高優先度の問題",
-                    value=critical_count + high_count,
-                    delta=f"CRITICAL: {critical_count}, HIGH: {high_count}",
-                    delta_color="inverse"
-                )
-
-            with col4:
-                if report.total_issues == 0:
-                    health_score = 100
+                if health_score >= 90:
                     health_status = "優良"
                     health_color = "green"
+                elif health_score >= 70:
+                    health_status = "良好"
+                    health_color = "blue"
+                elif health_score >= 50:
+                    health_status = "注意"
+                    health_color = "yellow"
                 else:
-                    critical = report.issues_by_severity.get('CRITICAL', 0)
-                    high = report.issues_by_severity.get('HIGH', 0)
-                    medium = report.issues_by_severity.get('MEDIUM', 0)
-                    low = report.issues_by_severity.get('LOW', 0)
+                    health_status = "警告"
+                    health_color = "red"
 
-                    # スコア計算（重み付け）
-                    penalty = (critical * 25) + (high * 10) + (medium * 3) + (low * 1)
-                    health_score = max(0, 100 - penalty)
+            st.metric(
+                label="データ品質スコア",
+                value=f"{health_score}点",
+                delta=health_status
+            )
 
-                    if health_score >= 90:
-                        health_status = "優良"
-                        health_color = "green"
-                    elif health_score >= 70:
-                        health_status = "良好"
-                        health_color = "blue"
-                    elif health_score >= 50:
-                        health_status = "注意"
-                        health_color = "yellow"
-                    else:
-                        health_status = "警告"
-                        health_color = "red"
-
-                st.metric(
-                    label="データ品質スコア",
-                    value=f"{health_score}点",
-                    delta=health_status
-                )
-
-            # チャート表示
-            if report.total_issues > 0:
-                st.markdown("---")
-                chart_col1, chart_col2 = st.columns(2)
-
-                with chart_col1:
-                    severity_chart = create_severity_distribution_chart(report)
-                    if severity_chart:
-                        st.plotly_chart(severity_chart, use_container_width=True)
-
-                with chart_col2:
-                    category_chart = create_category_distribution_chart(report.issues)
-                    if category_chart:
-                        st.plotly_chart(category_chart, use_container_width=True)
-
-                # 問題一覧
-                st.markdown("---")
-                st.header("📋 検出された問題一覧")
-
-                # フィルタリング
-                filter_col1, filter_col2 = st.columns(2)
-
-                with filter_col1:
-                    severity_filter = st.multiselect(
-                        "重大度でフィルタ",
-                        options=['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
-                        default=['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
-                    )
-
-                with filter_col2:
-                    category_filter = st.multiselect(
-                        "カテゴリでフィルタ",
-                        options=['completeness', 'consistency', 'timeliness', 'anomaly'],
-                        default=['completeness', 'consistency', 'timeliness', 'anomaly']
-                    )
-
-                # フィルタリング適用
-                filtered_issues = [
-                    issue for issue in report.issues
-                    if issue.severity.value in severity_filter and issue.category in category_filter
-                ]
-
-                if filtered_issues:
-                    st.markdown(f"**{len(filtered_issues)}件の問題を表示中**")
-
-                    for idx, issue in enumerate(filtered_issues, 1):
-                        display_issue(issue, idx)
-                else:
-                    st.info("フィルタ条件に一致する問題はありません。")
-            else:
-                st.success("🎉 データ品質に問題は検出されませんでした！")
-
-            # レポートのエクスポート
+        # チャート表示
+        if report.total_issues > 0:
             st.markdown("---")
-            st.header("💾 レポートのエクスポート")
+            chart_col1, chart_col2 = st.columns(2)
 
-            # CSVエクスポート
-            if report.total_issues > 0:
-                export_data = []
-                for issue in report.issues:
-                    export_data.append({
-                        'タイムスタンプ': report.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
-                        '重大度': issue.severity.value,
-                        'カテゴリ': issue.category,
-                        '問題タイトル': issue.title,
-                        'メッセージ': issue.message,
-                        '影響レコード数': issue.affected_records
-                    })
+            with chart_col1:
+                severity_chart = create_severity_distribution_chart(report)
+                if severity_chart:
+                    st.plotly_chart(severity_chart, use_container_width=True)
 
-                export_df = pd.DataFrame(export_data)
-                csv = export_df.to_csv(index=False, encoding='utf-8-sig')
+            with chart_col2:
+                category_chart = create_category_distribution_chart(report.issues)
+                if category_chart:
+                    st.plotly_chart(category_chart, use_container_width=True)
 
-                st.download_button(
-                    label="📥 CSVとしてダウンロード",
-                    data=csv,
-                    file_name=f"data_quality_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
+            # 問題一覧
+            st.markdown("---")
+            st.header("📋 検出された問題一覧")
+
+            # フィルタリング
+            filter_col1, filter_col2 = st.columns(2)
+
+            with filter_col1:
+                severity_filter = st.multiselect(
+                    "重大度でフィルタ",
+                    options=['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
+                    default=['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
                 )
 
-            # メタ情報
-            with st.expander("📊 データサマリー情報"):
-                st.json(report.summary)
-                st.markdown(f"**チェック実行日時:** {report.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+            with filter_col2:
+                category_filter = st.multiselect(
+                    "カテゴリでフィルタ",
+                    options=['completeness', 'consistency', 'timeliness', 'anomaly'],
+                    default=['completeness', 'consistency', 'timeliness', 'anomaly']
+                )
 
-    except FileNotFoundError as e:
-        st.error(f"❌ データファイルが見つかりません: {e}")
-        st.info("データファイルが正しい場所に配置されているか確認してください。")
+            # フィルタリング適用
+            filtered_issues = [
+                issue for issue in report.issues
+                if issue.severity.value in severity_filter and issue.category in category_filter
+            ]
 
-    except Exception as e:
-        st.error(f"❌ エラーが発生しました: {e}")
-        st.exception(e)
+            if filtered_issues:
+                st.markdown(f"**{len(filtered_issues)}件の問題を表示中**")
+
+                for idx, issue in enumerate(filtered_issues, 1):
+                    display_issue(issue, idx)
+            else:
+                st.info("フィルタ条件に一致する問題はありません。")
+        else:
+            st.success("🎉 データ品質に問題は検出されませんでした！")
+
+        # レポートのエクスポート
+        st.markdown("---")
+        st.header("💾 レポートのエクスポート")
+
+        # CSVエクスポート
+        if report.total_issues > 0:
+            export_data = []
+            for issue in report.issues:
+                export_data.append({
+                    'タイムスタンプ': report.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                    '重大度': issue.severity.value,
+                    'カテゴリ': issue.category,
+                    '問題タイトル': issue.title,
+                    'メッセージ': issue.message,
+                    '影響レコード数': issue.affected_records
+                })
+
+            export_df = pd.DataFrame(export_data)
+            csv = export_df.to_csv(index=False, encoding='utf-8-sig')
+
+            st.download_button(
+                label="📥 CSVとしてダウンロード",
+                data=csv,
+                file_name=f"data_quality_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+
+        # メタ情報
+        with st.expander("📊 データサマリー情報"):
+            st.json(report.summary)
+            st.markdown(f"**チェック実行日時:** {report.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 if __name__ == "__main__":
