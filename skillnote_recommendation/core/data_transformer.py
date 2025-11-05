@@ -8,40 +8,29 @@ import logging
 import pandas as pd
 import numpy as np
 from typing import Dict, Tuple
+
 from skillnote_recommendation.core.config import Config
+from skillnote_recommendation.utils.data_normalizers import DataNormalizer
+from skillnote_recommendation.utils.data_validators import DataValidator, ValidationError
+from skillnote_recommendation.core.error_handlers import ErrorHandler
 
 
 logger = logging.getLogger(__name__)
 
 
 class DataTransformer:
-    """データ変換クラス"""
+    """
+    データ変換クラス
 
-    @staticmethod
-    def normalize_member_code(code) -> str:
-        """
-        メンバーコードを正規化
+    生データを推薦システムで使用可能な形式に変換します。
+    データの正規化、検証、変換を担当します。
+    """
 
-        Args:
-            code: 元のメンバーコード
-
-        Returns:
-            正規化されたメンバーコード（文字列）
-        """
-        if pd.isna(code):
-            return ""
-
-        # 文字列に変換
-        code_str = str(code)
-
-        # 前後の空白を削除
-        code_str = code_str.strip()
-
-        # 全角英数字を半角に変換
-        import unicodedata
-        code_str = unicodedata.normalize('NFKC', code_str)
-
-        return code_str
+    def __init__(self):
+        """Initialize DataTransformer with normalizer and validator."""
+        self.normalizer = DataNormalizer()
+        self.validator = DataValidator()
+        self.config = Config()
 
     @staticmethod
     def normalize_level(level_value, competence_type: str) -> int:
@@ -168,25 +157,38 @@ class DataTransformer:
         logger.info("  総行数: %d", len(acquired_df))
         logger.info("  カラム: %s", list(acquired_df.columns))
 
-        # 必須カラムの確認
+        # 必須カラムの検証（新しいvalidatorを使用）
         required_columns = ['メンバーコード', '力量コード', '力量タイプ', 'レベル']
-        missing_columns = [col for col in required_columns if col not in acquired_df.columns]
-        if missing_columns:
-            logger.error("  ⚠ 必須カラムが不足しています: %s", missing_columns)
-            logger.error("  利用可能なカラム: %s", list(acquired_df.columns))
-            raise ValueError(f"保有力量データに必須カラムが不足しています: {missing_columns}")
+        try:
+            self.validator.validate_required_columns(
+                acquired_df,
+                required_columns,
+                "保有力量データ"
+            )
+            self.validator.validate_non_empty(acquired_df, "保有力量データ")
+        except ValidationError as e:
+            ErrorHandler.log_error(e, "data validation")
+            raise
 
-        # メンバーコードを正規化
+        # メンバーコードを正規化（新しいnormalizerを使用）
         logger.info("\nメンバーコードを正規化中...")
-        acquired_df['メンバーコード'] = acquired_df['メンバーコード'].apply(self.normalize_member_code)
+        acquired_df['メンバーコード'] = acquired_df['メンバーコード'].apply(
+            self.normalizer.normalize_member_code
+        )
         logger.info("  保有力量データのメンバーコードを正規化しました")
 
         # 有効なメンバーを抽出
         members_df = data['members'].copy()
-        members_df['メンバーコード'] = members_df['メンバーコード'].apply(self.normalize_member_code)
+        members_df['メンバーコード'] = members_df['メンバーコード'].apply(
+            self.normalizer.normalize_member_code
+        )
+
+        # 無効な名前パターンを設定から取得
+        invalid_patterns = self.config.VALIDATION_PARAMS['invalid_name_patterns']
+        pattern = '|'.join(invalid_patterns)
 
         valid_members = members_df[
-            (~members_df['メンバー名'].str.contains('削除|テスト|test', case=False, na=False)) &
+            (~members_df['メンバー名'].str.contains(pattern, case=False, na=False)) &
             (members_df['メンバーコード'] != "")
         ]['メンバーコード'].unique()
 
@@ -299,11 +301,17 @@ class DataTransformer:
         """
         members_df = data['members'].copy()
 
-        # メンバーコードを正規化
-        members_df['メンバーコード'] = members_df['メンバーコード'].apply(self.normalize_member_code)
+        # メンバーコードを正規化（新しいnormalizerを使用）
+        members_df['メンバーコード'] = members_df['メンバーコード'].apply(
+            self.normalizer.normalize_member_code
+        )
+
+        # 無効な名前パターンを設定から取得
+        invalid_patterns = self.config.VALIDATION_PARAMS['invalid_name_patterns']
+        pattern = '|'.join(invalid_patterns)
 
         members_clean = members_df[
-            (~members_df['メンバー名'].str.contains('削除|テスト|test', case=False, na=False)) &
+            (~members_df['メンバー名'].str.contains(pattern, case=False, na=False)) &
             (members_df['メンバーコード'] != "")
         ].copy()
 

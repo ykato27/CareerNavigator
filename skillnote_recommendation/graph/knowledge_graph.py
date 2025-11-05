@@ -11,7 +11,9 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Set, Optional
 from sklearn.metrics.pairwise import cosine_similarity
+
 from .category_hierarchy import CategoryHierarchy
+from skillnote_recommendation.core.config import Config
 
 
 logger = logging.getLogger(__name__)
@@ -214,13 +216,24 @@ class CompetenceKnowledgeGraph:
 
         logger.info("  追加: %d本のカテゴリー階層エッジ", edge_count)
 
-    def _add_member_similarity_edges(self, threshold: float = 0.3, top_k: int = 5):
+    def _add_member_similarity_edges(
+        self,
+        threshold: Optional[float] = None,
+        top_k: Optional[int] = None
+    ):
         """メンバー間の類似度エッジを追加
 
         Args:
             threshold: 類似度の閾値（この値以上のペアにエッジを張る）
+                      Noneの場合はConfig.GRAPH_PARAMSから取得
             top_k: 各メンバーに対して上位K人までエッジを張る
+                   Noneの場合はConfig.GRAPH_PARAMSから取得
         """
+        # デフォルト値を設定から取得
+        if threshold is None:
+            threshold = Config.GRAPH_PARAMS['member_similarity_threshold']
+        if top_k is None:
+            top_k = Config.GRAPH_PARAMS['member_similarity_top_k']
         # メンバー習得力量データの存在確認
         if self.member_competence_df.empty:
             logger.warning("  ⚠ メンバー習得力量データが空のため、類似度エッジをスキップします")
