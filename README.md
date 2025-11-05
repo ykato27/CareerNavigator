@@ -26,7 +26,7 @@ CareerNavigator/
 │
 ├── skillnote_recommendation/      # パッケージ
 │   ├── __init__.py
-│   ├── core/                      # コアモジュール（ルールベース推薦）
+│   ├── core/                      # コアモジュール（ルールベース推薦） → [詳細](skillnote_recommendation/core/README.md)
 │   │   ├── config.py              # 設定管理
 │   │   ├── models.py              # データモデル
 │   │   ├── data_loader.py         # データ読み込み
@@ -35,11 +35,15 @@ CareerNavigator/
 │   │   ├── recommendation_engine.py  # ルールベース推薦エンジン
 │   │   ├── recommendation_system.py  # 推薦システム
 │   │   └── evaluator.py           # 評価器（時系列分割・メトリクス・多様性評価）
-│   ├── ml/                        # 機械学習モジュール
+│   ├── ml/                        # 機械学習モジュール → [詳細](skillnote_recommendation/ml/README.md)
 │   │   ├── __init__.py
 │   │   ├── matrix_factorization.py  # Matrix Factorizationモデル
 │   │   ├── diversity.py           # 多様性再ランキング
 │   │   └── ml_recommender.py      # ML推薦システム
+│   ├── graph/                     # グラフベース推薦モジュール → [詳細](skillnote_recommendation/graph/README.md)
+│   │   ├── knowledge_graph.py     # 知識グラフ
+│   │   ├── hybrid_recommender.py  # ハイブリッド推薦
+│   │   └── career_path.py         # キャリアパス
 │   └── scripts/                   # 実行スクリプト
 │       ├── convert_data.py        # データ変換
 │       └── run_recommendation.py  # 推薦実行
@@ -559,6 +563,14 @@ uv pip install -e .
 
 ## ドキュメント
 
+### 🎓 初心者向けドキュメント
+
+- **[初心者向けコード理解ガイド (docs/BEGINNER_GUIDE.md)](docs/BEGINNER_GUIDE.md)** ⭐ **まずはここから！**
+  - どのファイルが実行ファイルで、どのファイルがライブラリコードか
+  - 各ファイルの役割を分かりやすく説明
+  - コードの読み方・学習の進め方
+  - よくある質問と回答
+
 ### 📚 開発者向けドキュメント
 
 - **[リファクタリングガイド (REFACTORING_GUIDE.md)](REFACTORING_GUIDE.md)** - エンタープライズグレード機能の実装ガイド
@@ -605,7 +617,10 @@ uv pip install -e .
   - 評価メトリクス
   - パラメータチューニング
 
-- **[コード構造ガイド (docs/CODE_STRUCTURE.md)](docs/CODE_STRUCTURE.md)** - プロジェクト構造とモジュール説明
+- **[コード構造ガイド (docs/CODE_STRUCTURE.md)](docs/CODE_STRUCTURE.md)** - プロジェクト構造とモジュール説明（技術者向け）
+  - Streamlitアプリケーション構造
+  - コーディング規約とパターン
+  - テスト構造と拡張ガイド
 
 - **[データ永続化 (docs/PERSISTENCE.md)](docs/PERSISTENCE.md)** - データベース設計と永続化アーキテクチャ
 
