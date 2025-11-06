@@ -762,7 +762,8 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                 # パターン別推薦を実行
                 pattern_recommendations = multi_recommender.recommend_by_patterns(
                     target_member_code=selected_member_code,
-                    top_k_per_pattern=top_k_per_pattern
+                    top_k_per_pattern=top_k_per_pattern,
+                    competence_type=competence_type
                 )
 
                 # セッションステートに保存
