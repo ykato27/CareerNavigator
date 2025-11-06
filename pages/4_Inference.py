@@ -593,7 +593,7 @@ if st.button("推薦を実行", type="primary"):
                 if 'pattern_recommendations' in st.session_state:
                     del st.session_state['pattern_recommendations']
 
-            elif recommendation_method in ["グラフベース推薦", "ハイブリッド推薦"]:
+            elif recommendation_method == "グラフベース推薦":
                 # Knowledge Graphの確認
                 if 'knowledge_graph' not in st.session_state:
                     st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
@@ -611,7 +611,8 @@ if st.button("推薦を実行", type="primary"):
                 graph_recommendations_raw = rwr.recommend(
                     member_code=selected_member_code,
                     top_n=top_n,
-                    return_paths=show_paths
+                    return_paths=show_paths,
+                    competence_type=competence_type
                 )
 
                 # RWRの結果をHybridRecommendation形式に変換
@@ -649,6 +650,37 @@ if st.button("推薦を実行", type="primary"):
                         competence_info=comp_info
                     )
                     graph_recommendations.append(hybrid_rec)
+
+                # HybridRecommendationを標準のRecommendationに変換
+                recs = [convert_hybrid_to_recommendation(hr) for hr in graph_recommendations]
+
+            elif recommendation_method == "ハイブリッド推薦":
+                # Knowledge Graphの確認
+                if 'knowledge_graph' not in st.session_state:
+                    st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
+                    st.stop()
+
+                # HybridGraphRecommenderを作成
+                from skillnote_recommendation.graph import build_hybrid_recommender
+                hybrid_recommender = build_hybrid_recommender(
+                    member_competence=td["member_competence"],
+                    competence_master=td["competence_master"],
+                    member_master=td["members_clean"],
+                    graph_weight=rwr_weight,
+                    cf_weight=1.0 - rwr_weight,
+                    content_weight=0.0,  # コンテンツベースは無効化（feature_engineerが必要なため）
+                    max_path_length=max_path_length,
+                    max_paths=max_paths
+                )
+
+                # ハイブリッド推薦を実行
+                graph_recommendations = hybrid_recommender.recommend(
+                    member_code=selected_member_code,
+                    top_n=top_n,
+                    competence_type=competence_type,
+                    category_filter=None,
+                    use_diversity=True
+                )
 
                 # HybridRecommendationを標準のRecommendationに変換
                 recs = [convert_hybrid_to_recommendation(hr) for hr in graph_recommendations]

@@ -62,7 +62,8 @@ class RandomWalkRecommender:
     def recommend(self,
                   member_code: str,
                   top_n: int = 10,
-                  return_paths: bool = True) -> List[Tuple[str, float, List[List[str]]]]:
+                  return_paths: bool = True,
+                  competence_type: Optional[List[str]] = None) -> List[Tuple[str, float, List[List[str]]]]:
         """
         RWRで力量を推薦
 
@@ -70,6 +71,8 @@ class RandomWalkRecommender:
             member_code: 対象メンバーコード
             top_n: 推薦件数
             return_paths: 推薦パスを返すかどうか
+            competence_type: フィルタする力量タイプのリスト（例: ['SKILL', 'EDUCATION']）
+                             Noneの場合は全ての力量タイプを推薦
 
         Returns:
             [(力量コード, スコア, 推薦パス), ...]
@@ -99,6 +102,13 @@ class RandomWalkRecommender:
 
                 # 既に習得済みの力量は除外
                 if comp_code not in acquired_competences:
+                    # 力量タイプフィルタリング
+                    if competence_type is not None:
+                        comp_info = self.kg.get_node_info(node)
+                        comp_type = comp_info.get('competence_type', 'UNKNOWN')
+                        if comp_type not in competence_type:
+                            continue  # フィルタ条件に合わない力量はスキップ
+
                     competence_scores.append((comp_code, score))
 
         competence_scores.sort(key=lambda x: x[1], reverse=True)
