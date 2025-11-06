@@ -1067,7 +1067,14 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                             # 参考人物を表示
                             if pattern_rec.reference_persons:
-                                st.markdown("### 👥 参考人物（共通）")
+                                st.markdown("### 👥 参考人物（あなたより総合スキルレベルが高いメンバー）")
+
+                                # フィルタリング情報を表示
+                                if pattern_rec.filtered_count > 0 and pattern_rec.total_count > 0:
+                                    st.info(
+                                        f"このパターンの全{pattern_rec.total_count}名のうち、"
+                                        f"あなたより総合スキルレベルが高い{pattern_rec.filtered_count}名を参考人物として選定しています。"
+                                    )
 
                                 ref_person_names = []
                                 for ref_person in pattern_rec.reference_persons:

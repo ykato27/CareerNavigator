@@ -26,6 +26,8 @@ class PatternRecommendation:
     recommendations: List[Recommendation]  # 推薦力量リスト
     avg_profile_used: bool  # 平均プロファイルを使用したか
     message: str  # メッセージ（参考人物が少ない場合など）
+    filtered_count: int = 0  # フィルタリング後の参考人物数（自分より優秀な人）
+    total_count: int = 0  # フィルタリング前の総メンバー数
 
 
 class MultiPatternRecommender:
@@ -127,10 +129,43 @@ class MultiPatternRecommender:
                 reference_persons=[],
                 recommendations=[],
                 avg_profile_used=False,
-                message=f"参考人物が{self.classifier.min_persons_per_group}名未満のため、推薦をスキップしました。"
+                message=f"参考人物が{self.classifier.min_persons_per_group}名未満のため、推薦をスキップしました。",
+                filtered_count=0,
+                total_count=len(group.member_codes)
             )
 
-        # 参考人物情報を整形
+        # 対象メンバーの総合スキルレベルを取得
+        target_total_level = self._get_member_total_skill_level(target_member_code)
+
+        # グループ内で対象者より総合スキルレベルが高いメンバーのみをフィルタリング
+        filtered_codes = []
+        filtered_names = []
+        filtered_sims = []
+
+        total_count = len(group.member_codes)
+
+        for code, name, sim in zip(group.member_codes, group.member_names, group.similarities):
+            member_total_level = self._get_member_total_skill_level(code)
+            # 対象者より総合スキルレベルが高いメンバーのみを選定
+            if member_total_level > target_total_level:
+                filtered_codes.append(code)
+                filtered_names.append(name)
+                filtered_sims.append(sim)
+
+        # フィルタリング後のメンバーが少ない場合
+        if len(filtered_codes) < self.classifier.min_persons_per_group:
+            return PatternRecommendation(
+                pattern_name=group.pattern_name,
+                pattern_label=group.pattern_label,
+                reference_persons=[],
+                recommendations=[],
+                avg_profile_used=False,
+                message=f"あなたより総合スキルレベルが高い参考人物が{self.classifier.min_persons_per_group}名未満のため、推薦をスキップしました。",
+                filtered_count=len(filtered_codes),
+                total_count=total_count
+            )
+
+        # フィルタリング後の参考人物情報を整形
         reference_persons = [
             {
                 'code': code,
@@ -138,14 +173,14 @@ class MultiPatternRecommender:
                 'similarity': f"{sim:.2f}"
             }
             for code, name, sim in zip(
-                group.member_codes,
-                group.member_names,
-                group.similarities
+                filtered_codes,
+                filtered_names,
+                filtered_sims
             )
         ]
 
-        # グループの平均プロファイルを計算
-        avg_profile = self._calculate_average_profile(group.member_codes)
+        # フィルタリング後のグループの平均プロファイルを計算
+        avg_profile = self._calculate_average_profile(filtered_codes)
 
         # 平均プロファイルを使って力量スコアを予測
         competence_scores = self._predict_competences_from_profile(
@@ -189,7 +224,9 @@ class MultiPatternRecommender:
                     reason=self._generate_reason(
                         comp_info,
                         group,
-                        score
+                        score,
+                        filtered_count=len(filtered_codes),
+                        total_count=total_count
                     ),
                     reference_persons=[]  # 個別の参考人物は使用しない
                 )
@@ -201,7 +238,9 @@ class MultiPatternRecommender:
             reference_persons=reference_persons,
             recommendations=recommendations,
             avg_profile_used=True,
-            message=""
+            message="",
+            filtered_count=len(filtered_codes),
+            total_count=total_count
         )
 
     def _calculate_average_profile(
@@ -274,6 +313,15 @@ class MultiPatternRecommender:
         ]["力量コード"].unique().tolist()
         return acquired
 
+    def _get_member_total_skill_level(self, member_code: str) -> float:
+        """メンバーの総合スキルレベル（全保有力量の正規化レベルの合計）を取得"""
+        member_comp = self.member_competence[
+            self.member_competence["メンバーコード"] == member_code
+        ]
+        if len(member_comp) == 0:
+            return 0.0
+        return float(member_comp["正規化レベル"].sum())
+
     def _normalize_score(self, score: float, all_scores: List[float]) -> float:
         """スコアを0-10に正規化"""
         if not all_scores:
@@ -289,27 +337,32 @@ class MultiPatternRecommender:
         self,
         competence_info: pd.Series,
         group: CareerPatternGroup,
-        score: float
+        score: float,
+        filtered_count: int = None,
+        total_count: int = None
     ) -> str:
         """推薦理由を生成"""
         comp_name = competence_info["力量名"]
         comp_type = competence_info["力量タイプ"]
         pattern_label = group.pattern_label
 
+        # フィルタリング後のメンバー数を使用（指定がない場合は全体）
+        member_count = filtered_count if filtered_count is not None else len(group.member_codes)
+
         if group.pattern_name == 'similar':
             reason = (
-                f"**{comp_name}** は、あなたと類似したキャリアパスを持つ{len(group.member_codes)}名のメンバーが "
-                f"習得している力量です。あなたのキャリアにも適合する可能性が高いです。"
+                f"**{comp_name}** は、あなたと類似したキャリアパスを持ち、かつあなたより総合スキルレベルが高い"
+                f"{member_count}名のメンバーが習得している力量です。あなたのキャリアにも適合する可能性が高いです。"
             )
         elif group.pattern_name == 'different1':
             reason = (
-                f"**{comp_name}** は、あなたとやや異なるキャリアパスを持つ{len(group.member_codes)}名のメンバーが "
-                f"習得している力量です。キャリアの幅を広げるのに適しています。"
+                f"**{comp_name}** は、あなたとやや異なるキャリアパスを持ち、かつあなたより総合スキルレベルが高い"
+                f"{member_count}名のメンバーが習得している力量です。キャリアの幅を広げるのに適しています。"
             )
         else:  # different2
             reason = (
-                f"**{comp_name}** は、あなたと大きく異なるキャリアパスを持つ{len(group.member_codes)}名のメンバーが "
-                f"習得している力量です。新しい専門領域への挑戦に適しています。"
+                f"**{comp_name}** は、あなたと大きく異なるキャリアパスを持ち、かつあなたより総合スキルレベルが高い"
+                f"{member_count}名のメンバーが習得している力量です。新しい専門領域への挑戦に適しています。"
             )
 
         return reason
