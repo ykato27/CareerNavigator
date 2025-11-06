@@ -173,8 +173,8 @@ class FeatureEngineer:
             type_vec = self.type_encoder.transform([['SKILL']])[0]
         else:
             comp_row = comp_info.iloc[0]
-            category = comp_row.get('category', 'UNKNOWN')
-            comp_type = comp_row.get('competence_type', 'SKILL')
+            category = comp_row.get(self.comp_master_category_col, 'UNKNOWN')
+            comp_type = comp_row.get(self.comp_master_type_col, 'SKILL')
 
             category_vec = self.category_encoder.transform([[category]])[0]
             type_vec = self.type_encoder.transform([[comp_type]])[0]
@@ -249,24 +249,37 @@ class FeatureEngineer:
             learning_velocity = 0.0
 
         # スキルの多様性（カテゴリ数/全力量数）
-        member_comps_with_category = member_comps.merge(
-            self.competence_master[[self.comp_master_code_col, self.comp_master_category_col]],
-            left_on=self.competence_code_col,
-            right_on=self.comp_master_code_col,
-            how='left'
-        )
-        unique_categories = member_comps_with_category[self.comp_master_category_col].nunique()
-        total_competences = len(member_comps)
-        skill_variety = unique_categories / max(total_competences, 1)
+        # カテゴリカラムが存在する場合のみ計算
+        if self.comp_master_category_col in self.competence_master.columns:
+            member_comps_with_category = member_comps.merge(
+                self.competence_master[[self.comp_master_code_col, self.comp_master_category_col]],
+                left_on=self.competence_code_col,
+                right_on=self.comp_master_code_col,
+                how='left'
+            )
 
-        # カテゴリの集中度（最頻カテゴリの割合）
-        if not member_comps_with_category.empty:
-            category_counts = member_comps_with_category[self.comp_master_category_col].value_counts()
-            if len(category_counts) > 0:
-                category_focus = category_counts.iloc[0] / total_competences
+            # mergeの結果、カテゴリカラムが存在するか確認
+            if self.comp_master_category_col in member_comps_with_category.columns:
+                unique_categories = member_comps_with_category[self.comp_master_category_col].nunique()
+                total_competences = len(member_comps)
+                skill_variety = unique_categories / max(total_competences, 1)
+
+                # カテゴリの集中度（最頻カテゴリの割合）
+                if not member_comps_with_category.empty:
+                    category_counts = member_comps_with_category[self.comp_master_category_col].value_counts()
+                    if len(category_counts) > 0:
+                        category_focus = category_counts.iloc[0] / total_competences
+                    else:
+                        category_focus = 0.0
+                else:
+                    category_focus = 0.0
             else:
+                # カテゴリ情報が取得できない場合はデフォルト値
+                skill_variety = 0.0
                 category_focus = 0.0
         else:
+            # カテゴリカラムが存在しない場合はデフォルト値
+            skill_variety = 0.0
             category_focus = 0.0
 
         return {
@@ -356,6 +369,10 @@ class FeatureEngineer:
             {category: embedding_vector}
         """
         embeddings = {}
+
+        # カテゴリカラムが存在しない場合は空の辞書を返す
+        if self.comp_master_category_col not in self.competence_master.columns:
+            return embeddings
 
         # カテゴリごとに力量を集計
         category_groups = self.competence_master.groupby(self.comp_master_category_col)
@@ -450,21 +467,26 @@ class FeatureEngineer:
             self.competence_master[self.comp_master_code_col] == competence_code
         ]
 
-        if not comp_info.empty:
+        if not comp_info.empty and self.comp_master_category_col in self.competence_master.columns:
             comp_category = comp_info.iloc[0].get(self.comp_master_category_col, 'UNKNOWN')
 
             # メンバーが習得済みの力量のカテゴリ分布
-            acquired_categories = self.member_competence[
+            acquired_with_category = self.member_competence[
                 self.member_competence[self.member_code_col] == member_code
             ].merge(
                 self.competence_master[[self.comp_master_code_col, self.comp_master_category_col]],
                 left_on=self.competence_code_col,
                 right_on=self.comp_master_code_col,
                 how='left'
-            )[self.comp_master_category_col].tolist()
+            )
 
-            # このカテゴリの習得比率
-            category_familiarity = acquired_categories.count(comp_category) / max(len(acquired_categories), 1)
+            # mergeの結果、カテゴリカラムが存在する場合のみ処理
+            if self.comp_master_category_col in acquired_with_category.columns:
+                acquired_categories = acquired_with_category[self.comp_master_category_col].tolist()
+                # このカテゴリの習得比率
+                category_familiarity = acquired_categories.count(comp_category) / max(len(acquired_categories), 1)
+            else:
+                category_familiarity = 0.0
         else:
             category_familiarity = 0.0
 
