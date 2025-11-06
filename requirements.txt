@@ -5,6 +5,7 @@ streamlit>=1.50.0
 plotly>=6.3.1
 networkx>=3.0
 optuna>=3.0.0
+cmaes>=0.10.0
 structlog>=23.0.0
 pydantic>=2.0.0
 python-json-logger>=2.0.0

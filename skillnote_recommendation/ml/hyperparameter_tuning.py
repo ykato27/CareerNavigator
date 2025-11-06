@@ -17,10 +17,19 @@ from sklearn.model_selection import KFold, TimeSeriesSplit
 
 try:
     import optuna
-    from optuna.samplers import TPESampler, RandomSampler, GridSampler, CmaEsSampler
+    from optuna.samplers import TPESampler, RandomSampler, GridSampler
     OPTUNA_AVAILABLE = True
+
+    # CmaEsSamplerは別途インポート（cmaesパッケージが必要）
+    try:
+        from optuna.samplers import CmaEsSampler
+        CMAES_AVAILABLE = True
+    except ImportError:
+        CMAES_AVAILABLE = False
+        logging.info("CMA-ESサンプラーが利用できません。cmaesパッケージをインストールしてください。")
 except ImportError:
     OPTUNA_AVAILABLE = False
+    CMAES_AVAILABLE = False
     logging.warning("Optunaがインストールされていません。ハイパーパラメータチューニング機能が使用できません。")
 
 from skillnote_recommendation.ml.matrix_factorization import MatrixFactorizationModel
@@ -466,9 +475,15 @@ class NMFHyperparameterTuner:
             logger.info("サンプラー: Random Sampler")
             print("[DEBUG] Sampler: Random")
         elif self.sampler == "cmaes":
-            sampler_instance = CmaEsSampler(seed=self.random_state)
-            logger.info("サンプラー: CMA-ES (Covariance Matrix Adaptation Evolution Strategy)")
-            print("[DEBUG] Sampler: CMA-ES")
+            if CMAES_AVAILABLE:
+                sampler_instance = CmaEsSampler(seed=self.random_state)
+                logger.info("サンプラー: CMA-ES (Covariance Matrix Adaptation Evolution Strategy)")
+                print("[DEBUG] Sampler: CMA-ES")
+            else:
+                logger.warning("CMA-ESが利用できません。cmaesパッケージをインストールしてください。TPEにフォールバックします。")
+                print("[WARNING] CMA-ES is not available. Install 'cmaes' package to use CMA-ES sampler. Falling back to TPE.")
+                sampler_instance = TPESampler(seed=self.random_state)
+                print("[DEBUG] Sampler: TPE (fallback)")
         else:
             sampler_instance = TPESampler(seed=self.random_state)
             logger.warning(f"不明なサンプラー '{self.sampler}'。TPEを使用します。")
