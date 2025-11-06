@@ -44,8 +44,7 @@
 |---------|---------|------|
 | **streamlit_app.py** | `uv run streamlit run streamlit_app.py` | **メインページ**: CSVファイルをアップロードしてデータを読み込む |
 | **pages/1_Model_Training.py** | サイドバーから選択 | **モデル訓練ページ**: 機械学習モデルを訓練する |
-| **pages/2_Inference.py** | サイドバーから選択 | **推論ページ**: メンバーへの力量推薦を実行する |
-| **pages/4_Skill_Dependencies.py** | サイドバーから選択 | **スキル依存関係ページ**: スキルの依存関係を可視化する |
+| **pages/4_Inference.py** | サイドバーから選択 | **推論ページ**: メンバーへの力量推薦を実行する |
 | **pages/5_Data_Quality.py** | サイドバーから選択 | **データ品質ページ**: データ品質をモニタリングする |
 | **pages/6_Model_Comparison.py** | サイドバーから選択 | **モデル比較ページ**: 複数のモデルを比較する |
 
@@ -113,10 +112,11 @@ uv run streamlit run streamlit_app.py
 
 | ファイル | 主要なクラス・関数 | 役割 |
 |---------|------------------|------|
-| **knowledge_graph.py** | `KnowledgeGraph` クラス | 力量の知識グラフを構築する |
-| **hybrid_recommender.py** | `HybridRecommender` クラス | グラフとMLを組み合わせた推薦 |
-| **career_path.py** | `CareerPath` クラス | キャリアパスを表現する |
-| **career_path_visualizer.py** | 可視化関数 | キャリアパスを可視化する |
+| **knowledge_graph.py** | `CompetenceKnowledgeGraph` クラス | 力量の知識グラフを構築する |
+| **random_walk.py** | `RandomWalkRecommender` クラス | Random Walk with Restartによる推薦 |
+| **hybrid_recommender.py** | `HybridGraphRecommender` クラス | RWR + NMF + コンテンツベースの統合推薦 |
+| **hybrid_builder.py** | ビルダー関数 | ハイブリッド推薦システムを簡単に構築 |
+| **category_hierarchy.py** | カテゴリ階層管理 | カテゴリの階層構造を管理 |
 
 ### 📁 skillnote_recommendation/utils/ - ユーティリティ
 
@@ -184,7 +184,7 @@ uv run streamlit run streamlit_app.py
    - Webアプリのメインページ
    - データ読み込みの流れ
 
-7. **pages/2_Inference.py** を読む
+7. **pages/4_Inference.py** を読む
    - 推薦実行のUI
    - ライブラリコードの使い方
 
