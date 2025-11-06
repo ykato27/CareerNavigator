@@ -1,8 +1,26 @@
 """
-Knowledge Graph構築モジュール
+Knowledge Graph Module
 
 メンバー、力量、カテゴリーのヘテロジニアスグラフを構築し、
-グラフベースの推薦アルゴリズムの基盤を提供
+グラフベースの推薦アルゴリズムの基盤を提供する。
+
+主な機能:
+- ヘテロジニアスグラフの構築（メンバー、力量、カテゴリー）
+- メンバー間類似度エッジの追加
+- カテゴリー階層エッジの追加
+- グラフ統計情報の出力
+- GEXF形式でのエクスポート
+
+ノードタイプ:
+- member: メンバーノード
+- competence: 力量ノード
+- category: カテゴリーノード
+
+エッジタイプ:
+- acquired: メンバー → 力量（習得関係）
+- belongs_to: 力量 → カテゴリー（所属関係）
+- similar: メンバー → メンバー（類似関係）
+- parent_of: カテゴリー → カテゴリー（親子関係）
 """
 
 import logging
@@ -22,33 +40,59 @@ logger = logging.getLogger(__name__)
 class CompetenceKnowledgeGraph:
     """力量推薦のためのナレッジグラフ
 
+    ヘテロジニアスグラフを構築し、メンバー、力量、カテゴリー間の
+    関係性を表現する。Random Walk with Restart (RWR) やその他の
+    グラフベース推薦アルゴリズムの基盤となる。
+
+    Attributes:
+        G: NetworkXグラフオブジェクト（無向グラフ）
+        member_competence_df: メンバー保有力量データ
+        member_master_df: メンバーマスタ
+        competence_master_df: 力量マスタ
+        use_category_hierarchy: カテゴリー階層を使用するか
+        category_hierarchy: CategoryHierarchyインスタンス（使用する場合）
+
     ノードタイプ:
-        - member: メンバーノード
-        - competence: 力量ノード
-        - category: カテゴリーノード
+        - member: メンバーノード（例: "member_M001"）
+        - competence: 力量ノード（例: "competence_C001"）
+        - category: カテゴリーノード（例: "category_プログラミング"）
 
     エッジタイプ:
-        - acquired: メンバー → 力量（習得関係）
-        - belongs_to: 力量 → カテゴリー（所属関係）
-        - similar: メンバー → メンバー（類似関係）
-        - parent_of: カテゴリー → カテゴリー（親子関係）NEW!
+        - acquired: メンバー → 力量（習得関係、重み=正規化レベル）
+        - belongs_to: 力量 → カテゴリー（所属関係、重み=1.0）
+        - similar: メンバー → メンバー（類似関係、重み=類似度）
+        - parent_of: カテゴリー → カテゴリー（親子関係、重み=1.0）
+
+    Example:
+        >>> kg = CompetenceKnowledgeGraph(
+        ...     member_competence=member_comp_df,
+        ...     member_master=member_df,
+        ...     competence_master=comp_df,
+        ...     use_category_hierarchy=True
+        ... )
+        >>> print(f"ノード数: {kg.G.number_of_nodes()}")
+        >>> print(f"エッジ数: {kg.G.number_of_edges()}")
     """
 
-    def __init__(self,
-                 member_competence: pd.DataFrame,
-                 member_master: pd.DataFrame,
-                 competence_master: pd.DataFrame,
-                 use_category_hierarchy: bool = True):
-        """
+    def __init__(
+        self,
+        member_competence: pd.DataFrame,
+        member_master: pd.DataFrame,
+        competence_master: pd.DataFrame,
+        use_category_hierarchy: bool = True
+    ):
+        """ナレッジグラフを初期化して構築
+
         Args:
             member_competence: メンバー保有力量データ
                 必須列: メンバーコード, 力量コード, 正規化レベル
             member_master: メンバーマスタ
                 必須列: メンバーコード, メンバー名
+                任意列: 職能等級, 役職
             competence_master: 力量マスタ
                 必須列: 力量コード, 力量名, 力量タイプ
-                任意列: 力量カテゴリー名
-            use_category_hierarchy: カテゴリー階層を使用するか
+                任意列: 力量カテゴリー名, 概要
+            use_category_hierarchy: カテゴリー階層を使用するか（デフォルト: True）
         """
         self.G = nx.Graph()
         self.member_competence_df = member_competence
@@ -63,13 +107,13 @@ class CompetenceKnowledgeGraph:
             self.category_hierarchy = None
 
         # グラフ構築
-        logger.info("\n" + "=" * 80)
+        logger.info("=" * 80)
         logger.info("Knowledge Graph 構築開始")
         logger.info("=" * 80)
         self._build_graph()
-        logger.info("\nKnowledge Graph 構築完了")
-        logger.info("  ノード数: %d", self.G.number_of_nodes())
-        logger.info("  エッジ数: %d", self.G.number_of_edges())
+        logger.info("Knowledge Graph 構築完了")
+        logger.info(f"  ノード数: {self.G.number_of_nodes()}")
+        logger.info(f"  エッジ数: {self.G.number_of_edges()}")
         self._print_graph_stats()
 
     def _build_graph(self):
@@ -313,15 +357,27 @@ class CompetenceKnowledgeGraph:
             top_k,
         )
 
-    def get_neighbors(self, node_id: str, edge_type: Optional[str] = None) -> List[str]:
+    # ===============================================================
+    # Public Methods
+    # ===============================================================
+
+    def get_neighbors(
+        self,
+        node_id: str,
+        edge_type: Optional[str] = None
+    ) -> List[str]:
         """指定ノードの隣接ノードを取得
 
         Args:
-            node_id: ノードID
-            edge_type: エッジタイプでフィルタ（None=全て）
+            node_id: ノードID（例: "member_M001", "competence_C001"）
+            edge_type: エッジタイプでフィルタ（None=全て、"acquired"、"belongs_to"など）
 
         Returns:
             隣接ノードIDのリスト
+
+        Example:
+            >>> kg.get_neighbors("member_M001", edge_type="acquired")
+            ['competence_C001', 'competence_C002', ...]
         """
         if not self.G.has_node(node_id):
             return []
@@ -337,10 +393,15 @@ class CompetenceKnowledgeGraph:
         """ノードの情報を取得
 
         Args:
-            node_id: ノードID
+            node_id: ノードID（例: "member_M001", "competence_C001"）
 
         Returns:
-            ノードの属性辞書
+            ノードの属性辞書（node_type, code, name, type, category等）
+
+        Example:
+            >>> info = kg.get_node_info("competence_C001")
+            >>> print(info['name'])
+            'Python基礎'
         """
         if not self.G.has_node(node_id):
             return {}
@@ -350,10 +411,14 @@ class CompetenceKnowledgeGraph:
         """メンバーが習得済みの力量コードを取得
 
         Args:
-            member_code: メンバーコード
+            member_code: メンバーコード（例: "M001"）
 
         Returns:
-            習得済み力量コードのセット
+            習得済み力量コードのセット（例: {"C001", "C002", "C003"}）
+
+        Example:
+            >>> acquired = kg.get_member_acquired_competences("M001")
+            >>> print(f"習得力量: {len(acquired)}個")
         """
         member_node = f"member_{member_code}"
         acquired = set()
@@ -369,10 +434,15 @@ class CompetenceKnowledgeGraph:
         """力量が所属するカテゴリー名を取得
 
         Args:
-            competence_code: 力量コード
+            competence_code: 力量コード（例: "C001"）
 
         Returns:
-            カテゴリー名（存在しない場合はNone）
+            カテゴリー名（例: "プログラミング"）、存在しない場合はNone
+
+        Example:
+            >>> category = kg.get_competence_category("C001")
+            >>> print(category)
+            'プログラミング'
         """
         competence_node = f"competence_{competence_code}"
 
@@ -381,6 +451,21 @@ class CompetenceKnowledgeGraph:
                 return neighbor.replace("category_", "")
 
         return None
+
+    def export_to_gexf(self, filename: str):
+        """グラフをGEXF形式でエクスポート
+
+        Gephi等のグラフ可視化ツールで利用可能な形式でエクスポートする。
+
+        Args:
+            filename: 出力ファイル名（例: "knowledge_graph.gexf"）
+
+        Example:
+            >>> kg.export_to_gexf("output/knowledge_graph.gexf")
+            グラフをエクスポートしました: output/knowledge_graph.gexf
+        """
+        nx.write_gexf(self.G, filename)
+        logger.info(f"グラフをエクスポートしました: {filename}")
 
     def _print_graph_stats(self):
         """グラフの統計情報を出力"""
