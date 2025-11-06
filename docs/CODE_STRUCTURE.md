@@ -9,11 +9,14 @@ CareerNavigator/
 ├── skillnote_recommendation/       # メインパッケージ
 │   ├── core/                       # コアビジネスロジック
 │   ├── ml/                         # 機械学習モジュール
-│   ├── utils/                      # ユーティリティモジュール（NEW）
+│   ├── graph/                      # グラフベース推薦モジュール
+│   ├── utils/                      # ユーティリティモジュール
 │   └── scripts/                    # 実行スクリプト
 ├── pages/                          # Streamlitページ
 │   ├── 1_Model_Training.py         # モデル学習ページ
-│   └── 2_Inference.py              # 推論ページ
+│   ├── 4_Inference.py              # 推論ページ
+│   ├── 5_Data_Quality.py           # データ品質ページ
+│   └── 6_Model_Comparison.py       # モデル比較ページ
 ├── streamlit_app.py                # メインアプリ（データ読み込み）
 ├── tests/                          # テストコード
 └── docs/                           # ドキュメント
@@ -80,7 +83,41 @@ CareerNavigator/
   - 参考人物の統合
   - 多様性メトリクス計算
 
-### skillnote_recommendation/utils/ （NEW）
+### skillnote_recommendation/graph/
+
+グラフベース推薦システム（Random Walk with Restart）。
+
+#### 主要モジュール:
+
+- **knowledge_graph.py**: 知識グラフの構築
+  - CompetenceKnowledgeGraphクラス
+  - メンバー、力量、カテゴリのノード管理
+  - エッジ関係の管理（acquired, belongs_to, similar, parent_of）
+  - グラフクエリ機能
+
+- **random_walk.py**: Random Walk with Restart推薦
+  - RandomWalkRecommenderクラス
+  - PageRankアルゴリズムによる推薦スコア計算
+  - フォールバック機能（カテゴリベース、類似メンバーベース）
+  - 推薦パス抽出
+  - PageRankキャッシュ機能
+
+- **hybrid_recommender.py**: ハイブリッド推薦
+  - HybridGraphRecommenderクラス
+  - RWR + NMF + コンテンツベースの統合
+  - スコア融合とランキング
+  - 推薦理由生成
+
+- **hybrid_builder.py**: ハイブリッド推薦ビルダー
+  - build_hybrid_recommender関数
+  - quick_recommend関数
+  - システム全体の構築と初期化
+
+- **category_hierarchy.py**: カテゴリ階層管理
+  - カテゴリの階層構造
+  - 親子関係の管理
+
+### skillnote_recommendation/utils/
 
 再利用可能なユーティリティ関数。
 
@@ -128,7 +165,7 @@ CareerNavigator/
   - 力量の潜在因子分布
   - モデル評価指標
 
-#### pages/2_Inference.py - 推論
+#### pages/4_Inference.py - 推論
 **ステップ3**: 推薦の実行と可視化
 
 - 推論対象メンバーの選択

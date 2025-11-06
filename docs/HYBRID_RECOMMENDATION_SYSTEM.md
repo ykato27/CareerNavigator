@@ -271,11 +271,23 @@ recommendations = hybrid_recommender.recommend(member_code='M001', top_n=10)
 from skillnote_recommendation.graph.random_walk import RandomWalkRecommender
 from skillnote_recommendation.graph.knowledge_graph import CompetenceKnowledgeGraph
 
-kg = CompetenceKnowledgeGraph()
-kg.build_graph(member_competence, competence_master, member_master)
+# 知識グラフを構築（コンストラクタで自動構築）
+kg = CompetenceKnowledgeGraph(
+    member_competence=member_competence,
+    member_master=member_master,
+    competence_master=competence_master,
+    use_category_hierarchy=True
+)
 
-rwr = RandomWalkRecommender(knowledge_graph=kg)
-recommendations = rwr.recommend(member_code='M001', top_n=10)
+# RWR推薦エンジン
+rwr = RandomWalkRecommender(knowledge_graph=kg, restart_prob=0.15)
+recommendations = rwr.recommend(member_code='M001', top_n=10, return_paths=True)
+
+# 推薦結果を表示
+for comp_code, score, paths in recommendations:
+    print(f"力量: {comp_code}, スコア: {score:.3f}")
+    if paths:
+        print(f"  推薦パス: {len(paths)}件")
 ```
 
 **注意**: 協調フィルタリング単独の推薦は廃止されました。ハイブリッド推薦またはグラフ構造ベース推薦を使用してください。
