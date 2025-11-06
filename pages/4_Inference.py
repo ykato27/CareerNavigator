@@ -655,7 +655,13 @@ if st.button("推薦を実行", type="primary"):
 
                     # パスから推薦理由を生成
                     reasons = []
-                    for path in readable_paths[:5]:  # 最初の5パスから理由を生成
+                    path_summary = {
+                        'category': [],
+                        'member': [],
+                        'competence': []
+                    }
+
+                    for path in readable_paths:  # すべてのパスから理由を生成
                         if len(path) < 2:
                             continue
 
@@ -666,27 +672,47 @@ if st.button("推薦を実行", type="primary"):
                             # カテゴリー経由のパス
                             category_nodes = [n for n in path if n['type'] == 'category']
                             if category_nodes:
-                                reasons.append(f"カテゴリー「{category_nodes[0]['name']}」の関連力量")
+                                path_summary['category'].append(category_nodes[0]['name'])
 
                         if path_types.count('member') > 1:
                             # 類似メンバー経由のパス
                             member_nodes = [n for n in path if n['type'] == 'member']
                             if len(member_nodes) > 1:
-                                reasons.append(f"類似メンバー「{member_nodes[1]['name']}」が保有")
+                                path_summary['member'].append(member_nodes[1]['name'])
 
                         if 'competence' in path_types and len(path) >= 3:
                             # 既習得力量経由のパス
                             comp_nodes = [n for n in path if n['type'] == 'competence']
                             if len(comp_nodes) >= 2:
-                                reasons.append(f"「{comp_nodes[0]['name']}」から推薦")
+                                path_summary['competence'].append(comp_nodes[0]['name'])
 
-                    # 理由を重複削除
-                    reasons = list(dict.fromkeys(reasons))
+                    # パスサマリーから理由を生成
+                    if path_summary['category']:
+                        unique_cats = list(set(path_summary['category']))
+                        if len(unique_cats) <= 3:
+                            reasons.append(f"カテゴリー経由: {', '.join(unique_cats)}")
+                        else:
+                            reasons.append(f"カテゴリー経由: {', '.join(unique_cats[:3])} 他{len(unique_cats)-3}件")
+
+                    if path_summary['member']:
+                        unique_members = list(set(path_summary['member']))
+                        if len(unique_members) <= 3:
+                            reasons.append(f"類似メンバー経由: {', '.join(unique_members)}")
+                        else:
+                            reasons.append(f"類似メンバー経由: {', '.join(unique_members[:3])} 他{len(unique_members)-3}名")
+
+                    if path_summary['competence']:
+                        unique_comps = list(set(path_summary['competence']))
+                        if len(unique_comps) <= 3:
+                            reasons.append(f"既習得力量経由: {', '.join(unique_comps)}")
+                        else:
+                            reasons.append(f"既習得力量経由: {', '.join(unique_comps[:3])} 他{len(unique_comps)-3}件")
+
+                    # パス数の情報を追加
                     if not reasons:
                         reasons = [f"{len(readable_paths)}個の学習パスから推薦"]
-                    else:
-                        # パス数の情報を追加
-                        reasons.append(f"（全{len(readable_paths)}パスから抽出）")
+
+                    reasons.insert(0, f"📊 抽出されたパス数: {len(readable_paths)}個")
 
                     # HybridRecommendationを作成
                     hybrid_rec = HybridRecommendation(
@@ -886,7 +912,7 @@ if st.button("推薦を実行", type="primary"):
 
                             # スコア表示のタイトルを決定
                             if recommendation_method == "グラフベース推薦":
-                                title = f"🎯 推薦 {idx}: {rec.competence_name} (グラフスコア: {hybrid_rec.rwr_score:.3f})"
+                                title = f"🎯 推薦 {idx}: {rec.competence_name} (グラフスコア: {hybrid_rec.graph_score:.3f})"
                             else:
                                 title = f"🎯 推薦 {idx}: {rec.competence_name} (総合スコア: {hybrid_rec.score:.3f})"
 
@@ -895,17 +921,17 @@ if st.button("推薦を実行", type="primary"):
                                 if recommendation_method == "グラフベース推薦":
                                     col_s1, col_s2 = st.columns(2)
                                     with col_s1:
-                                        st.metric("グラフスコア（RWR）", f"{hybrid_rec.rwr_score:.3f}")
+                                        st.metric("グラフスコア（RWR）", f"{hybrid_rec.graph_score:.3f}")
                                     with col_s2:
-                                        st.metric("NMFスコア（参考）", f"{hybrid_rec.nmf_score:.3f}")
+                                        st.metric("パス数", f"{len(hybrid_rec.paths)}個")
                                 else:  # ハイブリッド推薦
                                     col_s1, col_s2, col_s3 = st.columns(3)
                                     with col_s1:
                                         st.metric("総合スコア", f"{hybrid_rec.score:.3f}")
                                     with col_s2:
-                                        st.metric("グラフスコア", f"{hybrid_rec.rwr_score:.3f}")
+                                        st.metric("グラフスコア", f"{hybrid_rec.graph_score:.3f}")
                                     with col_s3:
-                                        st.metric("NMFスコア", f"{hybrid_rec.nmf_score:.3f}")
+                                        st.metric("NMFスコア", f"{hybrid_rec.cf_score:.3f}")
 
                                 # 推薦理由
                                 st.markdown("### 📋 推薦理由")
@@ -930,8 +956,8 @@ if st.button("推薦を実行", type="primary"):
                                     # 詳細説明を生成
                                     explanation = explainer.generate_detailed_explanation(
                                         paths=hybrid_rec.paths,
-                                        rwr_score=hybrid_rec.rwr_score,
-                                        nmf_score=hybrid_rec.nmf_score,
+                                        rwr_score=hybrid_rec.graph_score,
+                                        nmf_score=hybrid_rec.cf_score,
                                         competence_info=hybrid_rec.competence_info
                                     )
 
