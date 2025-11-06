@@ -37,6 +37,9 @@ class FeatureEngineer:
         self.member_competence = member_competence
         self.category_hierarchy = category_hierarchy or {}
 
+        # カラム名のマッピング（日本語と英語の両方に対応）
+        self._setup_column_mappings()
+
         # エンコーダーの初期化
         self.role_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
         self.grade_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
@@ -57,6 +60,25 @@ class FeatureEngineer:
         print(f"  等級数: {len(self.grade_encoder.categories_[0])}")
         print(f"  カテゴリ数: {len(self.category_encoder.categories_[0])}")
         print(f"  力量タイプ数: {len(self.type_encoder.categories_[0])}")
+
+    def _setup_column_mappings(self):
+        """カラム名のマッピングを設定（日本語と英語の両方に対応）"""
+        # メンバーコード
+        self.member_code_col = 'メンバーコード' if 'メンバーコード' in self.member_competence.columns else 'member_code'
+
+        # 力量コード
+        self.competence_code_col = '力量コード' if '力量コード' in self.member_competence.columns else 'competence_code'
+
+        # 取得日
+        self.acquired_date_col = '取得日' if '取得日' in self.member_competence.columns else 'acquired_date'
+
+        # 力量マスタのカラム
+        self.comp_master_code_col = '力量コード' if '力量コード' in self.competence_master.columns else 'competence_code'
+        self.comp_master_type_col = '力量タイプ' if '力量タイプ' in self.competence_master.columns else 'competence_type'
+        self.comp_master_category_col = '力量カテゴリー名' if '力量カテゴリー名' in self.competence_master.columns else 'category'
+
+        # メンバーマスタのカラム
+        self.member_master_code_col = 'メンバーコード' if 'メンバーコード' in self.member_master.columns else 'member_code'
 
     def _fit_encoders(self):
         """エンコーダーをフィッティング"""
@@ -88,7 +110,7 @@ class FeatureEngineer:
             ワンホットエンコードされた特徴ベクトル
         """
         member_info = self.member_master[
-            self.member_master['member_code'] == member_code
+            self.member_master[self.member_master_code_col] == member_code
         ]
 
         if member_info.empty:
@@ -116,7 +138,7 @@ class FeatureEngineer:
             ワンホットエンコードされた特徴ベクトル
         """
         comp_info = self.competence_master[
-            self.competence_master['competence_code'] == competence_code
+            self.competence_master[self.comp_master_code_col] == competence_code
         ]
 
         if comp_info.empty:
@@ -149,7 +171,7 @@ class FeatureEngineer:
             }
         """
         member_comps = self.member_competence[
-            self.member_competence['member_code'] == member_code
+            self.member_competence[self.member_code_col] == member_code
         ].copy()
 
         if member_comps.empty:
@@ -162,31 +184,31 @@ class FeatureEngineer:
             }
 
         # acquired_dateがある場合のみ時系列分析を実施
-        if 'acquired_date' in member_comps.columns:
-            member_comps['acquired_date'] = pd.to_datetime(
-                member_comps['acquired_date'],
+        if self.acquired_date_col in member_comps.columns:
+            member_comps[self.acquired_date_col] = pd.to_datetime(
+                member_comps[self.acquired_date_col],
                 errors='coerce'
             )
-            member_comps = member_comps.dropna(subset=['acquired_date'])
+            member_comps = member_comps.dropna(subset=[self.acquired_date_col])
 
             if not member_comps.empty:
                 # 最新日付を基準に
-                max_date = member_comps['acquired_date'].max()
+                max_date = member_comps[self.acquired_date_col].max()
 
                 # 過去6ヶ月の習得率
                 six_months_ago = max_date - pd.Timedelta(days=180)
-                recent_comps = member_comps[member_comps['acquired_date'] >= six_months_ago]
+                recent_comps = member_comps[member_comps[self.acquired_date_col] >= six_months_ago]
                 acquisition_rate = len(recent_comps) / 180.0  # 日あたりの習得率
 
                 # 直近活動度（過去30日）
                 thirty_days_ago = max_date - pd.Timedelta(days=30)
-                very_recent = member_comps[member_comps['acquired_date'] >= thirty_days_ago]
+                very_recent = member_comps[member_comps[self.acquired_date_col] >= thirty_days_ago]
                 recent_activity = len(very_recent) / 30.0
 
                 # 学習速度（日数あたりの習得数の変化率）
                 if len(member_comps) > 1:
-                    sorted_comps = member_comps.sort_values('acquired_date')
-                    date_diffs = sorted_comps['acquired_date'].diff().dt.days
+                    sorted_comps = member_comps.sort_values(self.acquired_date_col)
+                    date_diffs = sorted_comps[self.acquired_date_col].diff().dt.days
                     learning_velocity = 1.0 / (date_diffs.mean() + 1)  # 平均日数の逆数
                 else:
                     learning_velocity = 0.0
@@ -201,17 +223,18 @@ class FeatureEngineer:
 
         # スキルの多様性（カテゴリ数/全力量数）
         member_comps_with_category = member_comps.merge(
-            self.competence_master[['competence_code', 'category']],
-            on='competence_code',
+            self.competence_master[[self.comp_master_code_col, self.comp_master_category_col]],
+            left_on=self.competence_code_col,
+            right_on=self.comp_master_code_col,
             how='left'
         )
-        unique_categories = member_comps_with_category['category'].nunique()
+        unique_categories = member_comps_with_category[self.comp_master_category_col].nunique()
         total_competences = len(member_comps)
         skill_variety = unique_categories / max(total_competences, 1)
 
         # カテゴリの集中度（最頻カテゴリの割合）
         if not member_comps_with_category.empty:
-            category_counts = member_comps_with_category['category'].value_counts()
+            category_counts = member_comps_with_category[self.comp_master_category_col].value_counts()
             if len(category_counts) > 0:
                 category_focus = category_counts.iloc[0] / total_competences
             else:
@@ -236,7 +259,7 @@ class FeatureEngineer:
         cooccurrence = defaultdict(lambda: defaultdict(int))
 
         # メンバーごとに力量を集計
-        member_groups = self.member_competence.groupby('member_code')['competence_code'].apply(list)
+        member_groups = self.member_competence.groupby(self.member_code_col)[self.competence_code_col].apply(list)
 
         # 共起をカウント
         for competences in member_groups:
@@ -250,12 +273,12 @@ class FeatureEngineer:
         for comp1, related in cooccurrence.items():
             normalized_cooccurrence[comp1] = {}
             comp1_count = len(self.member_competence[
-                self.member_competence['competence_code'] == comp1
+                self.member_competence[self.competence_code_col] == comp1
             ])
 
             for comp2, count in related.items():
                 comp2_count = len(self.member_competence[
-                    self.member_competence['competence_code'] == comp2
+                    self.member_competence[self.competence_code_col] == comp2
                 ])
                 # Jaccard係数: intersection / union
                 union = comp1_count + comp2_count - count
@@ -308,16 +331,16 @@ class FeatureEngineer:
         embeddings = {}
 
         # カテゴリごとに力量を集計
-        category_groups = self.competence_master.groupby('category')
+        category_groups = self.competence_master.groupby(self.comp_master_category_col)
 
         for category, group in category_groups:
-            comp_codes = group['competence_code'].tolist()
+            comp_codes = group[self.comp_master_code_col].tolist()
 
             # このカテゴリの力量を習得しているメンバー数
             member_counts = []
             for comp_code in comp_codes:
                 count = len(self.member_competence[
-                    self.member_competence['competence_code'] == comp_code
+                    self.member_competence[self.competence_code_col] == comp_code
                 ])
                 member_counts.append(count)
 
@@ -381,8 +404,8 @@ class FeatureEngineer:
 
         # メンバーの既習得力量
         acquired_comps = self.member_competence[
-            self.member_competence['member_code'] == member_code
-        ]['competence_code'].tolist()
+            self.member_competence[self.member_code_col] == member_code
+        ][self.competence_code_col].tolist()
 
         # 共起スコアの平均
         cooccurrence_scores = []
@@ -397,20 +420,21 @@ class FeatureEngineer:
 
         # 力量のカテゴリ情報
         comp_info = self.competence_master[
-            self.competence_master['competence_code'] == competence_code
+            self.competence_master[self.comp_master_code_col] == competence_code
         ]
 
         if not comp_info.empty:
-            comp_category = comp_info.iloc[0].get('category', 'UNKNOWN')
+            comp_category = comp_info.iloc[0].get(self.comp_master_category_col, 'UNKNOWN')
 
             # メンバーが習得済みの力量のカテゴリ分布
             acquired_categories = self.member_competence[
-                self.member_competence['member_code'] == member_code
+                self.member_competence[self.member_code_col] == member_code
             ].merge(
-                self.competence_master[['competence_code', 'category']],
-                on='competence_code',
+                self.competence_master[[self.comp_master_code_col, self.comp_master_category_col]],
+                left_on=self.competence_code_col,
+                right_on=self.comp_master_code_col,
                 how='left'
-            )['category'].tolist()
+            )[self.comp_master_category_col].tolist()
 
             # このカテゴリの習得比率
             category_familiarity = acquired_categories.count(comp_category) / max(len(acquired_categories), 1)
