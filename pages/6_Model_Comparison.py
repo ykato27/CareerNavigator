@@ -317,9 +317,8 @@ def main():
     with col2:
         # NMFモデルの状態確認
         has_ml_recommender = 'ml_recommender' in st.session_state and st.session_state['ml_recommender'] is not None
-        has_engine = 'recommendation_engine' in st.session_state and st.session_state['recommendation_engine'] is not None
 
-        if has_ml_recommender and has_engine:
+        if has_ml_recommender:
             st.success("✅ NMFモデルは既に学習済みです")
 
             col_nmf1, col_nmf2 = st.columns(2)
@@ -327,12 +326,8 @@ def main():
                 st.metric("学習データ数", f"{len(member_competence):,}件")
             with col_nmf2:
                 # モデル情報があれば表示
-                if hasattr(st.session_state['ml_recommender'], 'n_components'):
-                    st.metric("潜在因子数", st.session_state['ml_recommender'].n_components)
-
-        elif has_ml_recommender and not has_engine:
-            st.warning("⚠️ NMFモデルは学習済みですが、RecommendationEngineが未初期化です")
-            st.info("👉 「推薦実行」ページでモデルを初期化してください")
+                if hasattr(st.session_state['ml_recommender'], 'mf_model'):
+                    st.metric("潜在因子数", st.session_state['ml_recommender'].mf_model.n_components)
 
         else:
             st.warning("⚠️ NMFモデルが学習されていません")
@@ -412,14 +407,28 @@ def main():
 
                 # セッションステートの詳細チェック
                 has_ml_recommender = 'ml_recommender' in st.session_state and st.session_state['ml_recommender'] is not None
-                has_engine = 'recommendation_engine' in st.session_state and st.session_state['recommendation_engine'] is not None
 
-                if has_ml_recommender and has_engine:
+                if has_ml_recommender:
                     try:
-                        engine = st.session_state['recommendation_engine']
+                        ml_recommender = st.session_state['ml_recommender']
 
                         # NMF推薦を実行
-                        nmf_recs = engine.recommend_for_member(target_member, top_n=top_n)
+                        nmf_recs_list = ml_recommender.recommend(
+                            member_code=target_member,
+                            top_n=top_n,
+                            use_diversity=False
+                        )
+
+                        # Recommendationオブジェクトから辞書形式に変換
+                        nmf_recs = []
+                        for rec in nmf_recs_list:
+                            nmf_recs.append({
+                                'skill_code': rec.competence_code,
+                                'skill_name': rec.competence_name,
+                                'predicted_score': rec.priority_score,
+                                'confidence': 0.7,  # デフォルト値
+                                'reason': rec.reason
+                            })
 
                         if nmf_recs:
                             for i, rec in enumerate(nmf_recs, 1):
@@ -429,11 +438,6 @@ def main():
                                     reason = rec.get('reason', '行列分解による推薦')
                                     st.markdown(reason)
 
-                                    # 類似メンバー情報があれば表示
-                                    if 'similar_members' in rec:
-                                        st.markdown("**類似メンバー:**")
-                                        st.write(rec['similar_members'][:3])
-
                             st.session_state['nmf_recs'] = nmf_recs
                         else:
                             st.info("推薦結果がありません")
@@ -441,29 +445,6 @@ def main():
                     except Exception as e:
                         st.error(f"❌ NMF推薦エラー: {e}")
                         st.exception(e)
-
-                elif has_ml_recommender and not has_engine:
-                    # MLモデルはあるがEngineがない
-                    st.warning("⚠️ RecommendationEngineが初期化されていません")
-                    st.info("👉 サイドバーから「推薦実行」ページに移動して、モデルを初期化してください")
-
-                    if st.button("📝 手動でEngineを初期化", key="init_engine"):
-                        try:
-                            from skillnote_recommendation.core.recommendation_engine import RecommendationEngine
-
-                            with st.spinner("RecommendationEngineを初期化中..."):
-                                engine = RecommendationEngine(
-                                    st.session_state['ml_recommender'],
-                                    member_competence,
-                                    competence_master
-                                )
-                                st.session_state['recommendation_engine'] = engine
-                                st.success("✅ 初期化完了！ページをリフレッシュしてください")
-                                st.rerun()
-
-                        except Exception as e:
-                            st.error(f"❌ 初期化エラー: {e}")
-                            st.exception(e)
 
                 else:
                     # MLモデルもない

@@ -35,7 +35,7 @@ CareerNavigatorは**階層型アーキテクチャ**を採用し、関心の分�
                    ↓
 ┌─────────────────────────────────────────┐
 │        Domain Layer                     │
-│  (ルールベース推薦 / ML推薦)              │
+│  (機械学習ベース推薦 / グラフベース推薦)   │
 └─────────────────────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────┐
@@ -54,8 +54,7 @@ CareerNavigatorは**階層型アーキテクチャ**を採用し、関心の分�
 
 **コンポーネント**:
 - `streamlit_app.py`: Streamlit Webアプリケーション
-- `scripts/run_recommendation.py`: CLIインターフェース
-- `scripts/convert_data.py`: データ変換CLI
+- Streamlit Pages: 各種分析・推薦ページ
 
 **依存関係**: Application Layer
 
@@ -66,7 +65,6 @@ CareerNavigatorは**階層型アーキテクチャ**を採用し、関心の分�
 **責務**: ユースケース実装、ビジネスロジックの調整
 
 **コンポーネント**:
-- `core/recommendation_system.py`: 推薦システムの統合インターフェース
 - `core/evaluator.py`: 評価システム
 - `ml/ml_evaluation.py`: ML評価システム
 
@@ -80,16 +78,17 @@ CareerNavigatorは**階層型アーキテクチャ**を採用し、関心の分�
 
 **コンポーネント**:
 
-#### ルールベース推薦
-- `core/recommendation_engine.py`: ルールベース推薦エンジン
-- `core/similarity_calculator.py`: 類似度計算
-- `core/reference_persons.py`: 参考人物検索
-
-#### ML推薦
+#### 機械学習ベース推薦
 - `ml/matrix_factorization.py`: Matrix Factorizationモデル
 - `ml/ml_recommender.py`: ML推薦エンジン
 - `ml/diversity.py`: 多様性再ランキング
 - `ml/hyperparameter_tuning.py`: ハイパーパラメータチューニング
+- `core/reference_persons.py`: 参考人物検索
+
+#### グラフベース推薦
+- `graph/knowledge_graph.py`: 知識グラフ構築
+- `graph/hybrid_recommender.py`: ハイブリッド推薦
+- `graph/career_path.py`: キャリアパス分析
 
 **依存関係**: Infrastructure Layer
 
