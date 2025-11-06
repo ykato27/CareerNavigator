@@ -171,13 +171,84 @@ class RecommendationPathVisualizer:
         """Plotly Figureを作成"""
         fig = go.Figure()
 
-        # エッジを描画
-        self._add_edges_to_figure(fig, G, pos, paths, scores)
+        # 各パスを個別に描画（エッジ）
+        self._add_paths_as_traces(fig, pos, paths, scores)
 
         # ノードを描画
         self._add_nodes_to_figure(fig, G, pos)
 
         return fig
+
+    def _add_paths_as_traces(self,
+                             fig: go.Figure,
+                             pos: Dict,
+                             paths: List[List[Dict]],
+                             scores: Optional[List[float]]):
+        """各パスを個別のトレースとして描画"""
+        path_colors = self._generate_path_colors(len(paths))
+
+        for path_idx, path in enumerate(paths):
+            if len(path) < 2:
+                continue
+
+            # このパスのエッジを収集
+            x_coords = []
+            y_coords = []
+
+            for i in range(len(path) - 1):
+                node_id = path[i]['id']
+                next_node_id = path[i + 1]['id']
+
+                if node_id in pos and next_node_id in pos:
+                    x0, y0 = pos[node_id]
+                    x1, y1 = pos[next_node_id]
+
+                    # エッジの座標を追加（Noneで区切って複数セグメントを描画）
+                    x_coords.extend([x0, x1, None])
+                    y_coords.extend([y0, y1, None])
+
+            # パス全体を1つのトレースとして追加
+            if x_coords:
+                fig.add_trace(go.Scatter(
+                    x=x_coords,
+                    y=y_coords,
+                    mode='lines',
+                    line=dict(
+                        color=path_colors[path_idx],
+                        width=2,
+                    ),
+                    hoverinfo='skip',
+                    showlegend=True,
+                    name=f'パス{path_idx + 1}',
+                    opacity=0.7,
+                ))
+
+                # 矢印を追加（各エッジの終点に）
+                for i in range(len(path) - 1):
+                    node_id = path[i]['id']
+                    next_node_id = path[i + 1]['id']
+
+                    if node_id in pos and next_node_id in pos:
+                        x0, y0 = pos[node_id]
+                        x1, y1 = pos[next_node_id]
+
+                        # 矢印を追加
+                        fig.add_annotation(
+                            x=x1,
+                            y=y1,
+                            ax=x0,
+                            ay=y0,
+                            xref='x',
+                            yref='y',
+                            axref='x',
+                            ayref='y',
+                            showarrow=True,
+                            arrowhead=2,
+                            arrowsize=1,
+                            arrowwidth=1.5,
+                            arrowcolor=path_colors[path_idx],
+                            opacity=0.7,
+                        )
 
     def _add_edges_to_figure(self,
                              fig: go.Figure,
