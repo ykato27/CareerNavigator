@@ -371,23 +371,17 @@ def display_positioning_maps(
 # メンバー選択UI
 # =========================================================
 
-st.subheader("👤 推論対象メンバーの選択")
+st.subheader("👤 推薦対象メンバーの選択")
 
-# 学習データに存在するメンバーのみをフィルタ（コールドスタート問題を回避）
+# 学習データに存在するメンバーのみをフィルタ
 trained_member_codes = set(mf_model.member_codes)
 available_members = members_df[
     members_df["メンバーコード"].isin(trained_member_codes)
 ]
 
 if len(available_members) == 0:
-    st.error("❌ 推論可能なメンバーが存在しません。")
+    st.error("❌ 推薦可能なメンバーが存在しません。モデルを学習してください。")
     st.stop()
-
-st.info(
-    f"📊 推論可能なメンバー数: {len(available_members)} / {len(members_df)} 名\n\n"
-    f"💡 **コールドスタート問題の回避**: 学習データに含まれるメンバーのみが選択可能です。\n"
-    f"保有力量が未登録のメンバーは、データ登録後にモデルを再学習してください。"
-)
 
 # メンバー選択プルダウン
 member_options = dict(
@@ -395,187 +389,116 @@ member_options = dict(
 )
 
 selected_member_code = st.selectbox(
-    "推論対象メンバーを選択してください",
+    "メンバーを選択",
     options=list(member_options.keys()),
-    format_func=lambda x: f"{member_options[x]} ({x})"
+    format_func=lambda x: f"{member_options[x]} ({x})",
+    help=f"推薦可能なメンバー: {len(available_members)}名"
 )
 
 
 # =========================================================
-# 推論設定UI
+# 基本設定
 # =========================================================
 
-st.subheader("⚙️ 推論設定")
+st.subheader("⚙️ 基本設定")
 
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
     top_n = st.slider(
         "推薦数",
+        min_value=5,
+        max_value=20,
+        value=10,
+        step=5,
+        help="推薦する力量の数"
+    )
+
+with col2:
+    selected_types = st.multiselect(
+        "推薦する力量タイプ",
+        options=["SKILL", "EDUCATION", "LICENSE"],
+        default=["SKILL", "EDUCATION", "LICENSE"],
+        help="SKILLのみ、EDUCATIONのみ等、絞り込みが可能です"
+    )
+
+    # 空リストの場合はNoneに変換（全てを推薦）
+    competence_type = selected_types if selected_types else None
+
+# =========================================================
+# 詳細設定（オプション）
+# =========================================================
+
+st.markdown("---")
+
+with st.expander("⚙️ 詳細設定（オプション）"):
+    st.markdown("### 推薦手法の選択")
+
+    # デフォルトはハイブリッド推薦（最も精度が高い）
+    recommendation_method = st.radio(
+        "推薦方法",
+        options=["ハイブリッド推薦（推奨）", "NMF推薦", "グラフベース推薦", "キャリアパターン別推薦"],
+        index=0,
+        help="通常はハイブリッド推薦をお勧めします",
+        horizontal=False
+    )
+
+    st.markdown("---")
+    st.markdown("### 比較モード")
+
+    comparison_mode = st.checkbox(
+        "複数の推薦方法を比較する",
+        value=False,
+        help="異なる推薦方法を同時実行して結果を比較できます"
+    )
+
+    if comparison_mode:
+        methods_to_compare = st.multiselect(
+            "比較する手法",
+            options=["NMF推薦", "グラフベース推薦", "ハイブリッド推薦"],
+            default=["NMF推薦", "グラフベース推薦"]
+        )
+        recommendation_method = None
+    else:
+        methods_to_compare = None
+
+    st.markdown("---")
+    st.markdown("### グラフ設定（グラフベース・ハイブリッド推薦のみ）")
+
+    show_paths = st.checkbox(
+        "学習パスを表示",
+        value=True,
+        help="推薦理由を可視化します"
+    )
+
+    max_path_length = st.slider(
+        "パスの最大ステップ数",
+        min_value=2,
+        max_value=20,
+        value=10,
+        step=2
+    )
+
+    max_paths = st.slider(
+        "表示するパス数",
         min_value=1,
         max_value=20,
         value=10,
         step=1
     )
 
-with col2:
-    st.markdown("**力量タイプフィルタ**")
-    selected_types = st.multiselect(
-        "推薦する力量タイプを選択してください",
-        options=["SKILL", "EDUCATION", "LICENSE"],
-        default=["SKILL", "EDUCATION", "LICENSE"],
-        help="複数選択可能。例: スキルのみ、スキルと教育、など"
-    )
+# デフォルト値の設定
+diversity_strategy = "hybrid"  # 常にハイブリッド戦略を使用
+rwr_weight = 0.5  # グラフとNMFを同等に評価
 
-    # 空リストの場合はNoneに変換（全てを推薦）
-    competence_type = selected_types if selected_types else None
-
-    # 選択が空の場合の警告
-    if not selected_types:
-        st.warning("⚠️ 力量タイプが選択されていません。全てのタイプから推薦します。")
-    else:
-        # 選択されたタイプを確認表示
-        st.caption(f"選択中: {', '.join(selected_types)}")
-
-with col3:
-    diversity_strategy = st.selectbox(
-        "多様性戦略",
-        options=["hybrid", "mmr", "category", "type"],
-        index=0,
-        help="推薦結果の多様性を確保する戦略を選択"
-    )
 
 # =========================================================
-# 推薦手法選択
+# 推薦実行
 # =========================================================
 
 st.markdown("---")
-st.subheader("🎯 推薦手法の選択")
 
-# モード選択（通常 or 比較）
-comparison_mode = st.checkbox(
-    "🔬 モデル比較モード",
-    value=False,
-    help="複数の推薦手法を同時実行して結果を比較します（旧Model Comparisonページの機能を統合）"
-)
-
-if comparison_mode:
-    st.info("""
-    🔬 **モデル比較モード**: 複数の推薦手法を同時に実行し、結果を並べて比較できます。
-    - 各手法の推薦結果を比較テーブルで表示
-    - 推薦理由や特徴を並べて確認
-    - モデルの特性を理解するのに最適
-    """)
-
-    # 比較する手法を選択
-    methods_to_compare = st.multiselect(
-        "比較する推薦手法を選択してください（複数選択可）",
-        options=["NMF推薦", "グラフベース推薦", "ハイブリッド推薦"],
-        default=["NMF推薦", "グラフベース推薦"],
-        help="比較したい推薦手法を選択します"
-    )
-
-    if not methods_to_compare:
-        st.warning("⚠️ 少なくとも1つの手法を選択してください")
-
-    recommendation_method = None  # 比較モードでは単一手法は使用しない
-else:
-    recommendation_method = st.radio(
-        "使用する推薦手法を選択してください",
-        options=["キャリアパターン別推薦", "NMF推薦", "グラフベース推薦", "ハイブリッド推薦"],
-        index=0,
-        help="推薦手法を選択します。キャリアパターン別推薦は3つの異なるキャリアから推薦、NMFは高速、グラフベースは説明可能性が高い、ハイブリッドは両方の良いところを組み合わせます。",
-        horizontal=True
-    )
-    methods_to_compare = None
-
-    # 選択された手法の説明を表示
-    if recommendation_method == "キャリアパターン別推薦":
-        st.info("""
-        🎨 **キャリアパターン別推薦**: 3つの異なるキャリアパターンから推薦を生成します。
-        - **💼 類似キャリア**: あなたと類似したキャリアパスを持つメンバーが習得している力量
-        - **🌟 異なるキャリア1**: やや異なるキャリアパスを持つメンバーの力量（キャリアの幅を広げる）
-        - **🚀 異なるキャリア2**: 大きく異なるキャリアパスを持つメンバーの力量（新領域への挑戦）
-        """)
-    elif recommendation_method == "NMF推薦":
-        st.info("📊 **NMF推薦（機械学習ベース）**: 協調フィルタリングに基づく高速な推薦。メンバー間の類似性から推薦を生成します。")
-    elif recommendation_method == "グラフベース推薦":
-        st.info("🔗 **グラフベース推薦（RWR）**: 知識グラフ構造を活用した推薦。推薦パスを可視化でき、説明可能性が高いです。")
-    else:
-        st.info("🎯 **ハイブリッド推薦（NMF + Graph）**: NMFとグラフベースの両方の強みを組み合わせた推薦。")
-
-# グラフベースまたはハイブリッドの場合、追加設定を表示
-graph_methods = ["グラフベース推薦", "ハイブリッド推薦"]
-show_graph_settings = False
-
-if comparison_mode:
-    # 比較モードの場合、選択された手法にグラフベースが含まれているかチェック
-    if methods_to_compare and any(method in graph_methods for method in methods_to_compare):
-        show_graph_settings = True
-else:
-    # 通常モードの場合
-    if recommendation_method in graph_methods:
-        show_graph_settings = True
-
-if show_graph_settings:
-    col_g1, col_g2 = st.columns(2)
-
-    with col_g1:
-        if (comparison_mode and "ハイブリッド推薦" in methods_to_compare) or \
-           (not comparison_mode and recommendation_method == "ハイブリッド推薦"):
-            rwr_weight = st.slider(
-                "グラフベーススコアの重み",
-                min_value=0.0,
-                max_value=1.0,
-                value=0.5,
-                step=0.1,
-                help="0.5 = グラフとNMFを同等に評価、1.0 = グラフのみ、0.0 = NMFのみ"
-            )
-        else:
-            rwr_weight = 1.0  # グラフベース推薦の場合は常に1.0
-
-    with col_g2:
-        show_paths = st.checkbox(
-            "推薦パスを表示",
-            value=True,
-            help="推薦理由をグラフで可視化します"
-        )
-
-    col_g3, col_g4 = st.columns(2)
-
-    with col_g3:
-        max_path_length = st.slider(
-            "推薦パスの最大ステップ数",
-            min_value=2,
-            max_value=20,
-            value=10,
-            step=1,
-            help="推薦パスの最大長さ（ステップ数）を設定します。大きいほど遠くの力量まで探索しますが、処理時間が増加します。"
-        )
-
-    with col_g4:
-        max_paths = st.slider(
-            "推薦パスの表示数",
-            min_value=1,
-            max_value=20,
-            value=10,
-            step=1,
-            help="各推薦力量に対して表示するパスの数を設定します。多いほど説明可能性が向上しますが、表示が複雑になります。"
-        )
-else:
-    rwr_weight = 0.5  # デフォルト値
-    max_path_length = 10  # デフォルト値
-    max_paths = 10  # デフォルト値
-    show_paths = False  # デフォルト値
-
-
-# =========================================================
-# 推論実行
-# =========================================================
-
-st.subheader("🚀 推論実行")
-
-if st.button("推薦を実行", type="primary"):
+if st.button("🚀 推薦を実行する", type="primary", use_container_width=True):
     # 比較モードの場合
     if comparison_mode:
         if not methods_to_compare:
@@ -789,7 +712,16 @@ if st.button("推薦を実行", type="primary"):
         st.stop()  # 比較モードの場合はここで終了
 
     # 通常モード（単一手法）
-    with st.spinner(f"{recommendation_method}を生成中..."):
+    # 表示名から内部名に変換
+    method_map = {
+        "ハイブリッド推薦（推奨）": "ハイブリッド推薦",
+        "NMF推薦": "NMF推薦",
+        "グラフベース推薦": "グラフベース推薦",
+        "キャリアパターン別推薦": "キャリアパターン別推薦"
+    }
+    internal_method = method_map.get(recommendation_method, recommendation_method)
+
+    with st.spinner(f"推薦を生成中..."):
         try:
             import time
             from skillnote_recommendation.graph import HybridGraphRecommender
@@ -798,7 +730,7 @@ if st.button("推薦を実行", type="primary"):
             start_time = time.time()
 
             # 選択された推薦手法のみを実行
-            if recommendation_method == "キャリアパターン別推薦":
+            if internal_method == "キャリアパターン別推薦":
                 # キャリアパターン別推薦
                 from skillnote_recommendation.core.config import Config
                 from skillnote_recommendation.ml.career_pattern_classifier import create_classifier_from_config
@@ -843,7 +775,7 @@ if st.button("推薦を実行", type="primary"):
 
                 graph_recommendations = None
 
-            elif recommendation_method == "NMF推薦":
+            elif internal_method == "NMF推薦":
                 # NMF推薦のみ
                 recs = recommender.recommend(
                     member_code=selected_member_code,
@@ -859,7 +791,7 @@ if st.button("推薦を実行", type="primary"):
                 if 'pattern_recommendations' in st.session_state:
                     del st.session_state['pattern_recommendations']
 
-            elif recommendation_method == "グラフベース推薦":
+            elif internal_method == "グラフベース推薦":
                 # Knowledge Graphの確認
                 if 'knowledge_graph' not in st.session_state:
                     st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
@@ -1002,7 +934,7 @@ if st.button("推薦を実行", type="primary"):
                 # HybridRecommendationを標準のRecommendationに変換
                 recs = [convert_hybrid_to_recommendation(hr) for hr in graph_recommendations]
 
-            elif recommendation_method == "ハイブリッド推薦":
+            elif internal_method == "ハイブリッド推薦":
                 # Knowledge Graphの確認
                 if 'knowledge_graph' not in st.session_state:
                     st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
@@ -1040,7 +972,7 @@ if st.button("推薦を実行", type="primary"):
             st.session_state.last_recommendations = recs
             st.session_state.last_target_member_code = selected_member_code
             st.session_state.last_execution_time = elapsed_time
-            st.session_state.last_recommendation_method = recommendation_method
+            st.session_state.last_recommendation_method = internal_method
             if graph_recommendations:
                 st.session_state.graph_recommendations = graph_recommendations
 
@@ -1103,16 +1035,16 @@ if st.button("推薦を実行", type="primary"):
 
                 # リッチな成功メッセージ（実行時間を表示）
                 render_success_message(
-                    title="推薦完了！",
-                    message=f"{recommendation_method}で{len(recs)}件の力量を推薦しました",
-                    additional_info=f"⚡ 実行時間: {elapsed_time:.2f}秒"
+                    title="✅ 推薦が完了しました",
+                    message=f"{len(recs)}件の力量を推薦しました",
+                    additional_info=f"実行時間: {elapsed_time:.2f}秒"
                 )
 
                 # 推薦結果の表示
                 st.markdown("---")
 
                 # キャリアパターン別推薦の場合
-                if recommendation_method == "キャリアパターン別推薦":
+                if internal_method == "キャリアパターン別推薦":
                     pattern_recs = st.session_state.get('pattern_recommendations', {})
 
                     if pattern_recs:
@@ -1168,7 +1100,7 @@ if st.button("推薦を実行", type="primary"):
                         st.error("キャリアパターン別推薦の結果が見つかりません。")
 
                 # NMF推薦の場合
-                elif recommendation_method == "NMF推薦":
+                elif internal_method == "NMF推薦":
                     # 推薦結果の詳細表示
                     for idx, rec in enumerate(recs, 1):
                         display_recommendation_details(rec, idx)
