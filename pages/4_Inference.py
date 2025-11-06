@@ -105,6 +105,17 @@ members_df = td["members_clean"]
 recommender = st.session_state.ml_recommender
 mf_model = recommender.mf_model
 
+# Knowledge Graphの初期化（グラフベース推薦とハイブリッド推薦で必要）
+if 'knowledge_graph' not in st.session_state:
+    from skillnote_recommendation.graph import CompetenceKnowledgeGraph
+    with st.spinner("Knowledge Graphを初期化中..."):
+        st.session_state.knowledge_graph = CompetenceKnowledgeGraph(
+            member_competence=td["member_competence"],
+            member_master=td["members_clean"],
+            competence_master=td["competence_master"],
+            use_category_hierarchy=True
+        )
+
 
 # =========================================================
 # ヘルパー関数
@@ -702,33 +713,45 @@ if st.button("推薦を実行", type="primary"):
         if comparison_results:
             st.success(f"✅ {len(comparison_results)}個の手法の実行が完了しました")
 
-            # 比較テーブルを作成
-            st.markdown("---")
-            st.subheader("📊 推薦結果の比較")
+            # 空の結果がある場合は警告
+            empty_methods = [method for method, result in comparison_results.items()
+                           if len(result['recommendations']) == 0]
+            if empty_methods:
+                st.warning(f"⚠️ 以下の手法で推薦結果が0件でした: {', '.join(empty_methods)}\n\n"
+                          "考えられる原因:\n"
+                          "- 既に多くの力量を習得済み\n"
+                          "- 力量タイプフィルタが厳しすぎる\n"
+                          "- 推薦数を増やしてみてください")
 
             # 比較テーブルを作成
-            comparison_data = []
-            max_len = max(len(result['recommendations']) for result in comparison_results.values())
+            max_len = max((len(result['recommendations']) for result in comparison_results.values()), default=0)
 
-            for i in range(max_len):
-                row = {'順位': i + 1}
+            if max_len > 0:
+                st.markdown("---")
+                st.subheader("📊 推薦結果の比較")
 
-                for method, result in comparison_results.items():
-                    recs = result['recommendations']
-                    if i < len(recs):
-                        rec = recs[i]
-                        row[f'{method}_力量名'] = rec.competence_name
-                        row[f'{method}_スコア'] = f"{rec.priority_score:.3f}"
-                        row[f'{method}_タイプ'] = rec.competence_type
-                    else:
-                        row[f'{method}_力量名'] = '-'
-                        row[f'{method}_スコア'] = '-'
-                        row[f'{method}_タイプ'] = '-'
+                # 比較テーブルを作成
+                comparison_data = []
 
-                comparison_data.append(row)
+                for i in range(max_len):
+                    row = {'順位': i + 1}
 
-            comparison_df = pd.DataFrame(comparison_data)
-            st.dataframe(comparison_df, use_container_width=True, height=400)
+                    for method, result in comparison_results.items():
+                        recs = result['recommendations']
+                        if i < len(recs):
+                            rec = recs[i]
+                            row[f'{method}_力量名'] = rec.competence_name
+                            row[f'{method}_スコア'] = f"{rec.priority_score:.3f}"
+                            row[f'{method}_タイプ'] = rec.competence_type
+                        else:
+                            row[f'{method}_力量名'] = '-'
+                            row[f'{method}_スコア'] = '-'
+                            row[f'{method}_タイプ'] = '-'
+
+                    comparison_data.append(row)
+
+                comparison_df = pd.DataFrame(comparison_data)
+                st.dataframe(comparison_df, use_container_width=True, height=400)
 
             # 実行時間の比較
             st.markdown("### ⏱️ 実行時間の比較")
