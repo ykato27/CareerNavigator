@@ -517,6 +517,42 @@ class NMFHyperparameterTuner:
                 callbacks=all_callbacks if all_callbacks else None
             )
             print(f"[DEBUG] Study.optimize completed. Total trials: {len(self.study.trials)}")
+        except ModuleNotFoundError as e:
+            # CMA-ES実行時にcmaesパッケージがない場合、TPEで再試行
+            if self.sampler == "cmaes" and "cmaes" in str(e):
+                import traceback
+                print(f"\n{'='*80}")
+                print(f"⚠️  CMA-ES サンプラーが利用できません")
+                print(f"{'='*80}")
+                print(f"理由: {e}")
+                print(f"解決方法: 'pip install cmaes' を実行してください")
+                print(f"代替策: TPE サンプラーにフォールバックして最適化を続行します")
+                print(f"{'='*80}\n")
+                logger.warning(f"CMA-ES execution failed: {e}. Falling back to TPE.")
+
+                # TPEサンプラーでStudyを再作成
+                print("[DEBUG] Creating new study with TPE sampler...")
+                sampler_instance = TPESampler(seed=self.random_state)
+                self.study = optuna.create_study(
+                    direction='minimize',
+                    sampler=sampler_instance
+                )
+                self.sampler = "tpe"  # サンプラー情報を更新
+                print("[DEBUG] Study recreated with TPE sampler")
+
+                # 再試行
+                print(f"[DEBUG] Retrying study.optimize with TPE sampler...")
+                self.study.optimize(
+                    self.objective,
+                    n_trials=self.n_trials,
+                    timeout=self.timeout,
+                    n_jobs=self.n_jobs,
+                    show_progress_bar=show_progress_bar,
+                    callbacks=all_callbacks if all_callbacks else None
+                )
+                print(f"[DEBUG] Study.optimize completed with TPE. Total trials: {len(self.study.trials)}")
+            else:
+                raise
         except Exception as e:
             import traceback
             print(f"[ERROR] Study.optimize failed: {type(e).__name__}: {e}")
