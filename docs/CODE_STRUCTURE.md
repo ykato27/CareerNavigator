@@ -23,7 +23,7 @@ CareerNavigator/
 
 ### skillnote_recommendation/core/
 
-ビジネスロジックとルールベース推薦システムの実装。
+基盤コンポーネントとデータ処理の実装。
 
 #### 主要モジュール:
 
@@ -45,11 +45,6 @@ CareerNavigator/
   - 力量マスタ作成
   - メンバー力量データ作成
   - スキルマトリクス作成
-
-- **recommendation_engine.py**: ルールベース推薦エンジン
-  - 優先度スコア計算
-  - カテゴリ重要度評価
-  - 習得容易性評価
 
 - **reference_persons.py**: 参考人物検索
   - 類似キャリアの人物検索
@@ -248,11 +243,9 @@ except Exception as e:
 
 ```
 tests/
-├── test_basic.py                   # 基本機能テスト
 ├── test_data_loader.py             # データ読み込みテスト
 ├── test_data_transformer.py        # データ変換テスト
-├── test_similarity_calculator.py   # 類似度計算テスト
-├── test_recommendation_engine.py   # 推薦エンジンテスト
+├── test_evaluator.py               # 評価システムテスト
 ├── test_matrix_factorization.py    # 行列分解テスト
 ├── test_diversity.py               # 多様性テスト
 ├── test_ml_recommender.py          # ML推薦システムテスト

@@ -307,23 +307,25 @@ print(f"共通メンバー数: {len(common_members)}")
 **解決策**:
 ```python
 # 推薦結果を確認
-from skillnote_recommendation.core.recommendation_engine import RecommendationEngine
+from skillnote_recommendation.ml.ml_recommender import MLRecommender
 
-# エンジンを作成して推薦を確認
+# メンバーマスタの準備
 members_data = pd.DataFrame({
     'メンバーコード': train_data['メンバーコード'].unique()
 })
 
-engine = RecommendationEngine(
-    df_members=members_data,
-    df_competence_master=competence_master,
-    df_member_competence=train_data,
-    df_similarity=pd.DataFrame(columns=['力量1', '力量2', '類似度'])
+# MLモデルを学習
+ml_recommender = MLRecommender.build(
+    member_competence=train_data,
+    competence_master=competence_master,
+    member_master=members_data,
+    use_preprocessing=False,
+    use_tuning=False
 )
 
 # サンプルメンバーで推薦を確認
 sample_member = train_data['メンバーコード'].iloc[0]
-recommendations = engine.recommend(sample_member, top_n=10)
+recommendations = ml_recommender.recommend(sample_member, top_n=10, use_diversity=False)
 
 print(f"メンバー {sample_member} の推薦:")
 for rec in recommendations[:5]:

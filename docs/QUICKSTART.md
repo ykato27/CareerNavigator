@@ -55,27 +55,17 @@ data/
 ### ステップ4: 実行
 
 ```bash
-# データ変換
-uv run skillnote-convert
-
-# 推薦実行
-uv run skillnote-recommend
+# Streamlitアプリを起動
+uv run streamlit run streamlit_app.py
 ```
+
+ブラウザが自動的に開き、WebUIから推薦システムを使用できます。
 
 ## よく使うコマンド
 
 ```bash
-# データ変換
-uv run skillnote-convert
-
-# 推薦実行
-uv run skillnote-recommend
-
-# Pythonシェルで対話的に使用
-uv run python
->>> from skillnote_recommendation import RecommendationSystem
->>> system = RecommendationSystem()
->>> system.print_recommendations('m48', top_n=10)
+# Streamlitアプリを起動
+uv run streamlit run streamlit_app.py
 
 # 依存関係の追加
 uv add パッケージ名
@@ -91,55 +81,6 @@ uv run black skillnote_recommendation/
 ```
 
 ## Pythonコードで使う
-
-### ルールベース推薦（基本）
-
-```python
-from skillnote_recommendation import RecommendationSystem
-
-# システム初期化
-system = RecommendationSystem()
-
-# 推薦実行
-system.print_recommendations('m48', top_n=10)
-```
-
-### ルールベース推薦（詳細）
-
-```python
-from skillnote_recommendation import RecommendationSystem
-
-system = RecommendationSystem()
-
-# メンバー情報を取得
-info = system.get_member_info('m48')
-print(f"メンバー: {info['name']}")
-print(f"SKILL: {info['skill_count']}件")
-
-# SKILLのみ推薦
-recommendations = system.recommend_competences(
-    'm48',
-    competence_type='SKILL',
-    top_n=5
-)
-
-for rec in recommendations:
-    print(f"{rec.competence_name}: {rec.priority_score:.2f}")
-
-# 特定カテゴリのみ推薦
-recommendations = system.recommend_competences(
-    'm48',
-    category_filter='製造部',
-    top_n=10
-)
-
-# CSV出力
-system.export_recommendations(
-    'm48',
-    'recommendations_m48.csv',
-    top_n=20
-)
-```
 
 ### 機械学習ベース推薦
 

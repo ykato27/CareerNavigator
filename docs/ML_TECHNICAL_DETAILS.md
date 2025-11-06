@@ -917,16 +917,16 @@ schedule.every().month.at("01 00:00").do(retrain_model)
 ### 2. A/Bテスト
 
 ```python
-# ルールベース vs ML の比較
+# 異なる多様性戦略の比較
 import random
 
 def get_recommendation(member_code):
     if random.random() < 0.5:
-        # グループA: ルールベース
-        return rule_based_system.recommend(member_code)
+        # グループA: ハイブリッド戦略
+        return ml_recommender.recommend(member_code, diversity_strategy='hybrid')
     else:
-        # グループB: ML
-        return ml_recommender.recommend(member_code)
+        # グループB: MMR戦略
+        return ml_recommender.recommend(member_code, diversity_strategy='mmr')
 
 # 効果測定
 # - 力量習得率

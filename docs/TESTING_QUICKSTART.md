@@ -446,20 +446,23 @@ def test_everything():
 ```python
 # conftest.pyで定義
 @pytest.fixture
-def sample_engine(sample_members, sample_competence_master,
-                  sample_member_competence, sample_similarity):
-    """推薦エンジンのフィクスチャ"""
-    return RecommendationEngine(
-        sample_members,
-        sample_competence_master,
-        sample_member_competence,
-        sample_similarity
+def sample_ml_recommender(sample_members, sample_competence_master,
+                          sample_member_competence):
+    """ML推薦エンジンのフィクスチャ"""
+    from skillnote_recommendation.ml.ml_recommender import MLRecommender
+
+    return MLRecommender.build(
+        member_competence=sample_member_competence,
+        competence_master=sample_competence_master,
+        member_master=sample_members,
+        use_preprocessing=False,
+        use_tuning=False
     )
 
 # テストで使用
-def test_recommend(sample_engine):
-    """sample_engineフィクスチャを使用"""
-    recommendations = sample_engine.recommend('m001', top_n=5)
+def test_recommend(sample_ml_recommender):
+    """sample_ml_recommenderフィクスチャを使用"""
+    recommendations = sample_ml_recommender.recommend('m001', top_n=5, use_diversity=False)
     assert len(recommendations) <= 5
 ```
 

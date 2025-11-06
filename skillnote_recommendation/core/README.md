@@ -1,27 +1,27 @@
 # Core モジュール
 
-このディレクトリには、CareerNavigatorの**コアビジネスロジック**が含まれています。
+このディレクトリには、CareerNavigatorの**基盤コンポーネント**が含まれています。
 
 ## 📋 このモジュールの役割
 
 - ✅ データの読み込みと変換
-- ✅ ルールベースの推薦ロジック
-- ✅ 推薦システムの評価
+- ✅ 推薦システムの評価（ML専用）
 - ✅ データ品質管理
 - ✅ 設定管理とエラーハンドリング
+- ✅ 参考人物検索
 
 ## 📂 ファイル分類
 
 ### 🎯 主要なクラス（重要）
 
-これらは、推薦システムの中心となるクラスです。
+これらは、推薦システムの基盤となるクラスです。
 
 | ファイル | クラス名 | 役割 |
 |---------|---------|------|
-| **recommendation_system.py** | `RecommendationSystem` | **統合推薦システム** - 推薦システム全体を管理する最上位クラス |
-| **recommendation_engine.py** | `RecommendationEngine` | **ルールベース推薦エンジン** - スコア計算と推薦ロジック |
 | **data_loader.py** | `DataLoader` | **データ読込** - CSVファイルからデータを読み込む |
 | **data_transformer.py** | `DataTransformer` | **データ変換** - 読み込んだデータを推薦用に変換する |
+| **evaluator.py** | `RecommendationEvaluator` | **評価システム** - ML推薦システムの性能を評価する |
+| **reference_persons.py** | `ReferencePersonFinder` | **参考人物検索** - ロールモデルとなる先輩を検索する |
 
 ### 📊 データ構造
 
@@ -38,9 +38,6 @@
 
 | ファイル | クラス名 | 役割 |
 |---------|---------|------|
-| **similarity_calculator.py** | `SimilarityCalculator` | 力量間の類似度を計算する |
-| **reference_persons.py** | `ReferencePersonSearch` | 参考となる先輩メンバーを検索する |
-| **evaluator.py** | `Evaluator` | 推薦システムの性能を評価する |
 | **skill_dependency_analyzer.py** | `SkillDependencyAnalyzer` | スキルの依存関係を分析する |
 
 ### 🛡️ 品質管理
@@ -81,28 +78,6 @@
 
 ## 🚀 使い方
 
-### 基本的な使い方
-
-```python
-from skillnote_recommendation import RecommendationSystem
-
-# 推薦システムを初期化
-system = RecommendationSystem()
-
-# メンバーへの推薦を実行
-recommendations = system.recommend_competences(
-    member_code='m48',
-    top_n=10,
-    competence_type='SKILL'
-)
-
-# 推薦結果を表示
-system.print_recommendations('m48', top_n=10)
-
-# CSV出力
-system.export_recommendations('m48', 'output.csv', top_n=20)
-```
-
 ### データの読み込みと変換
 
 ```python
@@ -115,16 +90,55 @@ data = loader.load_all_data()
 
 # データ変換
 transformer = DataTransformer()
-transformed = transformer.transform(data)
+competence_master = transformer.create_competence_master(data)
+member_competence, valid_members = transformer.create_member_competence(
+    data, competence_master
+)
 ```
 
-### 類似度計算
+### ML推薦システムの評価
 
 ```python
-from skillnote_recommendation.core.similarity_calculator import SimilarityCalculator
+from skillnote_recommendation.core.evaluator import RecommendationEvaluator
+from skillnote_recommendation.ml.ml_recommender import MLRecommender
 
-calculator = SimilarityCalculator(competence_master, member_competence)
-similarity = calculator.calculate_similarity('comp_001', 'comp_002')
+# MLモデルの学習
+ml_recommender = MLRecommender.build(
+    member_competence=member_competence,
+    competence_master=competence_master,
+    member_master=member_master
+)
+
+# 評価器の初期化
+evaluator = RecommendationEvaluator(recommender=ml_recommender)
+
+# 時系列分割評価
+train_data, test_data = evaluator.temporal_train_test_split(
+    member_competence, train_ratio=0.8
+)
+metrics = evaluator.evaluate_recommendations(
+    train_data, test_data, competence_master, top_k=10
+)
+```
+
+### 参考人物検索
+
+```python
+from skillnote_recommendation.core.reference_persons import ReferencePersonFinder
+
+# 参考人物検索の初期化
+finder = ReferencePersonFinder(
+    member_competence=member_competence,
+    member_master=member_master,
+    competence_master=competence_master
+)
+
+# 特定の力量を持つ参考人物を検索
+reference_persons = finder.find_reference_persons(
+    target_member_code='m48',
+    recommended_competence_code='skill_001',
+    top_n=3
+)
 ```
 
 ## 📖 詳しく知りたい方へ
