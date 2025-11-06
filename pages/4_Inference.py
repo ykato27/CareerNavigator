@@ -845,10 +845,23 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                         readable_path = []
                         for node in path:
                             node_info = kg.get_node_info(node)
+                            node_type = node_info.get('node_type', 'unknown')
+                            node_name = node_info.get('name', node)
+
+                            # メンバーノードの場合はメンバーコードを追加
+                            if node_type == 'member':
+                                member_code = node_info.get('code', '')
+                                if member_code:
+                                    node_name_with_code = f"{node_name} ({member_code})"
+                                else:
+                                    node_name_with_code = node_name
+                            else:
+                                node_name_with_code = node_name
+
                             readable_path.append({
                                 'id': node,
-                                'type': node_info.get('node_type', 'unknown'),
-                                'name': node_info.get('name', node),
+                                'type': node_type,
+                                'name': node_name_with_code,
                             })
                         readable_paths.append(readable_path)
 
