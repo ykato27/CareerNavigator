@@ -70,6 +70,7 @@ class MatrixFactorizationModel:
         )
 
         # 学習後のデータ
+        self.X = None  # 元のデータマトリクス（再構成誤差計算用）
         self.W = None  # メンバー因子行列
         self.H = None  # 力量因子行列
         self.member_codes = None  # メンバーコードのリスト
@@ -123,6 +124,7 @@ class MatrixFactorizationModel:
 
     def _fit_normal(self, X: np.ndarray) -> None:
         """通常の学習（Early stoppingなし）"""
+        self.X = X  # 元のデータマトリクスを保存（再構成誤差計算用）
         self.W = self.model.fit_transform(X)
         self.H = self.model.components_
         self.actual_n_iter_ = self.model.n_iter_
@@ -182,6 +184,7 @@ class MatrixFactorizationModel:
                     break
 
         # ベストモデルを設定
+        self.X = X  # 元のデータマトリクスを保存（再構成誤差計算用）
         self.W = best_W if best_W is not None else W
         self.H = best_H if best_H is not None else H
         self.actual_n_iter_ = best_iter if best_W is not None else current_max_iter
