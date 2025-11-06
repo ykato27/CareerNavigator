@@ -151,7 +151,8 @@ class HybridGraphRecommender:
         rwr_results = self.rwr.recommend(
             member_code=member_code,
             top_n=top_n * CANDIDATE_MULTIPLIER,  # 多めに取得してフィルタ
-            return_paths=True
+            return_paths=True,
+            competence_type=competence_type
         )
         rwr_dict = {comp: (score, paths) for comp, score, paths in rwr_results}
 
