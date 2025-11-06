@@ -60,7 +60,7 @@ def convert_hybrid_to_recommendation(hybrid_rec) -> Recommendation:
         category_importance=0.5,  # デフォルト値
         acquisition_ease=0.5,  # デフォルト値
         popularity=0.5,  # デフォルト値
-        reason=', '.join(hybrid_rec.reasons) if hybrid_rec.reasons else 'グラフベース推薦',
+        reason='\n'.join(hybrid_rec.reasons) if hybrid_rec.reasons else 'グラフベース推薦',
         reference_persons=[]
     )
 
@@ -621,16 +621,6 @@ if st.button("推薦を実行", type="primary"):
                 kg = st.session_state.knowledge_graph
 
                 for comp_code, score, paths in graph_recommendations_raw:
-                    # === デバッグ情報 ===
-                    st.write(f"### デバッグ: {comp_code}")
-                    st.write(f"- RWRから返されたパス数: **{len(paths)}個**")
-                    st.write(f"- パスの型: {type(paths)}")
-                    if paths:
-                        st.write(f"- 最初のパス: {paths[0]}")
-                        st.write(f"- 最初のパスの長さ: {len(paths[0])}")
-                    st.write("---")
-                    # === デバッグ情報終了 ===
-
                     # 力量情報を取得
                     comp_info_row = td["competence_master"][
                         td["competence_master"]["力量コード"] == comp_code
@@ -663,66 +653,72 @@ if st.button("推薦を実行", type="primary"):
                             })
                         readable_paths.append(readable_path)
 
-                    # パスから推薦理由を生成
+                    # パスから推薦理由を生成（各パスの詳細を表示）
                     reasons = []
-                    path_summary = {
-                        'category': [],
-                        'member': [],
-                        'competence': []
-                    }
+                    reasons.append(f"📊 抽出されたパス数: **{len(readable_paths)}個**")
+                    reasons.append("")  # 空行
 
-                    for path in readable_paths:  # すべてのパスから理由を生成
+                    # パスのタイプ別に分類
+                    direct_paths = []
+                    category_paths = []
+                    member_paths = []
+                    competence_paths = []
+
+                    for i, path in enumerate(readable_paths, 1):
                         if len(path) < 2:
                             continue
 
-                        # パスのパターンを解析
                         path_types = [n['type'] for n in path]
+                        path_names = [n['name'] for n in path]
 
-                        if 'category' in path_types:
-                            # カテゴリー経由のパス
-                            category_nodes = [n for n in path if n['type'] == 'category']
-                            if category_nodes:
-                                path_summary['category'].append(category_nodes[0]['name'])
-
-                        if path_types.count('member') > 1:
-                            # 類似メンバー経由のパス
-                            member_nodes = [n for n in path if n['type'] == 'member']
-                            if len(member_nodes) > 1:
-                                path_summary['member'].append(member_nodes[1]['name'])
-
-                        if 'competence' in path_types and len(path) >= 3:
-                            # 既習得力量経由のパス
-                            comp_nodes = [n for n in path if n['type'] == 'competence']
-                            if len(comp_nodes) >= 2:
-                                path_summary['competence'].append(comp_nodes[0]['name'])
-
-                    # パスサマリーから理由を生成
-                    if path_summary['category']:
-                        unique_cats = list(set(path_summary['category']))
-                        if len(unique_cats) <= 3:
-                            reasons.append(f"カテゴリー経由: {', '.join(unique_cats)}")
+                        # パスの説明を生成
+                        if len(path) == 2:
+                            # 直接パス
+                            direct_paths.append(f"  {i}. {path_names[0]} → {path_names[1]}")
+                        elif 'category' in path_types:
+                            # カテゴリー経由
+                            category_paths.append(f"  {i}. {' → '.join(path_names)}")
+                        elif path_types.count('member') > 1:
+                            # 類似メンバー経由
+                            member_paths.append(f"  {i}. {' → '.join(path_names)}")
+                        elif 'competence' in path_types and len(path) >= 3:
+                            # 既習得力量経由
+                            competence_paths.append(f"  {i}. {' → '.join(path_names)}")
                         else:
-                            reasons.append(f"カテゴリー経由: {', '.join(unique_cats[:3])} 他{len(unique_cats)-3}件")
+                            # その他のパス
+                            competence_paths.append(f"  {i}. {' → '.join(path_names)}")
 
-                    if path_summary['member']:
-                        unique_members = list(set(path_summary['member']))
-                        if len(unique_members) <= 3:
-                            reasons.append(f"類似メンバー経由: {', '.join(unique_members)}")
-                        else:
-                            reasons.append(f"類似メンバー経由: {', '.join(unique_members[:3])} 他{len(unique_members)-3}名")
+                    # パスタイプ別に表示
+                    if direct_paths:
+                        reasons.append(f"**🎯 直接パス ({len(direct_paths)}個):**")
+                        reasons.extend(direct_paths[:5])  # 最大5個表示
+                        if len(direct_paths) > 5:
+                            reasons.append(f"  ... 他{len(direct_paths) - 5}個")
+                        reasons.append("")
 
-                    if path_summary['competence']:
-                        unique_comps = list(set(path_summary['competence']))
-                        if len(unique_comps) <= 3:
-                            reasons.append(f"既習得力量経由: {', '.join(unique_comps)}")
-                        else:
-                            reasons.append(f"既習得力量経由: {', '.join(unique_comps[:3])} 他{len(unique_comps)-3}件")
+                    if category_paths:
+                        reasons.append(f"**📁 カテゴリー経由パス ({len(category_paths)}個):**")
+                        reasons.extend(category_paths[:5])
+                        if len(category_paths) > 5:
+                            reasons.append(f"  ... 他{len(category_paths) - 5}個")
+                        reasons.append("")
 
-                    # パス数の情報を追加
-                    if not reasons:
-                        reasons = [f"{len(readable_paths)}個の学習パスから推薦"]
+                    if member_paths:
+                        reasons.append(f"**👥 類似メンバー経由パス ({len(member_paths)}個):**")
+                        reasons.extend(member_paths[:5])
+                        if len(member_paths) > 5:
+                            reasons.append(f"  ... 他{len(member_paths) - 5}個")
+                        reasons.append("")
 
-                    reasons.insert(0, f"📊 抽出されたパス数: {len(readable_paths)}個")
+                    if competence_paths:
+                        reasons.append(f"**🔗 既習得力量経由パス ({len(competence_paths)}個):**")
+                        reasons.extend(competence_paths[:5])
+                        if len(competence_paths) > 5:
+                            reasons.append(f"  ... 他{len(competence_paths) - 5}個")
+
+                    # 理由がない場合のフォールバック
+                    if len(reasons) <= 2:
+                        reasons = [f"📊 {len(readable_paths)}個の学習パスから推薦"]
 
                     # HybridRecommendationを作成
                     hybrid_rec = HybridRecommendation(
@@ -978,17 +974,6 @@ if st.button("推薦を実行", type="primary"):
                                         member_name = members_df[
                                             members_df["メンバーコード"] == selected_member_code
                                         ]["メンバー名"].iloc[0]
-
-                                        # === グラフ可視化デバッグ ===
-                                        st.write("#### 📊 グラフ可視化に渡されるパス情報")
-                                        st.write(f"- パス数: **{len(hybrid_rec.paths)}個**")
-                                        st.write(f"- パスの型: {type(hybrid_rec.paths)}")
-                                        for i, path in enumerate(hybrid_rec.paths[:3], 1):
-                                            st.write(f"- パス{i}の長さ: {len(path)}, 内容: {[n.get('name', n.get('id', '?')) for n in path]}")
-                                        if len(hybrid_rec.paths) > 3:
-                                            st.write(f"- ... 他 {len(hybrid_rec.paths) - 3}個のパス")
-                                        st.write("---")
-                                        # === デバッグ終了 ===
 
                                         fig = visualizer.visualize_recommendation_path(
                                             paths=hybrid_rec.paths,
