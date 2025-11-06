@@ -38,10 +38,29 @@ class ContentBasedRecommender:
         self.competence_master = competence_master
         self.member_competence = member_competence
 
+        # カラム名のマッピングを設定
+        self._setup_column_mappings()
+
         # 同じ職種・等級のメンバープロファイルを作成
         self._build_role_grade_profiles()
 
         print("\nコンテンツベース推薦システム初期化完了")
+
+    def _setup_column_mappings(self):
+        """カラム名のマッピングを設定（日本語と英語の両方に対応）"""
+        # メンバーマスタのカラム
+        self.member_code_col = 'メンバーコード' if 'メンバーコード' in self.member_master.columns else 'member_code'
+
+        # メンバー習得力量のカラム
+        self.mc_member_code_col = 'メンバーコード' if 'メンバーコード' in self.member_competence.columns else 'member_code'
+        self.mc_competence_code_col = '力量コード' if '力量コード' in self.member_competence.columns else 'competence_code'
+        self.mc_level_col = 'レベル' if 'レベル' in self.member_competence.columns else 'level'
+
+        # 力量マスタのカラム
+        self.comp_code_col = '力量コード' if '力量コード' in self.competence_master.columns else 'competence_code'
+        self.comp_type_col = '力量タイプ' if '力量タイプ' in self.competence_master.columns else 'competence_type'
+        self.comp_category_col = '力量カテゴリー名' if '力量カテゴリー名' in self.competence_master.columns else 'category'
+        self.comp_name_col = '力量名' if '力量名' in self.competence_master.columns else 'name'
 
     def _build_role_grade_profiles(self):
         """職種・等級ごとのプロファイルを構築
@@ -62,18 +81,18 @@ class ContentBasedRecommender:
                     similar_members = self.member_master[
                         (self.member_master['role'] == role) &
                         (self.member_master['grade'] == grade)
-                    ]['member_code'].tolist()
+                    ][self.member_code_col].tolist()
 
                     # 彼らが習得している力量を集計
                     profile_comps = self.member_competence[
-                        self.member_competence['member_code'].isin(similar_members)
+                        self.member_competence[self.mc_member_code_col].isin(similar_members)
                     ]
 
                     # 力量ごとの習得率と平均レベルを計算
-                    comp_stats = profile_comps.groupby('competence_code').agg({
-                        'level': ['mean', 'count']
+                    comp_stats = profile_comps.groupby(self.mc_competence_code_col).agg({
+                        self.mc_level_col: ['mean', 'count']
                     }).reset_index()
-                    comp_stats.columns = ['competence_code', 'avg_level', 'count']
+                    comp_stats.columns = [self.mc_competence_code_col, 'avg_level', 'count']
                     comp_stats['acquisition_rate'] = comp_stats['count'] / len(similar_members)
 
                     self.role_grade_profiles[key] = comp_stats
@@ -96,7 +115,7 @@ class ContentBasedRecommender:
         """
         # メンバー情報を取得
         member_info = self.member_master[
-            self.member_master['member_code'] == member_code
+            self.member_master[self.member_code_col] == member_code
         ]
 
         if member_info.empty:
@@ -109,11 +128,11 @@ class ContentBasedRecommender:
 
         # 既習得力量を取得
         acquired_comps = self.member_competence[
-            self.member_competence['member_code'] == member_code
-        ]['competence_code'].tolist()
+            self.member_competence[self.mc_member_code_col] == member_code
+        ][self.mc_competence_code_col].tolist()
 
         # 候補力量を取得（未習得のもの）
-        all_comps = self.competence_master['competence_code'].tolist()
+        all_comps = self.competence_master[self.comp_code_col].tolist()
         candidate_comps = [c for c in all_comps if c not in acquired_comps]
 
         # フィルタリング
@@ -121,16 +140,16 @@ class ContentBasedRecommender:
             candidate_comps = [
                 c for c in candidate_comps
                 if self.competence_master[
-                    self.competence_master['competence_code'] == c
-                ]['competence_type'].iloc[0] in competence_type
+                    self.competence_master[self.comp_code_col] == c
+                ][self.comp_type_col].iloc[0] in competence_type
             ]
 
         if category_filter:
             candidate_comps = [
                 c for c in candidate_comps
                 if self.competence_master[
-                    self.competence_master['competence_code'] == c
-                ]['category'].iloc[0] == category_filter
+                    self.competence_master[self.comp_code_col] == c
+                ][self.comp_category_col].iloc[0] == category_filter
             ]
 
         # 親和性スコアを計算
@@ -178,7 +197,7 @@ class ContentBasedRecommender:
         recommendations = []
         for comp_code, scores in sorted_comps[:top_n]:
             comp_info = self.competence_master[
-                self.competence_master['competence_code'] == comp_code
+                self.competence_master[self.comp_code_col] == comp_code
             ].iloc[0]
 
             reason = self._generate_reason(
@@ -190,9 +209,9 @@ class ContentBasedRecommender:
 
             rec = Recommendation(
                 competence_code=comp_code,
-                competence_name=comp_info['name'],
-                competence_type=comp_info['competence_type'],
-                category=comp_info.get('category', 'UNKNOWN'),
+                competence_name=comp_info[self.comp_name_col],
+                competence_type=comp_info[self.comp_type_col],
+                category=comp_info.get(self.comp_category_col, 'UNKNOWN'),
                 priority_score=scores['score'],
                 category_importance=scores['profile'],
                 acquisition_ease=scores['affinity'],
@@ -223,7 +242,7 @@ class ContentBasedRecommender:
 
         scores = {}
         for comp_code in competence_codes:
-            profile_row = profile[profile['competence_code'] == comp_code]
+            profile_row = profile[profile[self.mc_competence_code_col] == comp_code]
 
             if not profile_row.empty:
                 # 習得率を使用
@@ -245,7 +264,7 @@ class ContentBasedRecommender:
             {competence_code: popularity_score}
         """
         # 各力量を習得しているメンバー数をカウント
-        comp_counts = self.member_competence.groupby('competence_code').size()
+        comp_counts = self.member_competence.groupby(self.mc_competence_code_col).size()
 
         max_count = comp_counts.max() if not comp_counts.empty else 1
 
