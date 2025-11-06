@@ -32,15 +32,15 @@ NumPy → データ分析
 
 | ファイル | クラス名 | 役割 |
 |---------|---------|------|
-| **knowledge_graph.py** | `KnowledgeGraph` | **知識グラフ** - 力量間の関係性をグラフ構造で表現 |
-| **hybrid_recommender.py** | `HybridRecommender` | **ハイブリッド推薦** - グラフとMLを組み合わせた推薦システム |
+| **knowledge_graph.py** | `CompetenceKnowledgeGraph` | **知識グラフ** - 力量間の関係性をグラフ構造で表現 |
+| **hybrid_recommender.py** | `HybridGraphRecommender` | **ハイブリッド推薦** - RWR + NMF + Content-Basedを組み合わせた推薦システム |
 | **career_path.py** | `CareerPath` | **キャリアパス** - メンバーのキャリア経路を表現 |
 
 ### 🧭 グラフアルゴリズム
 
 | ファイル | クラス名 | 役割 |
 |---------|---------|------|
-| **random_walk.py** | `RandomWalk` | **ランダムウォーク** - グラフ上をランダムに歩いて推薦候補を探索 |
+| **random_walk.py** | `RandomWalkRecommender` | **Random Walk with Restart (RWR)** - PageRankベースのグラフ推薦 |
 | **category_hierarchy.py** | `CategoryHierarchy` | **カテゴリ階層** - 力量カテゴリの階層構造を管理 |
 
 ### 📊 可視化
@@ -62,7 +62,7 @@ NumPy → データ分析
 ### 知識グラフの構築
 
 ```python
-from skillnote_recommendation.graph import KnowledgeGraph
+from skillnote_recommendation.graph.knowledge_graph import CompetenceKnowledgeGraph
 from skillnote_recommendation.core.data_loader import DataLoader
 
 # データ読み込み
@@ -70,40 +70,58 @@ loader = DataLoader()
 data = loader.load_all_data()
 
 # 知識グラフを構築
-kg = KnowledgeGraph(
+kg = CompetenceKnowledgeGraph(
     member_competence=data['member_competence'],
-    competence_master=data['competence_master']
+    member_master=data['member_master'],
+    competence_master=data['competence_master'],
+    use_category_hierarchy=True
 )
 
 # グラフの統計情報
-print(f"ノード数: {kg.num_nodes()}")
-print(f"エッジ数: {kg.num_edges()}")
+print(f"ノード数: {kg.G.number_of_nodes()}")
+print(f"エッジ数: {kg.G.number_of_edges()}")
 ```
 
 ### ハイブリッド推薦
 
 ```python
-from skillnote_recommendation.graph import HybridRecommender
+from skillnote_recommendation.graph.hybrid_recommender import HybridGraphRecommender
+from skillnote_recommendation.ml.ml_recommender import MLRecommender
+from skillnote_recommendation.ml.content_based_recommender import ContentBasedRecommender
+from skillnote_recommendation.ml.feature_engineering import FeatureEngineer
+
+# 各推薦エンジンを準備
+ml_recommender = MLRecommender.build(...)
+content_recommender = ContentBasedRecommender(...)
+feature_engineer = FeatureEngineer(...)
 
 # ハイブリッド推薦システムを初期化
-hybrid = HybridRecommender(
+hybrid = HybridGraphRecommender(
     knowledge_graph=kg,
-    ml_recommender=ml_recommender  # MLモジュールの推薦システム
+    ml_recommender=ml_recommender,
+    content_recommender=content_recommender,
+    feature_engineer=feature_engineer,
+    graph_weight=0.4,    # RWRの重み
+    cf_weight=0.3,       # NMFの重み
+    content_weight=0.3   # コンテンツベースの重み
 )
 
 # メンバーへの推薦
 recommendations = hybrid.recommend(
-    member_code='m48',
+    member_code='M001',
     top_n=10,
-    graph_weight=0.3,  # グラフベーススコアの重み
-    ml_weight=0.7      # MLスコアの重み
+    competence_type=['SKILL', 'EDUCATION']  # オプション: 力量タイプフィルタ
 )
 
-# 推薦理由にグラフ情報が含まれる
+# 推薦結果を表示
 for rec in recommendations:
-    print(f"{rec['力量名']}: 総合スコア {rec['ハイブリッドスコア']:.3f}")
-    print(f"  - グラフスコア: {rec['グラフスコア']:.3f}")
-    print(f"  - MLスコア: {rec['MLスコア']:.3f}")
+    print(f"{rec.competence_info['力量名']}: スコア {rec.score:.3f}")
+    print(f"  - RWRスコア: {rec.graph_score:.3f}")
+    print(f"  - NMFスコア: {rec.cf_score:.3f}")
+    print(f"  - コンテンツスコア: {rec.content_score:.3f}")
+    print(f"  - 推薦理由:")
+    for reason in rec.reasons:
+        print(f"    {reason}")
 ```
 
 ### キャリアパスの可視化
@@ -124,25 +142,38 @@ fig = visualize_career_path(career_path)
 fig.show()  # または fig.savefig('career_path.png')
 ```
 
-### ランダムウォークによる推薦
+### Random Walk with Restart (RWR) による推薦
 
 ```python
-from skillnote_recommendation.graph.random_walk import RandomWalk
+from skillnote_recommendation.graph.random_walk import RandomWalkRecommender
 
-# ランダムウォーク推薦
-rw = RandomWalk(knowledge_graph=kg)
-
-# メンバーの現在の力量から出発してランダムウォーク
-candidates = rw.walk_and_recommend(
-    start_competences=['comp_001', 'comp_002', 'comp_003'],
-    walk_length=10,
-    num_walks=100,
-    top_n=10
+# RWR推薦エンジンを初期化
+rwr = RandomWalkRecommender(
+    knowledge_graph=kg,
+    restart_prob=0.15,      # 再スタート確率
+    max_path_length=10,     # 推薦パスの最大長
+    max_paths=10,           # 各力量の推薦パス数
+    enable_cache=True       # PageRankキャッシュを有効化
 )
 
-# 推薦候補と訪問回数
-for comp_code, visit_count in candidates:
-    print(f"{comp_code}: {visit_count}回訪問")
+# メンバーへの推薦（パス付き）
+recommendations = rwr.recommend(
+    member_code='M001',
+    top_n=10,
+    return_paths=True,
+    competence_type=['SKILL']  # オプション: 力量タイプフィルタ
+)
+
+# 推薦結果を表示
+for comp_code, score, paths in recommendations:
+    comp_info = kg.get_node_info(f"competence_{comp_code}")
+    print(f"{comp_info['name']}: スコア {score:.5f}")
+    print(f"  推薦パス数: {len(paths)}個")
+
+    # 最初のパスを表示
+    if paths:
+        path_names = [kg.get_node_info(node)['name'] for node in paths[0]]
+        print(f"  パス例: {' → '.join(path_names)}")
 ```
 
 ## 📊 グラフ構造の例
