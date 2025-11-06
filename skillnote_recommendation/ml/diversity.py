@@ -301,13 +301,15 @@ class DiversityReranker:
 
     def calculate_diversity_metrics(self,
                                     recommendations: List[Tuple[str, float]],
-                                    competence_info: pd.DataFrame) -> Dict[str, float]:
+                                    competence_info: pd.DataFrame,
+                                    all_competences: Optional[List[str]] = None) -> Dict[str, float]:
         """
         推薦結果の多様性指標を計算
 
         Args:
             recommendations: (力量コード, スコア)のリスト
             competence_info: 力量情報DataFrame
+            all_competences: 全力量のリスト（カバレッジ計算用）
 
         Returns:
             多様性指標の辞書
@@ -316,7 +318,9 @@ class DiversityReranker:
             return {
                 'category_diversity': 0.0,
                 'type_diversity': 0.0,
-                'intra_list_diversity': 0.0
+                'intra_list_diversity': 0.0,
+                'intra_list_similarity': 0.0,
+                'coverage': 0.0
             }
 
         competence_dict = competence_info.set_index('力量コード').to_dict('index')
@@ -333,6 +337,7 @@ class DiversityReranker:
         type_diversity = len(types) / len(recommendations)
 
         # Intra-List Diversity: アイテム間の平均非類似度
+        # Intra-List Similarity: アイテム間の平均類似度
         similarities = []
         for i in range(len(recommendations)):
             for j in range(i + 1, len(recommendations)):
@@ -343,11 +348,121 @@ class DiversityReranker:
 
         avg_similarity = np.mean(similarities) if similarities else 0.0
         intra_list_diversity = 1.0 - avg_similarity
+        intra_list_similarity = avg_similarity
+
+        # カバレッジ：全力量中、推薦された力量の割合
+        if all_competences is not None:
+            recommended_comps = set(comp_code for comp_code, _ in recommendations)
+            coverage = len(recommended_comps) / len(all_competences)
+        else:
+            coverage = 0.0
 
         return {
             'category_diversity': category_diversity,
             'type_diversity': type_diversity,
             'intra_list_diversity': intra_list_diversity,
+            'intra_list_similarity': intra_list_similarity,
+            'coverage': coverage,
             'unique_categories': len(categories),
             'unique_types': len(types)
         }
+
+    def calculate_coverage(self,
+                          all_recommendations: List[List[Tuple[str, float]]],
+                          all_competences: List[str]) -> float:
+        """
+        カバレッジを計算（全ユーザーの推薦結果を考慮）
+
+        Args:
+            all_recommendations: 全ユーザーの推薦結果のリスト
+            all_competences: 全力量のリスト
+
+        Returns:
+            カバレッジ（0-1）
+        """
+        recommended_comps = set()
+        for recs in all_recommendations:
+            for comp_code, _ in recs:
+                recommended_comps.add(comp_code)
+
+        return len(recommended_comps) / len(all_competences) if all_competences else 0.0
+
+    def calculate_serendipity(self,
+                             recommendations: List[Tuple[str, float]],
+                             member_competence: pd.DataFrame,
+                             member_code: str,
+                             competence_info: pd.DataFrame,
+                             popularity_threshold: float = 0.3) -> float:
+        """
+        セレンディピティ（意外だが有用な推薦）を計算
+
+        セレンディピティは以下の条件を満たす推薦の割合：
+        1. ユーザーの既習得力量と異なるカテゴリ・タイプである（意外性）
+        2. かつ、推薦スコアが高い（有用性）
+        3. かつ、人気度が低すぎない（一定の実績がある）
+
+        Args:
+            recommendations: (力量コード, スコア)のリスト
+            member_competence: メンバー習得力量DataFrame
+            member_code: 対象メンバーコード
+            competence_info: 力量情報DataFrame
+            popularity_threshold: 人気度の閾値（これ以下を「意外」とみなす）
+
+        Returns:
+            セレンディピティスコア（0-1）
+        """
+        if len(recommendations) == 0:
+            return 0.0
+
+        # ユーザーの既習得力量を取得
+        acquired_comps = member_competence[
+            member_competence['メンバーコード'] == member_code
+        ]['力量コード'].tolist()
+
+        if not acquired_comps:
+            # 既習得力量がない場合、全て意外とみなす
+            return 1.0
+
+        # 既習得力量のカテゴリとタイプを取得
+        competence_dict = competence_info.set_index('力量コード').to_dict('index')
+
+        acquired_categories = set()
+        acquired_types = set()
+        for comp_code in acquired_comps:
+            comp_info = competence_dict.get(comp_code, {})
+            acquired_categories.add(comp_info.get('力量カテゴリー名'))
+            acquired_types.add(comp_info.get('力量タイプ'))
+
+        # 人気度を計算（全メンバーでの習得率）
+        popularity_scores = {}
+        all_members = member_competence['メンバーコード'].nunique()
+        for comp_code in competence_info['力量コード']:
+            member_count = len(member_competence[
+                member_competence['力量コード'] == comp_code
+            ])
+            popularity_scores[comp_code] = member_count / all_members if all_members > 0 else 0.0
+
+        # セレンディピティをカウント
+        serendipitous_count = 0
+        for comp_code, score in recommendations:
+            comp_info = competence_dict.get(comp_code, {})
+            category = comp_info.get('力量カテゴリー名')
+            comp_type = comp_info.get('力量タイプ')
+
+            # 意外性の判定：既習得力量と異なるカテゴリまたはタイプ
+            is_unexpected = (
+                category not in acquired_categories or
+                comp_type not in acquired_types
+            )
+
+            # 人気度の判定：適度に人気（あまりにマイナーすぎない）
+            popularity = popularity_scores.get(comp_code, 0.0)
+            has_reasonable_popularity = popularity <= popularity_threshold and popularity > 0.01
+
+            # スコアの判定：推薦スコアが高い（有用性）
+            is_useful = score > 0.5  # スコアが正規化されていると仮定
+
+            if is_unexpected and has_reasonable_popularity and is_useful:
+                serendipitous_count += 1
+
+        return serendipitous_count / len(recommendations)
