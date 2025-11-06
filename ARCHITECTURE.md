@@ -143,9 +143,6 @@ skillnote_recommendation/
 │   ├── retry.py                   # リトライロジック
 │   ├── schemas.py                 # バリデーションスキーマ
 │   │
-│   ├── similarity_calculator.py   # 類似度計算
-│   ├── recommendation_engine.py   # ルールベース推薦
-│   ├── recommendation_system.py   # 推薦システム統合
 │   ├── reference_persons.py       # 参考人物検索
 │   └── evaluator.py               # 評価システム
 │
@@ -189,22 +186,7 @@ CSVファイル（data/）
 - competence_similarity.csv
 ```
 
-### 2. ルールベース推薦フロー
-
-```
-メンバーコード入力
-    ↓
-RecommendationSystem
-    ↓
-RecommendationEngine
-    ├→ SimilarityCalculator（類似度計算）
-    ├→ 優先度スコア計算
-    └→ ReferencePersonFinder（参考人物検索）
-    ↓
-推薦結果（Recommendation[]）
-```
-
-### 3. ML推薦フロー
+### 2. ML推薦フロー
 
 ```
 メンバー×力量マトリクス
@@ -218,7 +200,7 @@ RecommendationEngine
 推薦結果（Recommendation[]）
 ```
 
-### 4. 評価フロー
+### 3. 評価フロー
 
 ```
 メンバー習得力量データ
@@ -248,25 +230,6 @@ RecommendationEngine
 loader = DataLoader()
 data = loader.load_all_data()
 # → dict with keys: 'members', 'member_competence', 'competence_master', etc.
-```
-
----
-
-### 推薦エンジン（RecommendationEngine）
-
-**責務**: ルールベースの推薦ロジック
-
-**アルゴリズム**:
-```
-優先度スコア = (カテゴリ重要度 × 0.4)
-             + (習得容易性 × 0.3)
-             + (人気度 × 0.3)
-```
-
-**インターフェース**:
-```python
-engine = RecommendationEngine(...)
-recommendations = engine.recommend(member_code='M001', top_n=10)
 ```
 
 ---
