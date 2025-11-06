@@ -57,24 +57,7 @@ uv run streamlit run streamlit_app.py
 # ブラウザが自動的に開き、上記のページにアクセスできます
 ```
 
-### ⚙️ コマンドラインツール（CLI）
-
-これらのファイルは、ターミナルから直接実行するツールです。
-
-| ファイル | 実行方法 | 役割 |
-|---------|---------|------|
-| **scripts/convert_data.py** | `uv run skillnote-convert` | CSVデータを推薦システム用に変換する |
-| **scripts/run_recommendation.py** | `uv run skillnote-recommend` | コマンドラインから推薦を実行する |
-| **scripts/evaluate_recommendations.py** | `uv run python -m skillnote_recommendation.scripts.evaluate_recommendations` | 推薦システムの性能を評価する |
-
-**使い方:**
-```bash
-# データ変換
-uv run skillnote-convert
-
-# 推薦実行
-uv run skillnote-recommend
-```
+**推奨:** 基本的にStreamlit Webアプリからすべての機能を利用できます。
 
 ---
 
@@ -92,20 +75,17 @@ uv run skillnote-recommend
 | **data_loader.py** | `DataLoader` クラス | CSVファイルを読み込む |
 | **data_transformer.py** | `DataTransformer` クラス | データを推薦システム用に変換する |
 
-**推薦ロジック:**
+**推薦補助機能:**
 
 | ファイル | 主要なクラス・関数 | 役割 |
 |---------|------------------|------|
-| **recommendation_engine.py** | `RecommendationEngine` クラス | ルールベースで力量を推薦する |
-| **recommendation_system.py** | `RecommendationSystem` クラス | 推薦システム全体を統合管理する |
-| **similarity_calculator.py** | `SimilarityCalculator` クラス | 力量間の類似度を計算する |
-| **reference_persons.py** | `ReferencePersonSearch` クラス | 参考となる先輩メンバーを検索する |
+| **reference_persons.py** | `ReferencePersonFinder` クラス | 参考となる先輩メンバーを検索する |
+| **evaluator.py** | `RecommendationEvaluator` クラス | ML推薦システムの性能を評価する |
 
-**評価・品質管理:**
+**品質管理:**
 
 | ファイル | 主要なクラス・関数 | 役割 |
 |---------|------------------|------|
-| **evaluator.py** | `Evaluator` クラス | 推薦システムの性能を評価する |
 | **data_quality.py** | 品質チェック関数 | データ品質をチェックする |
 | **data_quality_monitor.py** | `DataQualityMonitor` クラス | データ品質を継続的に監視する |
 
@@ -188,12 +168,13 @@ uv run skillnote-recommend
 
 どのように推薦が行われるかを見ます。
 
-4. **skillnote_recommendation/core/recommendation_engine.py** を読む
-   - ルールベースの推薦アルゴリズム
-   - スコア計算方法
-
-5. **skillnote_recommendation/ml/ml_recommender.py** を読む
+4. **skillnote_recommendation/ml/ml_recommender.py** を読む
    - 機械学習ベースの推薦アルゴリズム
+   - NMFによる協調フィルタリング
+   - 多様性再ランキング
+
+5. **skillnote_recommendation/core/reference_persons.py** を読む
+   - 参考人物（ロールモデル）の検索ロジック
 
 #### **ステップ4: 実行ファイルを読む**
 
@@ -211,14 +192,14 @@ uv run skillnote-recommend
 
 1. **クラス定義から読む**
    ```python
-   class RecommendationEngine:
-       """推薦エンジンのクラス"""
+   class MLRecommender:
+       """機械学習ベース推薦エンジン"""
 
-       def __init__(self, data):
+       def __init__(self, mf_model, competence_master, ...):
            # 初期化処理
            pass
 
-       def recommend(self, member_code):
+       def recommend(self, member_code, top_n=10):
            # 推薦を実行
            pass
    ```
@@ -227,8 +208,10 @@ uv run skillnote-recommend
 
 2. **関数のシグネチャを見る**
    ```python
-   def calculate_similarity(competence_a: str, competence_b: str) -> float:
-       """2つの力量の類似度を計算する"""
+   def find_reference_persons(target_member_code: str,
+                               recommended_competence_code: str,
+                               top_n: int = 3) -> List[dict]:
+       """参考人物を検索する"""
        pass
    ```
    - 引数（何を受け取るか）
@@ -238,7 +221,7 @@ uv run skillnote-recommend
 3. **importを追う**
    ```python
    from skillnote_recommendation.core.data_loader import DataLoader
-   from skillnote_recommendation.core.recommendation_engine import RecommendationEngine
+   from skillnote_recommendation.ml.ml_recommender import MLRecommender
    ```
    - どのライブラリコードを使っているかが分かる
 
@@ -287,15 +270,15 @@ streamlit_app.py        ← メインページ（ホーム）
 
 `streamlit_app.py` を起動すると、`pages/` フォルダ内のファイルが自動的にサイドバーに表示されます。
 
-### Q5: CLIスクリプトはどこにありますか？
+### Q5: コマンドラインから実行できますか？
 
-**A:** **skillnote_recommendation/scripts/** フォルダにあります：
+**A:** 基本的に **Streamlit Webアプリ** から全ての機能を利用できます。
+コマンドラインツールは現在提供していません。
 
-- `convert_data.py` - データ変換
-- `run_recommendation.py` - 推薦実行
-- `evaluate_recommendations.py` - 評価実行
-
-これらは `uv run skillnote-convert` のようにコマンドラインから実行します。
+Streamlitアプリの起動：
+```bash
+uv run streamlit run streamlit_app.py
+```
 
 ### Q6: テストコードは読むべきですか？
 
@@ -307,10 +290,11 @@ streamlit_app.py        ← メインページ（ホーム）
 
 **A:** 追加したい機能によって異なります：
 
-- **推薦ロジックを変更**: `recommendation_engine.py` または `ml_recommender.py`
+- **推薦ロジックを変更**: `ml/ml_recommender.py` または `ml/matrix_factorization.py`
 - **新しいページを追加**: `pages/` に新しいファイルを作成
-- **データ処理を変更**: `data_transformer.py`
+- **データ処理を変更**: `core/data_transformer.py`
 - **新しいモデルを追加**: `ml/` に新しいファイルを作成
+- **グラフベース推薦**: `graph/` のファイルを修正
 
 ただし、**コードを修正する前に、まず既存のコードをよく読んで理解してください。**
 
