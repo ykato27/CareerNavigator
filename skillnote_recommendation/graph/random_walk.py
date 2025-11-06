@@ -88,33 +88,63 @@ class RandomWalkRecommender:
         print(f"{'='*80}")
 
         # 1. RWRスコアを計算
-        print("  [1/3] RWRスコア計算中...")
+        print("  [1/4] RWRスコア計算中...")
         scores = self._random_walk_with_restart(member_node)
+        print(f"    RWRスコア算出完了: {len(scores)}ノード")
 
-        # 2. 力量ノードのみ抽出してソート
-        print("  [2/3] 力量スコア抽出中...")
-        competence_scores = []
+        # 2. 力量ノードのみ抽出
+        print("  [2/4] 力量スコア抽出中...")
         acquired_competences = self.kg.get_member_acquired_competences(member_code)
+        print(f"    既習得力量: {len(acquired_competences)}個")
 
+        all_competence_scores = []
         for node, score in scores.items():
             if node.startswith("competence_"):
                 comp_code = node.replace("competence_", "")
+                all_competence_scores.append((comp_code, score, node))
 
-                # 既に習得済みの力量は除外
-                if comp_code not in acquired_competences:
-                    # 力量タイプフィルタリング
-                    if competence_type is not None:
-                        comp_info = self.kg.get_node_info(node)
-                        comp_type = comp_info.get('competence_type', 'UNKNOWN')
-                        if comp_type not in competence_type:
-                            continue  # フィルタ条件に合わない力量はスキップ
+        print(f"    グラフ内の力量ノード総数: {len(all_competence_scores)}個")
 
-                    competence_scores.append((comp_code, score))
+        # 3. フィルタリング
+        print("  [3/4] フィルタリング中...")
+        competence_scores = []
+        excluded_acquired = 0
+        excluded_type = 0
+
+        for comp_code, score, node in all_competence_scores:
+            # 既に習得済みの力量は除外
+            if comp_code in acquired_competences:
+                excluded_acquired += 1
+                continue
+
+            # 力量タイプフィルタリング
+            if competence_type is not None:
+                comp_info = self.kg.get_node_info(node)
+                comp_type = comp_info.get('type', comp_info.get('competence_type', 'UNKNOWN'))
+                if comp_type not in competence_type:
+                    excluded_type += 1
+                    continue
+
+            competence_scores.append((comp_code, score))
+
+        print(f"    除外（既習得）: {excluded_acquired}個")
+        print(f"    除外（力量タイプ）: {excluded_type}個")
+        print(f"    推薦候補: {len(competence_scores)}個")
+
+        # フィルタリング後に候補が0の場合、カテゴリーベースの推薦を試みる
+        if len(competence_scores) == 0:
+            print("  [!] フィルタリング後の候補が0件です。カテゴリーベース推薦を試行...")
+            competence_scores = self._category_based_fallback(
+                member_code,
+                acquired_competences,
+                competence_type
+            )
+            print(f"    カテゴリーベース推薦: {len(competence_scores)}個")
 
         competence_scores.sort(key=lambda x: x[1], reverse=True)
 
-        # 3. Top-N推薦と推薦パスを抽出
-        print(f"  [3/3] Top-{top_n}推薦とパス抽出中...")
+        # 4. Top-N推薦と推薦パスを抽出
+        print(f"  [4/4] Top-{top_n}推薦とパス抽出中...")
         recommendations = []
 
         for comp_code, score in competence_scores[:top_n]:
@@ -274,6 +304,7 @@ class RandomWalkRecommender:
                 if self.graph.has_node(category_node):
                     # メンバー → カテゴリー → 力量 のパスを構築
                     fallback_paths.append([source, category_node, target])
+                    print(f"    フォールバック: カテゴリー経由パスを生成 ({target_category})")
 
         # 2. 類似メンバー経由のパスを探す（メンバーの習得済み力量から推測）
         try:
@@ -290,7 +321,7 @@ class RandomWalkRecommender:
                         target_data = self.kg.get_node_info(target)
                         target_category = target_data.get('category')
 
-                        if neighbor_category == target_category:
+                        if neighbor_category == target_category and neighbor_category:
                             # メンバー → 既習得力量 → カテゴリー → 推薦力量
                             category_node = f"category_{target_category}"
                             if self.graph.has_node(category_node):
@@ -300,16 +331,42 @@ class RandomWalkRecommender:
                                     category_node,
                                     target
                                 ])
+                                print(f"    フォールバック: 既習得力量経由パスを生成 ({neighbor_data.get('name', neighbor)})")
 
                                 if len(fallback_paths) >= max_paths:
                                     break
-        except Exception:
-            pass  # エラーが発生しても続行
+        except Exception as e:
+            print(f"    フォールバック処理中にエラー: {e}")
 
-        # 3. 少なくとも1つのパスを返す（直接パス）
+        # 3. 類似メンバーのパスを探す
+        if len(fallback_paths) < max_paths:
+            try:
+                # 類似メンバーを取得
+                similar_members = []
+                for neighbor in self.graph.neighbors(source):
+                    if neighbor.startswith("member_"):
+                        edge_data = self.graph[source][neighbor]
+                        if edge_data.get('edge_type') == 'similar':
+                            similar_members.append(neighbor)
+
+                # 類似メンバーとターゲット力量の間にエッジがあるか確認
+                for similar_member in similar_members[:2]:  # 最大2名
+                    if self.graph.has_edge(similar_member, target):
+                        # メンバー → 類似メンバー → 力量
+                        fallback_paths.append([source, similar_member, target])
+                        similar_data = self.kg.get_node_info(similar_member)
+                        print(f"    フォールバック: 類似メンバー経由パスを生成 ({similar_data.get('name', similar_member)})")
+
+                        if len(fallback_paths) >= max_paths:
+                            break
+            except Exception as e:
+                print(f"    類似メンバーパス生成中にエラー: {e}")
+
+        # 4. 少なくとも1つのパスを返す（直接パス）
         if not fallback_paths:
             # 最低限の説明: 直接推薦
             fallback_paths.append([source, target])
+            print(f"    フォールバック: 直接パスを生成")
 
         return fallback_paths[:max_paths]
 
@@ -356,6 +413,137 @@ class RandomWalkRecommender:
             'paths': readable_paths,
             'reasons': reasons,
         }
+
+    def _category_based_fallback(self,
+                                  member_code: str,
+                                  acquired_competences: Set[str],
+                                  competence_type: Optional[List[str]] = None) -> List[Tuple[str, float]]:
+        """
+        カテゴリーベースのフォールバック推薦
+
+        RWRで候補が0件の場合、既習得力量と同じカテゴリーの
+        未習得力量を推薦する
+
+        Args:
+            member_code: メンバーコード
+            acquired_competences: 既習得力量コードのセット
+            competence_type: 力量タイプフィルタ
+
+        Returns:
+            [(力量コード, スコア), ...]
+        """
+        fallback_scores = []
+
+        # 既習得力量のカテゴリーを取得
+        acquired_categories = set()
+        for comp_code in acquired_competences:
+            category = self.kg.get_competence_category(comp_code)
+            if category:
+                acquired_categories.add(category)
+
+        print(f"    既習得力量のカテゴリー: {len(acquired_categories)}個")
+
+        # 同じカテゴリーの未習得力量を探す
+        for category in acquired_categories:
+            category_node = f"category_{category}"
+            if not self.graph.has_node(category_node):
+                continue
+
+            # カテゴリーに属する力量を取得
+            for neighbor in self.graph.neighbors(category_node):
+                if neighbor.startswith("competence_"):
+                    comp_code = neighbor.replace("competence_", "")
+
+                    # 既習得はスキップ
+                    if comp_code in acquired_competences:
+                        continue
+
+                    # 力量タイプフィルタ
+                    if competence_type is not None:
+                        comp_info = self.kg.get_node_info(neighbor)
+                        comp_type = comp_info.get('type', comp_info.get('competence_type', 'UNKNOWN'))
+                        if comp_type not in competence_type:
+                            continue
+
+                    # カテゴリーベーススコア（一定値）
+                    # 同じカテゴリーなので一定の推薦価値がある
+                    fallback_scores.append((comp_code, 0.001))
+
+        # 候補が少ない場合、類似メンバーの力量も追加
+        if len(fallback_scores) < 5:
+            print("    候補が少ないため、類似メンバーの力量も追加...")
+            similar_member_scores = self._similar_member_fallback(
+                member_code,
+                acquired_competences,
+                competence_type
+            )
+            fallback_scores.extend(similar_member_scores)
+
+        # 重複除去
+        seen = set()
+        unique_scores = []
+        for comp_code, score in fallback_scores:
+            if comp_code not in seen:
+                seen.add(comp_code)
+                unique_scores.append((comp_code, score))
+
+        return unique_scores
+
+    def _similar_member_fallback(self,
+                                  member_code: str,
+                                  acquired_competences: Set[str],
+                                  competence_type: Optional[List[str]] = None) -> List[Tuple[str, float]]:
+        """
+        類似メンバーベースのフォールバック推薦
+
+        Args:
+            member_code: メンバーコード
+            acquired_competences: 既習得力量コードのセット
+            competence_type: 力量タイプフィルタ
+
+        Returns:
+            [(力量コード, スコア), ...]
+        """
+        fallback_scores = []
+        member_node = f"member_{member_code}"
+
+        # 類似メンバーを探す
+        similar_members = []
+        for neighbor in self.graph.neighbors(member_node):
+            if neighbor.startswith("member_"):
+                edge_data = self.graph[member_node][neighbor]
+                if edge_data.get('edge_type') == 'similar':
+                    similarity = edge_data.get('similarity', 0.5)
+                    similar_members.append((neighbor, similarity))
+
+        # 類似度順にソート
+        similar_members.sort(key=lambda x: x[1], reverse=True)
+
+        print(f"    類似メンバー: {len(similar_members)}名")
+
+        # 類似メンバーの保有力量を推薦
+        for similar_member_node, similarity in similar_members[:3]:  # 上位3名
+            # 類似メンバーの保有力量を取得
+            for neighbor in self.graph.neighbors(similar_member_node):
+                if neighbor.startswith("competence_"):
+                    comp_code = neighbor.replace("competence_", "")
+
+                    # 既習得はスキップ
+                    if comp_code in acquired_competences:
+                        continue
+
+                    # 力量タイプフィルタ
+                    if competence_type is not None:
+                        comp_info = self.kg.get_node_info(neighbor)
+                        comp_type = comp_info.get('type', comp_info.get('competence_type', 'UNKNOWN'))
+                        if comp_type not in competence_type:
+                            continue
+
+                    # 類似度ベーススコア
+                    score = 0.0005 * similarity
+                    fallback_scores.append((comp_code, score))
+
+        return fallback_scores
 
     def _generate_reasons(self, paths: List[List[str]]) -> List[str]:
         """
