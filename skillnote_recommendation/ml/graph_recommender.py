@@ -212,7 +212,8 @@ class SkillTransitionGraphRecommender(BaseRecommender):
         self,
         member_code: str,
         n: int = 10,
-        exclude_acquired: bool = True
+        exclude_acquired: bool = True,
+        competence_type: Optional[List[str]] = None
     ) -> List[Recommendation]:
         """
         推薦リストの生成
@@ -221,6 +222,8 @@ class SkillTransitionGraphRecommender(BaseRecommender):
             member_code: メンバーコード
             n: 推薦する件数
             exclude_acquired: 既習得スキルを除外するか
+            competence_type: フィルタする力量タイプのリスト（例: ['SKILL', 'EDUCATION']）
+                             Noneの場合は全ての力量タイプを推薦
 
         Returns:
             推薦結果のリスト
@@ -281,6 +284,17 @@ class SkillTransitionGraphRecommender(BaseRecommender):
                             }
                 except Exception as e:
                     logger.warning(f"類似スキル取得エラー ({skill}): {e}")
+
+        # 力量タイプでフィルタリング
+        if competence_type is not None:
+            filtered_candidates = {}
+            for skill_code, data in candidates.items():
+                skill_type = self._get_skill_type(skill_code)
+                if skill_type in competence_type:
+                    filtered_candidates[skill_code] = data
+            candidates = filtered_candidates
+
+            logger.info(f"力量タイプフィルタ適用: {competence_type} -> {len(candidates)}件の候補")
 
         # スコアでソート
         sorted_candidates = sorted(
@@ -453,3 +467,25 @@ class SkillTransitionGraphRecommender(BaseRecommender):
             ]
 
         return stats
+
+    def _get_skill_type(self, skill_code: str) -> str:
+        """
+        スキルの力量タイプを取得
+
+        Args:
+            skill_code: スキルコード
+
+        Returns:
+            力量タイプ（'SKILL', 'EDUCATION', 'LICENSE', 'UNKNOWN'）
+        """
+        if self.competence_master is None:
+            return 'UNKNOWN'
+
+        skill_row = self.competence_master[
+            self.competence_master['力量コード'] == skill_code
+        ]
+
+        if not skill_row.empty and '力量タイプ' in skill_row.columns:
+            return skill_row.iloc[0]['力量タイプ']
+
+        return 'UNKNOWN'
