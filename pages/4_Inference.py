@@ -621,6 +621,16 @@ if st.button("推薦を実行", type="primary"):
                 kg = st.session_state.knowledge_graph
 
                 for comp_code, score, paths in graph_recommendations_raw:
+                    # === デバッグ情報 ===
+                    st.write(f"### デバッグ: {comp_code}")
+                    st.write(f"- RWRから返されたパス数: **{len(paths)}個**")
+                    st.write(f"- パスの型: {type(paths)}")
+                    if paths:
+                        st.write(f"- 最初のパス: {paths[0]}")
+                        st.write(f"- 最初のパスの長さ: {len(paths[0])}")
+                    st.write("---")
+                    # === デバッグ情報終了 ===
+
                     # 力量情報を取得
                     comp_info_row = td["competence_master"][
                         td["competence_master"]["力量コード"] == comp_code
@@ -968,6 +978,17 @@ if st.button("推薦を実行", type="primary"):
                                         member_name = members_df[
                                             members_df["メンバーコード"] == selected_member_code
                                         ]["メンバー名"].iloc[0]
+
+                                        # === グラフ可視化デバッグ ===
+                                        st.write("#### 📊 グラフ可視化に渡されるパス情報")
+                                        st.write(f"- パス数: **{len(hybrid_rec.paths)}個**")
+                                        st.write(f"- パスの型: {type(hybrid_rec.paths)}")
+                                        for i, path in enumerate(hybrid_rec.paths[:3], 1):
+                                            st.write(f"- パス{i}の長さ: {len(path)}, 内容: {[n.get('name', n.get('id', '?')) for n in path]}")
+                                        if len(hybrid_rec.paths) > 3:
+                                            st.write(f"- ... 他 {len(hybrid_rec.paths) - 3}個のパス")
+                                        st.write("---")
+                                        # === デバッグ終了 ===
 
                                         fig = visualizer.visualize_recommendation_path(
                                             paths=hybrid_rec.paths,

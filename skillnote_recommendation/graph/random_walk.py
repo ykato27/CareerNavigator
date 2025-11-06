@@ -217,11 +217,23 @@ class RandomWalkRecommender:
 
             # 最初のmax_paths個のパスのみ取得（長さ制限付き）
             paths = []
+            rejected_count = 0
             for path in path_generator:
                 if len(path) - 1 <= max_length:  # パス長チェック
                     paths.append(path)
                     if len(paths) >= max_paths:
                         break
+                else:
+                    rejected_count += 1
+                    if rejected_count >= max_paths * 3:  # 長すぎるパスが続く場合は打ち切り
+                        break
+
+            # デバッグ情報
+            if paths:
+                print(f"    パス抽出成功: {len(paths)}個のパスを取得 (max_paths={max_paths}, max_length={max_length})")
+                print(f"    長さ制約で除外されたパス: {rejected_count}個")
+            else:
+                print(f"    パス抽出失敗: 条件に合うパスが見つかりませんでした (max_length={max_length})")
 
             # パスが見つかった場合は返す
             if paths:
