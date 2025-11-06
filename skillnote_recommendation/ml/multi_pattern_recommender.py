@@ -55,7 +55,8 @@ class MultiPatternRecommender:
     def recommend_by_patterns(
         self,
         target_member_code: str,
-        top_k_per_pattern: Dict[str, int] = None
+        top_k_per_pattern: Dict[str, int] = None,
+        competence_type: List[str] = None
     ) -> Dict[str, PatternRecommendation]:
         """
         キャリアパターンごとに推薦を生成
@@ -64,6 +65,8 @@ class MultiPatternRecommender:
             target_member_code: 対象メンバーコード
             top_k_per_pattern: 各パターンでの推薦件数
                 {'similar': 5, 'different1': 5, 'different2': 5}
+            competence_type: 推薦する力量タイプのリスト（例: ['SKILL', 'EDUCATION']）
+                Noneの場合は全てのタイプを推薦
 
         Returns:
             {'similar': PatternRecommendation, 'different1': ..., 'different2': ...}
@@ -86,7 +89,8 @@ class MultiPatternRecommender:
                 target_member_code=target_member_code,
                 group=group,
                 acquired_competences=acquired_competences,
-                top_k=top_k
+                top_k=top_k,
+                competence_type=competence_type
             )
 
             results[pattern_name] = recommendation
@@ -98,7 +102,8 @@ class MultiPatternRecommender:
         target_member_code: str,
         group: CareerPatternGroup,
         acquired_competences: List[str],
-        top_k: int
+        top_k: int,
+        competence_type: List[str] = None
     ) -> PatternRecommendation:
         """
         特定のキャリアパターングループに対して推薦を生成
@@ -108,6 +113,8 @@ class MultiPatternRecommender:
             group: キャリアパターングループ
             acquired_competences: 既習得力量のリスト
             top_k: 推薦件数
+            competence_type: 推薦する力量タイプのリスト（例: ['SKILL', 'EDUCATION']）
+                Noneの場合は全てのタイプを推薦
 
         Returns:
             PatternRecommendation
@@ -146,18 +153,26 @@ class MultiPatternRecommender:
             exclude_competences=acquired_competences
         )
 
-        # Top-K を取得
-        top_competences = competence_scores[:top_k]
-
         # Recommendationオブジェクトに変換
+        # 力量タイプでフィルタリングする場合、十分な数を確保するため多めに候補を取得
         recommendations = []
-        for competence_code, score in top_competences:
+        for competence_code, score in competence_scores:
+            # すでに十分な数の推薦を取得した場合は終了
+            if len(recommendations) >= top_k:
+                break
+
             comp_info = self.competence_master[
                 self.competence_master["力量コード"] == competence_code
             ]
 
             if len(comp_info) > 0:
                 comp_info = comp_info.iloc[0]
+
+                # 力量タイプでフィルタリング
+                if competence_type is not None:
+                    comp_type = comp_info["力量タイプ"]
+                    if comp_type not in competence_type:
+                        continue  # 指定されたタイプでない場合はスキップ
 
                 # スコアを0-10に正規化
                 priority_score = self._normalize_score(score, [s for _, s in competence_scores])
