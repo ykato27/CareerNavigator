@@ -611,7 +611,8 @@ if st.button("推薦を実行", type="primary"):
                 graph_recommendations_raw = rwr.recommend(
                     member_code=selected_member_code,
                     top_n=top_n,
-                    return_paths=show_paths
+                    return_paths=show_paths,
+                    competence_type=competence_type
                 )
 
                 # RWRの結果をHybridRecommendation形式に変換
