@@ -287,14 +287,24 @@ class SkillTransitionGraphRecommender(BaseRecommender):
 
         # 力量タイプでフィルタリング
         if competence_type is not None:
+            logger.info(f"力量タイプフィルタ適用開始: {competence_type}")
+            logger.info(f"フィルタ前の候補数: {len(candidates)}")
+
             filtered_candidates = {}
+            rejected_count = 0
             for skill_code, data in candidates.items():
                 skill_type = self._get_skill_type(skill_code)
+                skill_name = self.get_skill_name(skill_code)
+
                 if skill_type in competence_type:
                     filtered_candidates[skill_code] = data
-            candidates = filtered_candidates
+                    logger.debug(f"  ✓ {skill_name} ({skill_code}) - タイプ: {skill_type} -> 採用")
+                else:
+                    rejected_count += 1
+                    logger.debug(f"  ✗ {skill_name} ({skill_code}) - タイプ: {skill_type} -> 除外")
 
-            logger.info(f"力量タイプフィルタ適用: {competence_type} -> {len(candidates)}件の候補")
+            candidates = filtered_candidates
+            logger.info(f"フィルタ後の候補数: {len(candidates)} (除外: {rejected_count}件)")
 
         # スコアでソート
         sorted_candidates = sorted(
@@ -481,11 +491,19 @@ class SkillTransitionGraphRecommender(BaseRecommender):
         if self.competence_master is None:
             return 'UNKNOWN'
 
+        # 力量コードの検索（日本語・英語両対応）
+        code_col = '力量コード' if '力量コード' in self.competence_master.columns else 'competence_code'
         skill_row = self.competence_master[
-            self.competence_master['力量コード'] == skill_code
+            self.competence_master[code_col] == skill_code
         ]
 
-        if not skill_row.empty and '力量タイプ' in skill_row.columns:
-            return skill_row.iloc[0]['力量タイプ']
+        if skill_row.empty:
+            return 'UNKNOWN'
 
-        return 'UNKNOWN'
+        # 力量タイプカラムの検索（日本語・英語両対応）
+        if '力量タイプ' in skill_row.columns:
+            return skill_row.iloc[0]['力量タイプ']
+        elif 'competence_type' in skill_row.columns:
+            return skill_row.iloc[0]['competence_type']
+        else:
+            return 'UNKNOWN'
