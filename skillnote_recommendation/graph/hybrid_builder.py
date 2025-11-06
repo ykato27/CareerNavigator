@@ -23,6 +23,7 @@ def build_hybrid_recommender(
     cf_weight: float = 0.3,
     content_weight: float = 0.3,
     max_path_length: int = 10,
+    max_paths: int = 10,
     use_tuning: bool = False,
     enable_cache: bool = True,
     category_hierarchy: Optional[dict] = None
@@ -38,6 +39,7 @@ def build_hybrid_recommender(
         cf_weight: 協調フィルタリングスコアの重み（デフォルト: 0.3）
         content_weight: コンテンツベーススコアの重み（デフォルト: 0.3）
         max_path_length: 推薦パスの最大長さ/ステップ数（デフォルト: 10）
+        max_paths: 各力量に対して抽出する推薦パスの最大数（デフォルト: 10）
         use_tuning: ハイパーパラメータチューニングを使用するか
         enable_cache: グラフのキャッシュを有効にするか
         category_hierarchy: カテゴリ階層構造
@@ -110,6 +112,7 @@ def build_hybrid_recommender(
         cf_weight=cf_weight,
         content_weight=content_weight,
         max_path_length=max_path_length,
+        max_paths=max_paths,
         enable_cache=enable_cache
     )
 
@@ -129,7 +132,8 @@ def quick_recommend(
     graph_weight: float = 0.4,
     cf_weight: float = 0.3,
     content_weight: float = 0.3,
-    max_path_length: int = 10
+    max_path_length: int = 10,
+    max_paths: int = 10
 ):
     """
     クイック推薦（ハイブリッド推薦システムを構築して推薦を実行）
@@ -144,6 +148,7 @@ def quick_recommend(
         cf_weight: 協調フィルタリングスコアの重み
         content_weight: コンテンツベーススコアの重み
         max_path_length: 推薦パスの最大長さ/ステップ数
+        max_paths: 各力量に対して抽出する推薦パスの最大数
 
     Returns:
         推薦結果のリスト
@@ -164,7 +169,8 @@ def quick_recommend(
         graph_weight=graph_weight,
         cf_weight=cf_weight,
         content_weight=content_weight,
-        max_path_length=max_path_length
+        max_path_length=max_path_length,
+        max_paths=max_paths
     )
 
     recommendations = hybrid_recommender.recommend(

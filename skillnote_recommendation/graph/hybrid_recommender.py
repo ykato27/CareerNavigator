@@ -82,6 +82,7 @@ class HybridGraphRecommender:
                  content_weight: float = DEFAULT_CONTENT_WEIGHT,
                  restart_prob: float = DEFAULT_RESTART_PROB,
                  max_path_length: int = 10,
+                 max_paths: int = 10,
                  enable_cache: bool = True):
         """
         Args:
@@ -94,6 +95,7 @@ class HybridGraphRecommender:
             content_weight: コンテンツベーススコアの重み
             restart_prob: RWRの再スタート確率
             max_path_length: 推薦パスの最大長さ（ステップ数）
+            max_paths: 各力量に対して抽出する推薦パスの最大数
             enable_cache: RWRのPageRankキャッシュを有効にするか
         """
         self.kg = knowledge_graph
@@ -105,6 +107,7 @@ class HybridGraphRecommender:
             knowledge_graph=knowledge_graph,
             restart_prob=restart_prob,
             max_path_length=max_path_length,
+            max_paths=max_paths,
             enable_cache=enable_cache
         )
 

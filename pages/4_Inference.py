@@ -466,7 +466,7 @@ else:
 
 # グラフベースまたはハイブリッドの場合、追加設定を表示
 if recommendation_method in ["グラフベース推薦", "ハイブリッド推薦"]:
-    col_g1, col_g2, col_g3 = st.columns(3)
+    col_g1, col_g2 = st.columns(2)
 
     with col_g1:
         if recommendation_method == "ハイブリッド推薦":
@@ -482,6 +482,15 @@ if recommendation_method in ["グラフベース推薦", "ハイブリッド推�
             rwr_weight = 1.0  # グラフベース推薦の場合は常に1.0
 
     with col_g2:
+        show_paths = st.checkbox(
+            "推薦パスを表示",
+            value=True,
+            help="推薦理由をグラフで可視化します"
+        )
+
+    col_g3, col_g4 = st.columns(2)
+
+    with col_g3:
         max_path_length = st.slider(
             "推薦パスの最大ステップ数",
             min_value=2,
@@ -491,15 +500,19 @@ if recommendation_method in ["グラフベース推薦", "ハイブリッド推�
             help="推薦パスの最大長さ（ステップ数）を設定します。大きいほど遠くの力量まで探索しますが、処理時間が増加します。"
         )
 
-    with col_g3:
-        show_paths = st.checkbox(
-            "推薦パスを表示",
-            value=True,
-            help="推薦理由をグラフで可視化します"
+    with col_g4:
+        max_paths = st.slider(
+            "推薦パスの表示数",
+            min_value=1,
+            max_value=20,
+            value=10,
+            step=1,
+            help="各推薦力量に対して表示するパスの数を設定します。多いほど説明可能性が向上しますが、表示が複雑になります。"
         )
 else:
     rwr_weight = 0.5  # デフォルト値
     max_path_length = 10  # デフォルト値
+    max_paths = 10  # デフォルト値
     show_paths = False
 
 
@@ -586,11 +599,12 @@ if st.button("推薦を実行", type="primary"):
                     st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
                     st.stop()
 
-                # RandomWalkRecommenderを作成（max_path_lengthを設定）
+                # RandomWalkRecommenderを作成（max_path_lengthとmax_pathsを設定）
                 from skillnote_recommendation.graph.random_walk import RandomWalkRecommender
                 rwr = RandomWalkRecommender(
                     knowledge_graph=st.session_state.knowledge_graph,
-                    max_path_length=max_path_length
+                    max_path_length=max_path_length,
+                    max_paths=max_paths
                 )
 
                 # グラフベース推薦を実行
