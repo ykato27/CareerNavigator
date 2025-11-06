@@ -441,35 +441,77 @@ with col3:
 st.markdown("---")
 st.subheader("🎯 推薦手法の選択")
 
-recommendation_method = st.radio(
-    "使用する推薦手法を選択してください",
-    options=["キャリアパターン別推薦", "NMF推薦", "グラフベース推薦", "ハイブリッド推薦"],
-    index=0,
-    help="推薦手法を選択します。キャリアパターン別推薦は3つの異なるキャリアから推薦、NMFは高速、グラフベースは説明可能性が高い、ハイブリッドは両方の良いところを組み合わせます。",
-    horizontal=True
+# モード選択（通常 or 比較）
+comparison_mode = st.checkbox(
+    "🔬 モデル比較モード",
+    value=False,
+    help="複数の推薦手法を同時実行して結果を比較します（旧Model Comparisonページの機能を統合）"
 )
 
-# 選択された手法の説明を表示
-if recommendation_method == "キャリアパターン別推薦":
+if comparison_mode:
     st.info("""
-    🎨 **キャリアパターン別推薦**: 3つの異なるキャリアパターンから推薦を生成します。
-    - **💼 類似キャリア**: あなたと類似したキャリアパスを持つメンバーが習得している力量
-    - **🌟 異なるキャリア1**: やや異なるキャリアパスを持つメンバーの力量（キャリアの幅を広げる）
-    - **🚀 異なるキャリア2**: 大きく異なるキャリアパスを持つメンバーの力量（新領域への挑戦）
+    🔬 **モデル比較モード**: 複数の推薦手法を同時に実行し、結果を並べて比較できます。
+    - 各手法の推薦結果を比較テーブルで表示
+    - 推薦理由や特徴を並べて確認
+    - モデルの特性を理解するのに最適
     """)
-elif recommendation_method == "NMF推薦":
-    st.info("📊 **NMF推薦（機械学習ベース）**: 協調フィルタリングに基づく高速な推薦。メンバー間の類似性から推薦を生成します。")
-elif recommendation_method == "グラフベース推薦":
-    st.info("🔗 **グラフベース推薦（RWR）**: 知識グラフ構造を活用した推薦。推薦パスを可視化でき、説明可能性が高いです。")
+
+    # 比較する手法を選択
+    methods_to_compare = st.multiselect(
+        "比較する推薦手法を選択してください（複数選択可）",
+        options=["NMF推薦", "グラフベース推薦", "ハイブリッド推薦"],
+        default=["NMF推薦", "グラフベース推薦"],
+        help="比較したい推薦手法を選択します"
+    )
+
+    if not methods_to_compare:
+        st.warning("⚠️ 少なくとも1つの手法を選択してください")
+
+    recommendation_method = None  # 比較モードでは単一手法は使用しない
 else:
-    st.info("🎯 **ハイブリッド推薦（NMF + Graph）**: NMFとグラフベースの両方の強みを組み合わせた推薦。")
+    recommendation_method = st.radio(
+        "使用する推薦手法を選択してください",
+        options=["キャリアパターン別推薦", "NMF推薦", "グラフベース推薦", "ハイブリッド推薦"],
+        index=0,
+        help="推薦手法を選択します。キャリアパターン別推薦は3つの異なるキャリアから推薦、NMFは高速、グラフベースは説明可能性が高い、ハイブリッドは両方の良いところを組み合わせます。",
+        horizontal=True
+    )
+    methods_to_compare = None
+
+    # 選択された手法の説明を表示
+    if recommendation_method == "キャリアパターン別推薦":
+        st.info("""
+        🎨 **キャリアパターン別推薦**: 3つの異なるキャリアパターンから推薦を生成します。
+        - **💼 類似キャリア**: あなたと類似したキャリアパスを持つメンバーが習得している力量
+        - **🌟 異なるキャリア1**: やや異なるキャリアパスを持つメンバーの力量（キャリアの幅を広げる）
+        - **🚀 異なるキャリア2**: 大きく異なるキャリアパスを持つメンバーの力量（新領域への挑戦）
+        """)
+    elif recommendation_method == "NMF推薦":
+        st.info("📊 **NMF推薦（機械学習ベース）**: 協調フィルタリングに基づく高速な推薦。メンバー間の類似性から推薦を生成します。")
+    elif recommendation_method == "グラフベース推薦":
+        st.info("🔗 **グラフベース推薦（RWR）**: 知識グラフ構造を活用した推薦。推薦パスを可視化でき、説明可能性が高いです。")
+    else:
+        st.info("🎯 **ハイブリッド推薦（NMF + Graph）**: NMFとグラフベースの両方の強みを組み合わせた推薦。")
 
 # グラフベースまたはハイブリッドの場合、追加設定を表示
-if recommendation_method in ["グラフベース推薦", "ハイブリッド推薦"]:
+graph_methods = ["グラフベース推薦", "ハイブリッド推薦"]
+show_graph_settings = False
+
+if comparison_mode:
+    # 比較モードの場合、選択された手法にグラフベースが含まれているかチェック
+    if methods_to_compare and any(method in graph_methods for method in methods_to_compare):
+        show_graph_settings = True
+else:
+    # 通常モードの場合
+    if recommendation_method in graph_methods:
+        show_graph_settings = True
+
+if show_graph_settings:
     col_g1, col_g2 = st.columns(2)
 
     with col_g1:
-        if recommendation_method == "ハイブリッド推薦":
+        if (comparison_mode and "ハイブリッド推薦" in methods_to_compare) or \
+           (not comparison_mode and recommendation_method == "ハイブリッド推薦"):
             rwr_weight = st.slider(
                 "グラフベーススコアの重み",
                 min_value=0.0,
@@ -513,7 +555,7 @@ else:
     rwr_weight = 0.5  # デフォルト値
     max_path_length = 10  # デフォルト値
     max_paths = 10  # デフォルト値
-    show_paths = False
+    show_paths = False  # デフォルト値
 
 
 # =========================================================
@@ -523,6 +565,207 @@ else:
 st.subheader("🚀 推論実行")
 
 if st.button("推薦を実行", type="primary"):
+    # 比較モードの場合
+    if comparison_mode:
+        if not methods_to_compare:
+            st.error("❌ 比較する手法を選択してください")
+            st.stop()
+
+        st.success(f"🔬 比較モード: {len(methods_to_compare)}個の手法を実行中...")
+
+        # 比較モード処理（後で実装）
+        comparison_results = {}
+
+        import time
+        from skillnote_recommendation.graph import build_hybrid_recommender
+
+        for method in methods_to_compare:
+            with st.spinner(f"{method}を実行中..."):
+                try:
+                    start_time = time.time()
+
+                    if method == "NMF推薦":
+                        recs = recommender.recommend(
+                            member_code=selected_member_code,
+                            top_n=top_n,
+                            competence_type=competence_type,
+                            category_filter=None,
+                            use_diversity=True,
+                            diversity_strategy=diversity_strategy
+                        )
+                        comparison_results[method] = {
+                            'recommendations': recs,
+                            'execution_time': time.time() - start_time,
+                            'method_type': 'nmf'
+                        }
+
+                    elif method == "グラフベース推薦":
+                        # Knowledge Graphの確認
+                        if 'knowledge_graph' not in st.session_state:
+                            st.error("❌ Knowledge Graphが初期化されていません")
+                            continue
+
+                        # RWRで推薦
+                        from skillnote_recommendation.graph import RandomWalkRecommender
+                        rwr = RandomWalkRecommender(
+                            knowledge_graph=st.session_state['knowledge_graph'],
+                            max_path_length=max_path_length,
+                            max_paths=max_paths
+                        )
+
+                        graph_recommendations_raw = rwr.recommend(
+                            member_code=selected_member_code,
+                            top_n=top_n,
+                            return_paths=show_paths,
+                            competence_type=competence_type
+                        )
+
+                        # Recommendation形式に変換
+                        from skillnote_recommendation.core.models import Recommendation
+                        recs = []
+                        for comp_code, score, paths in graph_recommendations_raw:
+                            comp_info_row = td["competence_master"][
+                                td["competence_master"]["力量コード"] == comp_code
+                            ]
+                            if not comp_info_row.empty:
+                                recs.append(Recommendation(
+                                    competence_code=comp_code,
+                                    competence_name=comp_info_row.iloc[0]['力量名'],
+                                    competence_type=comp_info_row.iloc[0]['力量タイプ'],
+                                    category=comp_info_row.iloc[0].get('力量カテゴリー名', 'UNKNOWN'),
+                                    priority_score=score,
+                                    category_importance=0.5,
+                                    interpretability_score=0.9,
+                                    paths=paths if show_paths else []
+                                ))
+
+                        comparison_results[method] = {
+                            'recommendations': recs,
+                            'execution_time': time.time() - start_time,
+                            'method_type': 'graph'
+                        }
+
+                    elif method == "ハイブリッド推薦":
+                        # Knowledge Graphの確認
+                        if 'knowledge_graph' not in st.session_state:
+                            st.error("❌ Knowledge Graphが初期化されていません")
+                            continue
+
+                        # HybridGraphRecommenderを作成
+                        hybrid_recommender = build_hybrid_recommender(
+                            member_competence=td["member_competence"],
+                            competence_master=td["competence_master"],
+                            member_master=td["members_clean"],
+                            graph_weight=rwr_weight,
+                            cf_weight=1.0 - rwr_weight,
+                            content_weight=0.0,
+                            max_path_length=max_path_length,
+                            max_paths=max_paths
+                        )
+
+                        # ハイブリッド推薦を実行
+                        hybrid_recs = hybrid_recommender.recommend(
+                            member_code=selected_member_code,
+                            top_n=top_n,
+                            competence_type=competence_type,
+                            category_filter=None,
+                            use_diversity=True
+                        )
+
+                        # Recommendation形式に変換
+                        from skillnote_recommendation.core.models import Recommendation
+                        recs = []
+                        for hybrid_rec in hybrid_recs:
+                            recs.append(Recommendation(
+                                competence_code=hybrid_rec.competence_code,
+                                competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code),
+                                competence_type=hybrid_rec.competence_info.get('力量タイプ', 'UNKNOWN'),
+                                category=hybrid_rec.competence_info.get('カテゴリー', ''),
+                                priority_score=hybrid_rec.score,
+                                category_importance=0.5,
+                                interpretability_score=0.8,
+                                paths=hybrid_rec.paths if show_paths else []
+                            ))
+
+                        comparison_results[method] = {
+                            'recommendations': recs,
+                            'execution_time': time.time() - start_time,
+                            'method_type': 'hybrid'
+                        }
+
+                except Exception as e:
+                    st.error(f"❌ {method}の実行中にエラーが発生しました: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+
+        # 比較結果を表示
+        if comparison_results:
+            st.success(f"✅ {len(comparison_results)}個の手法の実行が完了しました")
+
+            # 比較テーブルを作成
+            st.markdown("---")
+            st.subheader("📊 推薦結果の比較")
+
+            # 比較テーブルを作成
+            comparison_data = []
+            max_len = max(len(result['recommendations']) for result in comparison_results.values())
+
+            for i in range(max_len):
+                row = {'順位': i + 1}
+
+                for method, result in comparison_results.items():
+                    recs = result['recommendations']
+                    if i < len(recs):
+                        rec = recs[i]
+                        row[f'{method}_力量名'] = rec.competence_name
+                        row[f'{method}_スコア'] = f"{rec.priority_score:.3f}"
+                        row[f'{method}_タイプ'] = rec.competence_type
+                    else:
+                        row[f'{method}_力量名'] = '-'
+                        row[f'{method}_スコア'] = '-'
+                        row[f'{method}_タイプ'] = '-'
+
+                comparison_data.append(row)
+
+            comparison_df = pd.DataFrame(comparison_data)
+            st.dataframe(comparison_df, use_container_width=True, height=400)
+
+            # 実行時間の比較
+            st.markdown("### ⏱️ 実行時間の比較")
+            time_cols = st.columns(len(comparison_results))
+            for idx, (method, result) in enumerate(comparison_results.items()):
+                with time_cols[idx]:
+                    st.metric(
+                        label=method,
+                        value=f"{result['execution_time']:.2f}秒"
+                    )
+
+            # 詳細結果（個別タブで表示）
+            st.markdown("### 📋 詳細結果")
+            tabs = st.tabs(list(comparison_results.keys()))
+
+            for idx, (method, result) in enumerate(comparison_results.items()):
+                with tabs[idx]:
+                    st.markdown(f"#### {method}の詳細結果")
+                    recs = result['recommendations']
+
+                    for rec in recs[:10]:  # 上位10件を表示
+                        with st.expander(f"{rec.rank if hasattr(rec, 'rank') else '?'}. {rec.competence_name} (スコア: {rec.priority_score:.3f})"):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.markdown(f"**力量タイプ**: {rec.competence_type}")
+                            with col2:
+                                st.markdown(f"**カテゴリ**: {rec.category}")
+
+                            if hasattr(rec, 'paths') and rec.paths:
+                                st.markdown("**推薦パス**:")
+                                for path_idx, path in enumerate(rec.paths[:3], 1):
+                                    path_names = [node.get('name', node.get('id', '?')) for node in path]
+                                    st.caption(f"パス{path_idx}: {' → '.join(path_names)}")
+
+        st.stop()  # 比較モードの場合はここで終了
+
+    # 通常モード（単一手法）
     with st.spinner(f"{recommendation_method}を生成中..."):
         try:
             import time
