@@ -618,6 +618,8 @@ if st.button("推薦を実行", type="primary"):
                 # RWRの結果をHybridRecommendation形式に変換
                 from skillnote_recommendation.graph.hybrid_recommender import HybridRecommendation
                 graph_recommendations = []
+                kg = st.session_state.knowledge_graph
+
                 for comp_code, score, paths in graph_recommendations_raw:
                     # 力量情報を取得
                     comp_info_row = td["competence_master"][
@@ -638,6 +640,54 @@ if st.button("推薦を実行", type="primary"):
                             '概要': None
                         }
 
+                    # パスを人間が読める形式に変換
+                    readable_paths = []
+                    for path in paths:
+                        readable_path = []
+                        for node in path:
+                            node_info = kg.get_node_info(node)
+                            readable_path.append({
+                                'id': node,
+                                'type': node_info.get('node_type', 'unknown'),
+                                'name': node_info.get('name', node),
+                            })
+                        readable_paths.append(readable_path)
+
+                    # パスから推薦理由を生成
+                    reasons = []
+                    for path in readable_paths[:5]:  # 最初の5パスから理由を生成
+                        if len(path) < 2:
+                            continue
+
+                        # パスのパターンを解析
+                        path_types = [n['type'] for n in path]
+
+                        if 'category' in path_types:
+                            # カテゴリー経由のパス
+                            category_nodes = [n for n in path if n['type'] == 'category']
+                            if category_nodes:
+                                reasons.append(f"カテゴリー「{category_nodes[0]['name']}」の関連力量")
+
+                        if path_types.count('member') > 1:
+                            # 類似メンバー経由のパス
+                            member_nodes = [n for n in path if n['type'] == 'member']
+                            if len(member_nodes) > 1:
+                                reasons.append(f"類似メンバー「{member_nodes[1]['name']}」が保有")
+
+                        if 'competence' in path_types and len(path) >= 3:
+                            # 既習得力量経由のパス
+                            comp_nodes = [n for n in path if n['type'] == 'competence']
+                            if len(comp_nodes) >= 2:
+                                reasons.append(f"「{comp_nodes[0]['name']}」から推薦")
+
+                    # 理由を重複削除
+                    reasons = list(dict.fromkeys(reasons))
+                    if not reasons:
+                        reasons = [f"{len(readable_paths)}個の学習パスから推薦"]
+                    else:
+                        # パス数の情報を追加
+                        reasons.append(f"（全{len(readable_paths)}パスから抽出）")
+
                     # HybridRecommendationを作成
                     hybrid_rec = HybridRecommendation(
                         competence_code=comp_code,
@@ -645,8 +695,8 @@ if st.button("推薦を実行", type="primary"):
                         graph_score=score,
                         cf_score=0.0,
                         content_score=0.0,
-                        paths=paths,
-                        reasons=["グラフベース推薦による提案"],
+                        paths=readable_paths,
+                        reasons=reasons,
                         competence_info=comp_info
                     )
                     graph_recommendations.append(hybrid_rec)
