@@ -465,7 +465,7 @@ else:
 
 # グラフベースまたはハイブリッドの場合、追加設定を表示
 if recommendation_method in ["グラフベース推薦", "ハイブリッド推薦"]:
-    col_g1, col_g2 = st.columns(2)
+    col_g1, col_g2, col_g3 = st.columns(3)
 
     with col_g1:
         if recommendation_method == "ハイブリッド推薦":
@@ -481,6 +481,16 @@ if recommendation_method in ["グラフベース推薦", "ハイブリッド推�
             rwr_weight = 1.0  # グラフベース推薦の場合は常に1.0
 
     with col_g2:
+        max_path_length = st.slider(
+            "推薦パスの最大ステップ数",
+            min_value=2,
+            max_value=20,
+            value=10,
+            step=1,
+            help="推薦パスの最大長さ（ステップ数）を設定します。大きいほど遠くの力量まで探索しますが、処理時間が増加します。"
+        )
+
+    with col_g3:
         show_paths = st.checkbox(
             "推薦パスを表示",
             value=True,
@@ -488,6 +498,7 @@ if recommendation_method in ["グラフベース推薦", "ハイブリッド推�
         )
 else:
     rwr_weight = 0.5  # デフォルト値
+    max_path_length = 10  # デフォルト値
     show_paths = False
 
 
@@ -574,21 +585,55 @@ if st.button("推薦を実行", type="primary"):
                     st.error("❌ Knowledge Graphが初期化されていません。データ読み込みページで再度データを読み込んでください。")
                     st.stop()
 
-                # HybridGraphRecommenderを初期化
-                hybrid_recommender = HybridGraphRecommender(
+                # RandomWalkRecommenderを作成（max_path_lengthを設定）
+                from skillnote_recommendation.graph.random_walk import RandomWalkRecommender
+                rwr = RandomWalkRecommender(
                     knowledge_graph=st.session_state.knowledge_graph,
-                    ml_recommender=recommender,
-                    rwr_weight=rwr_weight
+                    max_path_length=max_path_length
                 )
 
-                # グラフベースまたはハイブリッド推薦を実行
-                graph_recommendations = hybrid_recommender.recommend(
+                # グラフベース推薦を実行
+                graph_recommendations_raw = rwr.recommend(
                     member_code=selected_member_code,
                     top_n=top_n,
-                    competence_type=competence_type,
-                    category_filter=None,
-                    use_diversity=True
+                    return_paths=show_paths
                 )
+
+                # RWRの結果をHybridRecommendation形式に変換
+                from skillnote_recommendation.graph.hybrid_recommender import HybridRecommendation
+                graph_recommendations = []
+                for comp_code, score, paths in graph_recommendations_raw:
+                    # 力量情報を取得
+                    comp_info_row = td["competence_master"][
+                        td["competence_master"]["力量コード"] == comp_code
+                    ]
+                    if not comp_info_row.empty:
+                        comp_info = {
+                            '力量名': comp_info_row.iloc[0]['力量名'],
+                            '力量タイプ': comp_info_row.iloc[0]['力量タイプ'],
+                            'カテゴリー': comp_info_row.iloc[0].get('力量カテゴリー名', 'UNKNOWN'),
+                            '概要': None
+                        }
+                    else:
+                        comp_info = {
+                            '力量名': comp_code,
+                            '力量タイプ': 'UNKNOWN',
+                            'カテゴリー': 'UNKNOWN',
+                            '概要': None
+                        }
+
+                    # HybridRecommendationを作成
+                    hybrid_rec = HybridRecommendation(
+                        competence_code=comp_code,
+                        score=score,
+                        graph_score=score,
+                        cf_score=0.0,
+                        content_score=0.0,
+                        paths=paths,
+                        reasons=["グラフベース推薦による提案"],
+                        competence_info=comp_info
+                    )
+                    graph_recommendations.append(hybrid_rec)
 
                 # HybridRecommendationを標準のRecommendationに変換
                 recs = [convert_hybrid_to_recommendation(hr) for hr in graph_recommendations]
