@@ -9,8 +9,8 @@ CareerNavigatorプロジェクトのテスト実装をすぐに始めるため�
 1. [セットアップ](#セットアップ)
 2. [テスト実行](#テスト実行)
 3. [作成済みファイル](#作成済みファイル)
-4. [次のステップ](#次のステップ)
-5. [テスト作成の例](#テスト作成の例)
+4. [テスト作成の例](#テスト作成の例)
+5. [次のステップ](#次のステップ)
 
 ---
 
@@ -33,6 +33,7 @@ pip install -e ".[dev]"
 - pandas (データ処理)
 - numpy (数値計算)
 - scikit-learn (機械学習ライブラリ)
+- networkx (グラフライブラリ)
 
 ---
 
@@ -89,7 +90,7 @@ uv run pytest tests/ -v --tb=short
 
 **内容**: 包括的なテスト設計ドキュメント
 - テスト戦略
-- コンポーネント別テストケース設計（合計100+ケース）
+- コンポーネント別テストケース設計
 - テストデータ戦略
 - 実装優先度
 
@@ -98,447 +99,249 @@ uv run pytest tests/ -v --tb=short
 ### 2. tests/conftest.py
 
 **内容**: 共通テストフィクスチャ
-- サンプルデータフィクスチャ（メンバー、力量、習得データ等）
-- 一時ディレクトリフィクスチャ
-- CSVファイル生成ヘルパー
-- カスタムpytestマーカー定義
+- サンプルデータ生成
+- テスト用ヘルパー関数
 
-**使い方**: 他のテストファイルから自動的にインポートされます。新しいフィクスチャを追加する場合はこのファイルに記述してください。
+### 3. 既存テスト
 
-### 3. tests/test_data_loader.py
-
-**内容**: DataLoaderクラスの完全なテスト実装例（23テストケース）
-- カラム名クリーニング（6テスト）
-- CSV読み込み（5テスト）
-- 全データ読み込み（3テスト）
-- データ検証（4テスト）
-- 初期化（2テスト）
-- エッジケース（3テスト）
-
-**使い方**: テスト実装の参考例として活用してください。
-
-**実行結果**:
-```
-✅ 23 passed (全テスト成功)
-```
-
-### 4. tests/test_basic.py
-
-**内容**: 既存の基本テスト（6テストケース）
-- Config設定
-- データモデル（Member, Competence, Recommendation）
-
-**状態**: 既存テストも正常動作中
+以下のテストが既に実装されています：
+- `tests/test_data_loader.py` - データローダーテスト
+- `tests/test_data_transformer.py` - データ変換テスト
+- `tests/test_evaluator.py` - 評価器テスト
+- `tests/test_matrix_factorization.py` - NMFモデルテスト
+- `tests/test_diversity.py` - 多様性再ランキングテスト
+- `tests/test_ml_recommender.py` - ML推薦エンジンテスト
 
 ---
 
-## 🚀 次のステップ
+## 🎯 テスト作成の例
 
-### フェーズ1: データ変換テストの実装（優先度: 高）
+### 例1: 知識グラフのテスト（NEW）
 
-**ファイル**: `tests/test_data_transformer.py`
-
-**実装すべきテスト**:
-1. レベル正規化テスト
-   - SKILLタイプ（1-5の整数）
-   - EDUCATION/LICENSEタイプ（●→1, 空→0）
-2. 統合力量マスタ作成
-3. メンバー習得力量データ作成
-4. スキルマトリクス作成
-
-**サンプルコード**:
+**ファイル**: `tests/test_knowledge_graph.py`
 
 ```python
-"""
-tests/test_data_transformer.py
-"""
 import pytest
 import pandas as pd
-from skillnote_recommendation.core.data_transformer import DataTransformer
+from skillnote_recommendation.graph.knowledge_graph import CompetenceKnowledgeGraph
 
 
-class TestNormalizeLevel:
-    """レベル正規化のテスト"""
-
-    @pytest.mark.parametrize("level,expected", [
-        ('1', 1), ('3', 3), ('5', 5),
-        ('invalid', 0), ('', 0), (None, 0)
-    ])
-    def test_normalize_level_skill(self, level, expected):
-        """SKILLタイプのレベル正規化"""
-        result = DataTransformer.normalize_level(level, 'SKILL')
-        assert result == expected
-
-    @pytest.mark.parametrize("comp_type,level,expected", [
-        ('EDUCATION', '●', 1),
-        ('EDUCATION', '', 0),
-        ('LICENSE', '●', 1),
-        ('LICENSE', None, 0),
-    ])
-    def test_normalize_level_non_skill(self, comp_type, level, expected):
-        """EDUCATION/LICENSEタイプのレベル正規化"""
-        result = DataTransformer.normalize_level(level, comp_type)
-        assert result == expected
-
-
-class TestCreateCompetenceMaster:
-    """統合力量マスタ作成のテスト"""
-
-    def test_create_competence_master(self, sample_skills, sample_education,
-                                       sample_license, sample_categories):
-        """統合力量マスタが正しく作成される"""
-        data = {
-            'skills': sample_skills,
-            'education': sample_education,
-            'license': sample_license,
-            'categories': sample_categories
-        }
-
-        transformer = DataTransformer()
-        master = transformer.create_competence_master(data)
-
-        # 3タイプすべてが含まれること
-        assert 'SKILL' in master['力量タイプ'].values
-        assert 'EDUCATION' in master['力量タイプ'].values
-        assert 'LICENSE' in master['力量タイプ'].values
-
-        # 件数確認
-        skill_count = len(sample_skills)
-        edu_count = len(sample_education)
-        lic_count = len(sample_license)
-        assert len(master) == skill_count + edu_count + lic_count
-```
-
-**実行**:
-```bash
-uv run pytest tests/test_data_transformer.py -v
-```
-
----
-
-### フェーズ2: 類似度計算テストの実装（優先度: 高）
-
-**ファイル**: `tests/test_similarity_calculator.py`
-
-**実装すべきテスト**:
-1. Jaccard係数の正確性検証
-2. 類似度閾値フィルタリング
-3. サンプリング機能
-4. 対称性（(A,B)のみで(B,A)は含まれない）
-
-**サンプルコード**:
-
-```python
-"""
-tests/test_similarity_calculator.py
-"""
-import pytest
-import pandas as pd
-import numpy as np
-from skillnote_recommendation.core.similarity_calculator import SimilarityCalculator
-
-
-class TestJaccardCoefficient:
-    """Jaccard係数計算のテスト"""
-
-    def test_jaccard_coefficient_accuracy(self):
-        """Jaccard係数の正確性を手計算で検証"""
-        # テストデータ: s1とs2の習得者が一部重複
-        # s1: {m1, m2} (2人)
-        # s2: {m1, m3} (2人)
-        # intersection: {m1} (1人)
-        # union: {m1, m2, m3} (3人)
-        # Jaccard = 1/3 = 0.333...
-
-        data = pd.DataFrame({
-            'メンバーコード': ['m1', 'm1', 'm2', 'm3'],
-            '力量コード': ['s1', 's2', 's1', 's2'],
-            '正規化レベル': [3, 4, 2, 3]
-        })
-
-        calculator = SimilarityCalculator(sample_size=100, threshold=0.1)
-        result = calculator.calculate_similarity(data)
-
-        # s1-s2の類似度を取得
-        similarity = result[
-            ((result['力量1'] == 's1') & (result['力量2'] == 's2')) |
-            ((result['力量1'] == 's2') & (result['力量2'] == 's1'))
-        ]['類似度'].values[0]
-
-        # 小数第2位まで一致することを確認
-        assert abs(similarity - 1/3) < 0.01
-
-    def test_similarity_threshold(self):
-        """閾値以下の類似度が除外される"""
-        data = pd.DataFrame({
-            'メンバーコード': ['m1', 'm2', 'm3', 'm4'],
-            '力量コード': ['s1', 's1', 's2', 's2'],
-            '正規化レベル': [3, 2, 4, 5]
-        })
-
-        # 閾値を高く設定
-        calculator = SimilarityCalculator(sample_size=100, threshold=0.8)
-        result = calculator.calculate_similarity(data)
-
-        # 高い閾値で類似ペアが少なくなる（または0件）
-        assert len(result) >= 0
-        if len(result) > 0:
-            assert result['類似度'].min() > 0.8
-```
-
----
-
-### フェーズ3: 推薦エンジンテストの実装（優先度: 最高）
-
-**ファイル**: `tests/test_recommendation_engine.py`
-
-**実装すべきテスト**:
-1. カテゴリ重要度計算
-2. 習得容易性計算
-3. 人気度計算
-4. 優先度スコア計算
-5. 推薦理由生成
-6. 推薦実行とソート
-
----
-
-## 💡 テスト作成の例
-
-### パターン1: 単純な関数テスト
-
-```python
-def test_simple_function():
-    """説明文"""
-    # Arrange (準備)
-    input_value = "test"
-
-    # Act (実行)
-    result = my_function(input_value)
-
-    # Assert (検証)
-    assert result == "expected_output"
-```
-
-### パターン2: フィクスチャを使用したテスト
-
-```python
-def test_with_fixture(sample_members):
-    """フィクスチャを使用したテスト"""
-    # sample_membersはconftest.pyで定義されたフィクスチャ
-    assert len(sample_members) == 5
-    assert 'メンバーコード' in sample_members.columns
-```
-
-### パターン3: パラメータ化テスト
-
-```python
-@pytest.mark.parametrize("input_val,expected", [
-    (1, 1),
-    (3, 3),
-    (5, 5),
-    ('invalid', 0),
-])
-def test_with_parameters(input_val, expected):
-    """複数のパターンを一度にテスト"""
-    result = normalize_value(input_val)
-    assert result == expected
-```
-
-### パターン4: 例外テスト
-
-```python
-def test_exception_raised():
-    """例外が発生することを確認"""
-    with pytest.raises(ValueError) as exc_info:
-        dangerous_function("invalid")
-
-    assert "エラーメッセージ" in str(exc_info.value)
-```
-
-### パターン5: 一時ファイルを使用したテスト
-
-```python
-def test_file_operation(tmp_path):
-    """一時ファイルを使ったテスト"""
-    # tmp_pathはpytestが提供する一時ディレクトリ
-    test_file = tmp_path / "test.csv"
-    df = pd.DataFrame({'col': [1, 2, 3]})
-    df.to_csv(test_file, index=False)
-
-    # ファイル操作をテスト
-    result = load_csv_file(test_file)
-    assert len(result) == 3
-```
-
----
-
-## 📊 現在のテスト状況
-
-### 実装済み
-
-| テストファイル | テスト数 | 状態 | カバレッジ |
-|--------------|---------|------|-----------|
-| `test_basic.py` | 6 | ✅ 全成功 | Config, Models |
-| `test_data_loader.py` | 23 | ✅ 全成功 | DataLoader完全カバー |
-| **合計** | **29** | ✅ | **約30%** |
-
-### 未実装（優先順）
-
-1. `test_data_transformer.py` - 18テスト（高優先度）
-2. `test_similarity_calculator.py` - 12テスト（高優先度）
-3. `test_recommendation_engine.py` - 24テスト（最高優先度）
-4. `test_recommendation_system.py` - 12テスト（高優先度）
-5. `test_integration.py` - 5テスト（中優先度）
-6. `test_e2e.py` - 5テスト（中優先度）
-
-**目標**: 合計100+テストケース、80%以上のカバレッジ
-
----
-
-## 🎯 ベストプラクティス
-
-### 1. テストの命名規則
-
-```python
-# ✅ 良い例
-def test_normalize_level_skill_with_valid_value():
-    """有効な値でのSKILLレベル正規化"""
-    pass
-
-# ❌ 悪い例
-def test1():
-    pass
-```
-
-### 2. Arrange-Act-Assert パターン
-
-```python
-def test_calculate_score():
-    # Arrange: テストデータを準備
-    input_data = create_test_data()
-
-    # Act: テスト対象を実行
-    result = calculate_score(input_data)
-
-    # Assert: 結果を検証
-    assert result > 0
-    assert result <= 10
-```
-
-### 3. 1テスト1検証
-
-```python
-# ✅ 良い例: 1つの機能を明確にテスト
-def test_category_importance_in_range():
-    """カテゴリ重要度が0-10の範囲内"""
-    score = calculate_category_importance('cat01')
-    assert 0 <= score <= 10
-
-# ❌ 悪い例: 複数の異なる機能を1つのテストで検証
-def test_everything():
-    assert func1() == 1
-    assert func2() == 2
-    assert func3() == 3
-```
-
-### 4. フィクスチャの活用
-
-```python
-# conftest.pyで定義
-@pytest.fixture
-def sample_ml_recommender(sample_members, sample_competence_master,
-                          sample_member_competence):
-    """ML推薦エンジンのフィクスチャ"""
-    from skillnote_recommendation.ml.ml_recommender import MLRecommender
-
-    return MLRecommender.build(
+def test_graph_construction(sample_members, sample_competences, sample_member_competence):
+    """グラフ構築のテスト"""
+    kg = CompetenceKnowledgeGraph(
         member_competence=sample_member_competence,
-        competence_master=sample_competence_master,
         member_master=sample_members,
-        use_preprocessing=False,
-        use_tuning=False
+        competence_master=sample_competences,
+        use_category_hierarchy=True
     )
 
-# テストで使用
-def test_recommend(sample_ml_recommender):
-    """sample_ml_recommenderフィクスチャを使用"""
-    recommendations = sample_ml_recommender.recommend('m001', top_n=5, use_diversity=False)
-    assert len(recommendations) <= 5
+    # ノード数の確認
+    assert kg.G.number_of_nodes() > 0
+
+    # エッジ数の確認
+    assert kg.G.number_of_edges() > 0
+
+
+def test_get_neighbors(sample_members, sample_competences, sample_member_competence):
+    """隣接ノード取得のテスト"""
+    kg = CompetenceKnowledgeGraph(
+        member_competence=sample_member_competence,
+        member_master=sample_members,
+        competence_master=sample_competences
+    )
+
+    # メンバーの習得力量を取得
+    neighbors = kg.get_neighbors("member_M001", edge_type="acquired")
+
+    # 習得力量が存在することを確認
+    assert len(neighbors) > 0
+
+    # 力量ノードであることを確認
+    for neighbor in neighbors:
+        assert neighbor.startswith("competence_")
+
+
+def test_get_member_acquired_competences(sample_members, sample_competences, sample_member_competence):
+    """習得力量取得のテスト"""
+    kg = CompetenceKnowledgeGraph(
+        member_competence=sample_member_competence,
+        member_master=sample_members,
+        competence_master=sample_competences
+    )
+
+    # 習得力量を取得
+    acquired = kg.get_member_acquired_competences("M001")
+
+    # 習得力量が存在することを確認
+    assert len(acquired) > 0
+
+    # 力量コードの形式を確認
+    for comp_code in acquired:
+        assert isinstance(comp_code, str)
+```
+
+### 例2: Random Walkのテスト（NEW）
+
+**ファイル**: `tests/test_random_walk.py`
+
+```python
+import pytest
+from skillnote_recommendation.graph.knowledge_graph import CompetenceKnowledgeGraph
+from skillnote_recommendation.graph.random_walk import RandomWalkRecommender
+
+
+def test_rwr_recommend(sample_members, sample_competences, sample_member_competence):
+    """RWR推薦のテスト"""
+    # グラフ構築
+    kg = CompetenceKnowledgeGraph(
+        member_competence=sample_member_competence,
+        member_master=sample_members,
+        competence_master=sample_competences
+    )
+
+    # RWR推薦エンジン
+    rwr = RandomWalkRecommender(
+        knowledge_graph=kg,
+        restart_prob=0.15
+    )
+
+    # 推薦生成
+    recommendations = rwr.recommend(
+        member_code="M001",
+        top_n=5,
+        return_paths=True
+    )
+
+    # 推薦結果が存在することを確認
+    assert len(recommendations) > 0
+
+    # 推薦形式の確認
+    for comp_code, score, paths in recommendations:
+        assert isinstance(comp_code, str)
+        assert isinstance(score, float)
+        assert 0 <= score <= 1
+        assert isinstance(paths, list)
+
+
+def test_rwr_cache(sample_members, sample_competences, sample_member_competence):
+    """RWRキャッシュのテスト"""
+    kg = CompetenceKnowledgeGraph(
+        member_competence=sample_member_competence,
+        member_master=sample_members,
+        competence_master=sample_competences
+    )
+
+    rwr = RandomWalkRecommender(
+        knowledge_graph=kg,
+        enable_cache=True
+    )
+
+    # 初回実行
+    _ = rwr.recommend("M001", top_n=5)
+
+    # キャッシュ統計確認
+    cache_stats = rwr.get_cache_stats()
+    assert cache_stats['cached_members'] == 1
+
+    # キャッシュクリア
+    rwr.clear_cache()
+    cache_stats = rwr.get_cache_stats()
+    assert cache_stats['cached_members'] == 0
 ```
 
 ---
 
-## 🔍 デバッグのヒント
+## 📝 次のステップ
 
-### テストが失敗した場合
+### Phase 3: グラフ推薦テスト（未実装）
+
+1. **知識グラフテスト** (`test_knowledge_graph.py`)
+   - グラフ構築
+   - クエリ機能
+   - メンバー間類似度
+
+2. **Random Walkテスト** (`test_random_walk.py`)
+   - RWR推薦
+   - フォールバック処理
+   - 推薦パス抽出
+   - キャッシング
+
+3. **ハイブリッド推薦テスト** (`test_hybrid_recommender.py`)
+   - スコア融合
+   - 推薦生成
+   - 推薦理由生成
+
+### Phase 4: 統合・E2Eテスト（未実装）
+
+4. **統合テスト** (`test_integration.py`)
+   - データパイプライン全体の検証
+
+5. **E2Eテスト** (`test_e2e.py`)
+   - エンドツーエンドシナリオの検証
+
+---
+
+## 🔗 関連ドキュメント
+
+- [TEST_DESIGN.md](TEST_DESIGN.md) - 詳細なテスト設計
+- [TESTING_QUICKSTART.md](TESTING_QUICKSTART.md) - このドキュメント
+- [pytest ドキュメント](https://docs.pytest.org/) - pytestの公式ドキュメント
+
+---
+
+## 💡 ヒント
+
+### テスト実行が遅い場合
 
 ```bash
-# 詳細なエラー情報を表示
-uv run pytest tests/test_data_loader.py::test_name -v --tb=long
-
-# pdbデバッガを起動
-uv run pytest tests/test_data_loader.py::test_name --pdb
-
-# 最初の失敗で停止
-uv run pytest tests/ -x
+# 並列実行（pytest-xdist使用）
+uv run pytest tests/ -n auto
 
 # 失敗したテストのみ再実行
 uv run pytest tests/ --lf
+
+# 最初の失敗で停止
+uv run pytest tests/ -x
 ```
 
-### printデバッグ
+### テストデバッグ
+
+```bash
+# pdbでデバッグ
+uv run pytest tests/ --pdb
+
+# 標準出力を表示
+uv run pytest tests/ -s
+```
+
+### テストマーカー
 
 ```python
-def test_with_debug(sample_members):
-    """デバッグ情報を出力"""
-    print(f"\nDataFrame shape: {sample_members.shape}")
-    print(f"Columns: {sample_members.columns.tolist()}")
+# 遅いテストをスキップ
+@pytest.mark.slow
+def test_slow_operation():
+    ...
 
-    result = process_data(sample_members)
-
-    print(f"Result: {result}")
-    assert result is not None
-```
-
-実行時に `-s` オプションを追加：
-```bash
-uv run pytest tests/test_file.py::test_with_debug -v -s
+# 実行時
+pytest tests/ -m "not slow"
 ```
 
 ---
 
-## 📚 参考資料
+## 📊 現在の状況
 
-- **TEST_DESIGN.md**: 詳細なテスト設計ドキュメント
-- **pytest公式ドキュメント**: https://docs.pytest.org/
-- **pandas testing**: https://pandas.pydata.org/docs/reference/api/pandas.testing.assert_frame_equal.html
+**カバレッジ**: 約40-50%（推定）
+**目標カバレッジ**: 80%以上
 
----
+**完了済み**:
+- ✅ Core Module テスト
+- ✅ ML Module テスト
 
-## ✅ チェックリスト
-
-テスト実装前に確認：
-
-- [ ] TEST_DESIGN.mdを読んで全体像を把握
-- [ ] 開発環境がセットアップ済み（`uv sync --dev`）
-- [ ] 既存テストが動作することを確認（`uv run pytest tests/`）
-- [ ] conftest.pyのフィクスチャを理解
-- [ ] test_data_loader.pyを参考例として確認
-
-テスト実装中：
-
-- [ ] 明確なテスト名とdocstring
-- [ ] Arrange-Act-Assertパターンに従う
-- [ ] エッジケースも考慮
-- [ ] 必要に応じてフィクスチャを追加
-
-テスト完了後：
-
-- [ ] 全テストが成功（`uv run pytest tests/ -v`）
-- [ ] カバレッジを確認（`uv run pytest --cov`）
-- [ ] コードレビュー依頼
+**未実装**:
+- ⏳ Graph Module テスト
+- ⏳ 統合テスト
+- ⏳ E2Eテスト
 
 ---
 
-**作成日**: 2025-10-23
-**バージョン**: 1.0
+テスト実装を進めて、品質の高いシステムを構築しましょう！
