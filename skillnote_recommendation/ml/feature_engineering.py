@@ -56,10 +56,25 @@ class FeatureEngineer:
         self.category_embeddings = self._compute_category_embeddings()
 
         print("\n特徴量エンジニアリング初期化完了")
-        print(f"  職種数: {len(self.role_encoder.categories_[0])}")
-        print(f"  等級数: {len(self.grade_encoder.categories_[0])}")
-        print(f"  カテゴリ数: {len(self.category_encoder.categories_[0])}")
-        print(f"  力量タイプ数: {len(self.type_encoder.categories_[0])}")
+        if hasattr(self.role_encoder, 'categories_'):
+            print(f"  職種数: {len(self.role_encoder.categories_[0])}")
+        else:
+            print(f"  職種数: 0 (カラムなし)")
+
+        if hasattr(self.grade_encoder, 'categories_'):
+            print(f"  等級数: {len(self.grade_encoder.categories_[0])}")
+        else:
+            print(f"  等級数: 0 (カラムなし)")
+
+        if hasattr(self.category_encoder, 'categories_'):
+            print(f"  カテゴリ数: {len(self.category_encoder.categories_[0])}")
+        else:
+            print(f"  カテゴリ数: 0 (カラムなし)")
+
+        if hasattr(self.type_encoder, 'categories_'):
+            print(f"  力量タイプ数: {len(self.type_encoder.categories_[0])}")
+        else:
+            print(f"  力量タイプ数: 0 (カラムなし)")
 
     def _setup_column_mappings(self):
         """カラム名のマッピングを設定（日本語と英語の両方に対応）"""
@@ -82,23 +97,35 @@ class FeatureEngineer:
 
     def _fit_encoders(self):
         """エンコーダーをフィッティング"""
-        # 職種と等級のエンコーダー
+        # 職種と等級のエンコーダー（カラムがない場合はダミーデータでfit）
         if 'role' in self.member_master.columns:
             roles = self.member_master['role'].fillna('UNKNOWN').values.reshape(-1, 1)
             self.role_encoder.fit(roles)
+        else:
+            # カラムがない場合はダミーでfit
+            self.role_encoder.fit([['UNKNOWN']])
 
         if 'grade' in self.member_master.columns:
             grades = self.member_master['grade'].fillna('UNKNOWN').values.reshape(-1, 1)
             self.grade_encoder.fit(grades)
+        else:
+            # カラムがない場合はダミーでfit
+            self.grade_encoder.fit([['UNKNOWN']])
 
-        # カテゴリと力量タイプのエンコーダー
-        if 'category' in self.competence_master.columns:
-            categories = self.competence_master['category'].fillna('UNKNOWN').values.reshape(-1, 1)
+        # カテゴリと力量タイプのエンコーダー（日本語カラム名にも対応）
+        if self.comp_master_category_col in self.competence_master.columns:
+            categories = self.competence_master[self.comp_master_category_col].fillna('UNKNOWN').values.reshape(-1, 1)
             self.category_encoder.fit(categories)
+        else:
+            # カラムがない場合はダミーでfit
+            self.category_encoder.fit([['UNKNOWN']])
 
-        if 'competence_type' in self.competence_master.columns:
-            types = self.competence_master['competence_type'].fillna('SKILL').values.reshape(-1, 1)
+        if self.comp_master_type_col in self.competence_master.columns:
+            types = self.competence_master[self.comp_master_type_col].fillna('SKILL').values.reshape(-1, 1)
             self.type_encoder.fit(types)
+        else:
+            # カラムがない場合はダミーでfit
+            self.type_encoder.fit([['SKILL']])
 
     def encode_member_attributes(self, member_code: str) -> np.ndarray:
         """メンバー属性をワンホットエンコーディング
