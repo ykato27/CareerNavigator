@@ -16,7 +16,7 @@ from .knowledge_graph import CompetenceKnowledgeGraph
 DEFAULT_RESTART_PROB = 0.15
 DEFAULT_MAX_ITER = 100
 DEFAULT_TOLERANCE = 1e-6
-DEFAULT_MAX_PATHS = 3
+DEFAULT_MAX_PATHS = 10  # パス数を10に増やす
 DEFAULT_MAX_PATH_LENGTH = 10  # 5→10に延長
 MIN_SCORE_THRESHOLD = 1e-10
 
@@ -34,6 +34,7 @@ class RandomWalkRecommender:
                  max_iter: int = DEFAULT_MAX_ITER,
                  tolerance: float = DEFAULT_TOLERANCE,
                  max_path_length: int = DEFAULT_MAX_PATH_LENGTH,
+                 max_paths: int = DEFAULT_MAX_PATHS,
                  enable_cache: bool = True):
         """
         Args:
@@ -43,6 +44,7 @@ class RandomWalkRecommender:
             max_iter: 最大反復回数
             tolerance: 収束判定の閾値
             max_path_length: 推薦パスの最大長さ（ステップ数）
+            max_paths: 各力量に対して抽出する推薦パスの最大数
             enable_cache: PageRank結果のキャッシュを有効にするか
         """
         self.graph = knowledge_graph.G
@@ -51,6 +53,7 @@ class RandomWalkRecommender:
         self.max_iter = max_iter
         self.tolerance = tolerance
         self.max_path_length = max_path_length
+        self.max_paths = max_paths
         self.enable_cache = enable_cache
 
         # Plan 3: PageRank結果のキャッシュ
@@ -110,7 +113,7 @@ class RandomWalkRecommender:
                 paths = self._extract_paths(
                     member_node,
                     f"competence_{comp_code}",
-                    max_paths=3,
+                    max_paths=self.max_paths,
                     max_length=self.max_path_length
                 )
             recommendations.append((comp_code, score, paths))
