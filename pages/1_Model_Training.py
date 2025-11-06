@@ -425,38 +425,39 @@ else:
                 st.session_state.ml_recommender = ml_recommender
                 st.session_state.model_trained = True
 
-                # モデルの保存
-                current_user = persistence_manager.get_current_user()
-                if current_user:
-                    with st.spinner("モデルを保存中..."):
-                        try:
-                            # モデルのパラメータとメトリクスを取得
-                            mf_model = ml_recommender.mf_model
-                            parameters = {
-                                "n_components": mf_model.n_components,
-                                "use_preprocessing": use_preprocessing,
-                                "use_tuning": use_tuning,
-                            }
-                            metrics = {
-                                "reconstruction_error": mf_model.get_reconstruction_error(),
-                            }
+                # モデルの保存（persistence_managerが利用可能な場合）
+                if 'persistence_manager' in globals():
+                    current_user = persistence_manager.get_current_user()
+                    if current_user:
+                        with st.spinner("モデルを保存中..."):
+                            try:
+                                # モデルのパラメータとメトリクスを取得
+                                mf_model = ml_recommender.mf_model
+                                parameters = {
+                                    "n_components": mf_model.n_components,
+                                    "use_preprocessing": use_preprocessing,
+                                    "use_tuning": use_tuning,
+                                }
+                                metrics = {
+                                    "reconstruction_error": mf_model.get_reconstruction_error(),
+                                }
 
-                            # モデルを保存
-                            model_id = persistence_manager.save_trained_model(
-                                model=ml_recommender,
-                                model_type="nmf",
-                                parameters=parameters,
-                                metrics=metrics,
-                                training_data=st.session_state.transformed_data.get("skill_matrix"),
-                                description=f"NMF model (preprocessing={use_preprocessing}, tuning={use_tuning})"
-                            )
+                                # モデルを保存
+                                model_id = persistence_manager.save_trained_model(
+                                    model=ml_recommender,
+                                    model_type="nmf",
+                                    parameters=parameters,
+                                    metrics=metrics,
+                                    training_data=st.session_state.transformed_data.get("skill_matrix"),
+                                    description=f"NMF model (preprocessing={use_preprocessing}, tuning={use_tuning})"
+                                )
 
-                            if model_id:
-                                st.success(f"✅ MLモデル学習が完了し、保存されました（ID: {model_id[:8]}...）")
-                            else:
-                                st.success("✅ MLモデル学習が完了しました。")
-                        except Exception as save_error:
-                            st.warning(f"⚠️ モデルの保存に失敗しましたが、モデルは使用可能です: {save_error}")
+                                if model_id:
+                                    st.success(f"✅ MLモデル学習が完了し、保存されました（ID: {model_id[:8]}...）")
+                                else:
+                                    st.success("✅ MLモデル学習が完了しました。")
+                            except Exception as save_error:
+                                st.warning(f"⚠️ モデルの保存に失敗しましたが、モデルは使用可能です: {save_error}")
                 else:
                     st.success("✅ MLモデル学習が完了しました。")
                     st.info("💡 ログインするとモデルを保存して再利用できます。")
