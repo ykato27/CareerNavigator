@@ -64,21 +64,36 @@ class RecommendationPathVisualizer:
         fig = self._create_plotly_figure(G, pos, paths, scores)
 
         # レイアウト設定
+        title_text = (
+            f"<b>推薦パス: {target_member_name} → {target_competence_name}</b><br>"
+            f"<sub>📊 推薦ロジック: あなたの既習得力量 → 類似メンバー → 推薦力量</sub><br>"
+            f"<sub style='font-size:10px'>💡 各ノードにカーソルを合わせると詳しい説明が表示されます</sub>"
+        )
+
         fig.update_layout(
             title=dict(
-                text=f"推薦パス: {target_member_name} → {target_competence_name}",
+                text=title_text,
                 x=0.5,
                 xanchor='center',
-                font=dict(size=20)
+                font=dict(size=18)
             ),
             showlegend=True,
             hovermode='closest',
-            margin=dict(b=20, l=5, r=5, t=60),
+            margin=dict(b=20, l=5, r=5, t=120),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             plot_bgcolor='white',
             width=1000,
             height=600,
+            legend=dict(
+                orientation="v",
+                yanchor="top",
+                y=1,
+                xanchor="left",
+                x=1.02,
+                title=dict(text="<b>ノードの種類</b>", font=dict(size=12)),
+                font=dict(size=11)
+            )
         )
 
         return fig
@@ -325,8 +340,26 @@ class RecommendationPathVisualizer:
                 showlegend=False,
             ))
 
+    def _get_node_role_explanation(self, node_type: str, is_start_path: bool = False) -> str:
+        """ノードタイプごとの役割説明を取得"""
+        explanations = {
+            'member': '推薦を受ける対象者',
+            'competence': 'パスの起点となる既習得力量、または<br>パスの終点となる推薦力量',
+            'category': '力量が属するカテゴリー。<br>同じカテゴリーの力量を探すのに使用',
+            'similar_member': 'あなたと同じ力量を持つメンバー。<br>このメンバーが習得している力量が推薦されます',
+        }
+        return explanations.get(node_type, 'グラフのノード')
+
     def _add_nodes_to_figure(self, fig: go.Figure, G: nx.DiGraph, pos: Dict):
         """ノードを描画"""
+        # ノードタイプごとの説明
+        type_descriptions = {
+            'member': '👤 あなた（対象メンバー）',
+            'competence': '📚 あなたの既習得力量',
+            'category': '📁 カテゴリー',
+            'similar_member': '🤝 類似メンバー（あなたと似たスキルを持つ人）',
+        }
+
         # ノードタイプごとにグループ化
         node_groups = {}
         for node_id in G.nodes():
@@ -347,16 +380,22 @@ class RecommendationPathVisualizer:
             node_groups[node_type]['x'].append(x)
             node_groups[node_type]['y'].append(y)
             node_groups[node_type]['text'].append(node_data['name'])
+
+            # ホバーテキストに役割の説明を追加
+            role_description = type_descriptions.get(node_type, f'タイプ: {node_type}')
             node_groups[node_type]['hovertext'].append(
-                f"{node_data['name']}<br>タイプ: {node_type}"
+                f"<b>{node_data['name']}</b><br><br>"
+                f"{role_description}<br><br>"
+                f"💡 このノードの役割:<br>"
+                f"{self._get_node_role_explanation(node_type)}"
             )
 
         # タイプごとに描画
         type_labels = {
-            'member': '対象メンバー',
-            'competence': '推薦力量',
-            'category': 'カテゴリー',
-            'similar_member': '類似メンバー',
+            'member': '👤 あなた（対象メンバー）',
+            'competence': '📚 既習得力量',
+            'category': '📁 カテゴリー',
+            'similar_member': '🤝 類似メンバー',
         }
 
         for node_type, group in node_groups.items():
