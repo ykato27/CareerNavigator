@@ -799,7 +799,9 @@ if st.session_state.get("model_trained", False):
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.metric("イテレーション数", mf_model.model.n_iter_)
+            # actual_n_iter_を使用（Early stopping対応）
+            n_iter = mf_model.actual_n_iter_ if mf_model.actual_n_iter_ is not None else getattr(mf_model.model, 'n_iter_', 'N/A')
+            st.metric("イテレーション数", n_iter)
 
         with col2:
             sparsity_W = np.sum(mf_model.W == 0) / mf_model.W.size * 100
