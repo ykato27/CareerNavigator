@@ -67,11 +67,10 @@ def build_hybrid_recommender(
 
     # 1. 知識グラフの構築
     print("\n[1/5] 知識グラフを構築...")
-    kg = CompetenceKnowledgeGraph()
-    kg.build_graph(
+    kg = CompetenceKnowledgeGraph(
         member_competence=member_competence,
-        competence_master=competence_master,
-        member_master=member_master
+        member_master=member_master,
+        competence_master=competence_master
     )
 
     # 2. ML推薦エンジンの構築
