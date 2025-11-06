@@ -33,6 +33,7 @@ class RandomWalkRecommender:
                  restart_prob: float = DEFAULT_RESTART_PROB,
                  max_iter: int = DEFAULT_MAX_ITER,
                  tolerance: float = DEFAULT_TOLERANCE,
+                 max_path_length: int = DEFAULT_MAX_PATH_LENGTH,
                  enable_cache: bool = True):
         """
         Args:
@@ -41,6 +42,7 @@ class RandomWalkRecommender:
                          0.15 = スタート地点に15%の確率で戻る
             max_iter: 最大反復回数
             tolerance: 収束判定の閾値
+            max_path_length: 推薦パスの最大長さ（ステップ数）
             enable_cache: PageRank結果のキャッシュを有効にするか
         """
         self.graph = knowledge_graph.G
@@ -48,6 +50,7 @@ class RandomWalkRecommender:
         self.restart_prob = restart_prob
         self.max_iter = max_iter
         self.tolerance = tolerance
+        self.max_path_length = max_path_length
         self.enable_cache = enable_cache
 
         # Plan 3: PageRank結果のキャッシュ
@@ -108,7 +111,7 @@ class RandomWalkRecommender:
                     member_node,
                     f"competence_{comp_code}",
                     max_paths=3,
-                    max_length=5
+                    max_length=self.max_path_length
                 )
             recommendations.append((comp_code, score, paths))
 

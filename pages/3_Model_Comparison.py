@@ -106,9 +106,10 @@ def create_interpretability_radar(graph_info, nmf_info=None):
 
 def main():
     st.set_page_config(
-        page_title="モデル比較分析 - CareerNavigator",
-        page_icon="🔬",
-        layout="wide"
+        page_title="CareerNavigator - モデル比較",
+        page_icon="🧭",
+        layout="wide",
+        initial_sidebar_state="expanded"
     )
 
     # Apply rich UI styles

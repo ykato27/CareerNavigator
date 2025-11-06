@@ -30,9 +30,10 @@ from skillnote_recommendation.utils.ui_components import (
 # =========================================================
 
 st.set_page_config(
-    page_title="スキル依存関係分析",
-    page_icon="🔗",
-    layout="wide"
+    page_title="CareerNavigator - スキル依存関係",
+    page_icon="🧭",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Apply rich UI styles
