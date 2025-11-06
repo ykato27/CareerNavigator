@@ -271,7 +271,8 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
         self,
         member_code: str,
         n: int = 10,
-        exclude_acquired: bool = True
+        exclude_acquired: bool = True,
+        competence_type: Optional[List[str]] = None
     ) -> List[Recommendation]:
         """
         推薦リストの生成（改良版）
@@ -280,6 +281,8 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
             member_code: メンバーコード
             n: 推薦する件数
             exclude_acquired: 既習得スキルを除外するか
+            competence_type: フィルタする力量タイプのリスト（例: ['SKILL', 'EDUCATION']）
+                             Noneの場合は全ての力量タイプを推薦
 
         Returns:
             推薦結果のリスト
@@ -343,6 +346,17 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
                         'metadata': {},
                         'path_quality': 0.5
                     }
+
+        # 力量タイプでフィルタリング
+        if competence_type is not None:
+            filtered_candidates = {}
+            for skill_code, data in candidates.items():
+                skill_type = self._get_skill_type(skill_code)
+                if skill_type in competence_type:
+                    filtered_candidates[skill_code] = data
+            candidates = filtered_candidates
+
+            logger.info(f"力量タイプフィルタ適用: {competence_type} -> {len(candidates)}件の候補")
 
         # スコアでソート
         sorted_candidates = sorted(
@@ -555,3 +569,25 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
     def get_edge_statistics(self) -> Dict[Tuple[str, str], Dict[str, Any]]:
         """エッジの詳細統計を取得"""
         return self.edge_details.copy()
+
+    def _get_skill_type(self, skill_code: str) -> str:
+        """
+        スキルの力量タイプを取得
+
+        Args:
+            skill_code: スキルコード
+
+        Returns:
+            力量タイプ（'SKILL', 'EDUCATION', 'LICENSE', 'UNKNOWN'）
+        """
+        if self.competence_master is None:
+            return 'UNKNOWN'
+
+        skill_row = self.competence_master[
+            self.competence_master['力量コード'] == skill_code
+        ]
+
+        if not skill_row.empty and '力量タイプ' in skill_row.columns:
+            return skill_row.iloc[0]['力量タイプ']
+
+        return 'UNKNOWN'
