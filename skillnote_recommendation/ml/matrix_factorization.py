@@ -303,7 +303,14 @@ class MatrixFactorizationModel:
         if not self.is_fitted:
             raise ValueError("モデルが学習されていません。")
 
-        return self.model.reconstruction_err_
+        # scikit-learn 1.0以降ではreconstruction_err_属性が削除されたため、手動で計算
+        if hasattr(self.model, 'reconstruction_err_'):
+            return self.model.reconstruction_err_
+        else:
+            # 手動で再構成誤差を計算: ||X - WH||_F
+            X_reconstructed = self.W @ self.H
+            reconstruction_error = np.linalg.norm(self.X - X_reconstructed, 'fro')
+            return reconstruction_error
 
     def save(self, filepath: str):
         """
