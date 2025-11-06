@@ -155,9 +155,10 @@ def display_issue(issue, index):
 
 def main():
     st.set_page_config(
-        page_title="データ品質モニタリング - CareerNavigator",
-        page_icon="🔍",
-        layout="wide"
+        page_title="CareerNavigator - データ品質チェック",
+        page_icon="🧭",
+        layout="wide",
+        initial_sidebar_state="expanded"
     )
 
     # Apply rich UI styles

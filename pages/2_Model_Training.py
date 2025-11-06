@@ -1,5 +1,5 @@
 """
-キャリア推薦システム - モデル学習と分析
+CareerNavigator - モデル学習と分析
 """
 
 import streamlit as st
@@ -19,9 +19,10 @@ from skillnote_recommendation.utils.ui_components import (
 # ページ設定
 # =========================================================
 st.set_page_config(
-    page_title="キャリア推薦システム - モデル学習",
-    page_icon="🤖",
-    layout="wide"
+    page_title="CareerNavigator - モデル学習",
+    page_icon="🧭",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Apply rich UI styles
@@ -29,9 +30,9 @@ apply_rich_ui_styles()
 
 # リッチなヘッダー
 render_gradient_header(
-    title="モデル学習と分析",
+    title="🧭 CareerNavigator",
     icon="🤖",
-    description="MLモデルを学習し、学習結果を分析します"
+    description="モデル学習と分析 - AIモデルを学習し、学習結果を分析します"
 )
 
 

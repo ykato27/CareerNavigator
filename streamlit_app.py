@@ -1,5 +1,7 @@
 """
-キャリア推薦システム Streamlitアプリ - データ読み込み
+CareerNavigator - AIキャリア推薦システム
+
+スキルデータと機械学習を活用した、データドリブンなキャリア開発支援システム
 """
 
 import os
@@ -20,9 +22,10 @@ from skillnote_recommendation.utils.ui_components import (
 # ページ設定
 # =========================================================
 st.set_page_config(
-    page_title="キャリア推薦システム - データ読み込み",
-    page_icon="📁",
-    layout="wide"
+    page_title="CareerNavigator - データ読み込み",
+    page_icon="🧭",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Apply rich UI styles
@@ -30,9 +33,9 @@ apply_rich_ui_styles()
 
 # リッチなヘッダー
 render_gradient_header(
-    title="データ読み込み",
+    title="🧭 CareerNavigator",
     icon="📁",
-    description="6種類のCSVファイルをアップロードしてデータを準備します"
+    description="データ読み込み - 6種類のCSVファイルをアップロードしてデータを準備します"
 )
 
 
