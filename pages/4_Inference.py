@@ -64,10 +64,38 @@ def create_growth_path_timeline(growth_path, role_name: str):
     # データ準備
     skills = growth_path.skills_in_order
 
+    # 優先度スコアを計算（取得率と取得順序を組み合わせる）
+    # スコアが高いほど早期に習得すべきスキル
+    skills_with_priority = []
+    for skill in skills:
+        # 取得率スコア：多くの人が取っているほど高い（0.0～1.0）
+        acquisition_score = skill.acquisition_rate
+
+        # 順序スコア：早期に取得されているほど高い（0.0～1.0）
+        # 最大順序を取得して正規化
+        max_order = max(s.average_order for s in skills)
+        order_score = 1.0 - (skill.average_order / (max_order + 1)) if max_order > 0 else 0.5
+
+        # 優先度スコア：取得率を重視（60%）、順序を考慮（40%）
+        priority_score = (acquisition_score * 0.6) + (order_score * 0.4)
+
+        skills_with_priority.append({
+            'skill': skill,
+            'priority_score': priority_score,
+            'acquisition_score': acquisition_score,
+            'order_score': order_score
+        })
+
+    # 優先度スコアでソート（降順：高い方が先）
+    skills_with_priority.sort(key=lambda x: x['priority_score'], reverse=True)
+
+    # ソート済みスキルリストを取得
+    sorted_skills = [item['skill'] for item in skills_with_priority]
+
     # 成長段階を決定（取得率に基づく）
     stages = []
     colors = []
-    for skill in skills:
+    for skill in sorted_skills:
         if skill.acquisition_rate < 0.3:
             stages.append("🌱 初級")
             colors.append("#90EE90")  # Light green
@@ -82,23 +110,30 @@ def create_growth_path_timeline(growth_path, role_name: str):
     skill_names = [
         skill.competence_name[:25] + "..." if len(skill.competence_name) > 25
         else skill.competence_name
-        for skill in skills
+        for skill in sorted_skills
     ]
 
-    # 取得順序
-    orders = [skill.average_order for skill in skills]
+    # 推奨取得順序（1から始まる連番）
+    recommended_orders = list(range(1, len(sorted_skills) + 1))
 
     # 取得率（パーセント）
-    acquisition_rates = [skill.acquisition_rate * 100 for skill in skills]
+    acquisition_rates = [skill.acquisition_rate * 100 for skill in sorted_skills]
+
+    # 優先度スコアを取得
+    priority_scores = [item['priority_score'] for item in skills_with_priority]
 
     # ホバーテキスト
     hover_texts = [
         f"<b>{skill.competence_name}</b><br>"
-        f"平均取得順序: {skill.average_order:.1f}番目<br>"
-        f"取得率: {skill.acquisition_rate*100:.1f}% ({skill.acquisition_count}/{skill.total_members}名)<br>"
+        f"推奨取得順序: {rec_order}番目<br>"
+        f"優先度スコア: {priority:.3f}<br>"
+        f"<br>"
+        f"【実データ】<br>"
+        f"実際の平均取得順序: {skill.average_order:.1f}番目<br>"
+        f"役職内取得率: {skill.acquisition_rate*100:.1f}% ({skill.acquisition_count}/{skill.total_members}名)<br>"
         f"成長段階: {stage}<br>"
         f"カテゴリー: {skill.category}"
-        for skill, stage in zip(skills, stages)
+        for skill, rec_order, priority, stage in zip(sorted_skills, recommended_orders, priority_scores, stages)
     ]
 
     # タイムライン図を作成
@@ -106,7 +141,7 @@ def create_growth_path_timeline(growth_path, role_name: str):
 
     # スキルをバーで表示
     fig.add_trace(go.Bar(
-        x=orders,
+        x=recommended_orders,
         y=skill_names,
         orientation='h',
         marker=dict(
@@ -125,12 +160,12 @@ def create_growth_path_timeline(growth_path, role_name: str):
     fig.update_layout(
         title=dict(
             text=f"<b>役職「{role_name}」のスキル取得シナリオ</b><br>"
-                 f"<sup>平均取得順序に基づく成長パス（{growth_path.total_members}名のデータから分析）</sup>",
+                 f"<sup>取得率と時間軸を考慮した推奨順序（{growth_path.total_members}名のデータから分析）</sup>",
             x=0.5,
             xanchor='center'
         ),
         xaxis=dict(
-            title="平均取得順序（番目）",
+            title="推奨取得順序（多くの人が早期に取得しているスキル順）",
             gridcolor='lightgray',
             showgrid=True
         ),
@@ -138,7 +173,7 @@ def create_growth_path_timeline(growth_path, role_name: str):
             title="",
             autorange="reversed"  # 上から下に表示
         ),
-        height=max(400, len(skills) * 30),  # スキル数に応じて高さを調整
+        height=max(400, len(sorted_skills) * 30),  # スキル数に応じて高さを調整
         margin=dict(l=200, r=50, t=100, b=50),
         plot_bgcolor='white',
         hovermode='closest',
@@ -1421,7 +1456,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                                 # 成長パスの可視化を追加
                                 st.markdown("#### 📈 スキル取得シナリオ")
-                                st.info("この役職のメンバーが実際にスキルを習得してきた順序を可視化しています。左から右へ進むほど後期に習得されるスキルです。")
+                                st.info("この役職のメンバーの実データ（取得率と取得時期）を分析し、推奨取得順序を算出しています。左から右へ：多くの人が早期に習得しているスキル順です。")
 
                                 # タブで表示
                                 timeline_tab, stages_tab = st.tabs(["🔄 取得順序タイムライン", "📊 段階別分布"])
@@ -1431,7 +1466,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     timeline_fig = create_growth_path_timeline(growth_path, role_name)
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
-                                        st.caption("💡 各バーの色は成長段階を示します（緑が薄い=初級、濃い=上級）。バーの幅は平均取得順序を示し、バー内の数値は役職内での取得率（%）です。")
+                                        st.caption("💡 横軸は推奨取得順序（左から右へ：多くの人が早期に習得しているスキル順）。バーの色は成長段階（緑が薄い=初級、濃い=上級）。バー内の数値は役職内での取得率（%）です。")
 
                                 with stages_tab:
                                     # 段階別チャートを作成
