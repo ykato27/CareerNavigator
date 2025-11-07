@@ -284,7 +284,36 @@ uv run streamlit run streamlit_app.py
 
 **A:** **はい、おすすめです！** テストコード（`tests/` フォルダ）を読むと、各ライブラリコードの使い方が分かります。
 
+**現在のテスト状況（v1.2.1）:**
+- **テスト数**: 393テスト
+- **カバレッジ**: 47%
+- **テストファイル数**: 12ファイル
+
+**主なテストファイル:**
+- `tests/test_data_loader.py` - データ読み込みのテスト
+- `tests/test_data_transformer.py` - データ変換のテスト
+- `tests/test_evaluator.py` - 評価機能のテスト
+- `tests/test_matrix_factorization.py` - 行列分解モデルのテスト
+- `tests/test_diversity.py` - 多様性再ランキングのテスト
+- `tests/test_ml_recommender.py` - ML推薦システムのテスト
+- `tests/test_knowledge_graph.py` - グラフベース推薦のテスト（v1.2.1新規）
+- `tests/test_hyperparameter_tuning.py` - ハイパーパラメータ調整のテスト（v1.2.1新規）
+- `tests/test_feature_engineering.py` - 特徴量エンジニアリングのテスト（v1.2.1新規）
+- `tests/test_visualization.py` - 可視化機能のテスト（v1.2.1新規）
+
 例えば、`tests/test_data_loader.py` を見れば、`DataLoader` クラスの使い方が分かります。
+
+**テストの実行方法:**
+```bash
+# すべてのテストを実行
+uv run pytest
+
+# カバレッジ付きでテスト実行
+uv run pytest --cov=skillnote_recommendation
+
+# 特定のテストファイルのみ実行
+uv run pytest tests/test_data_loader.py
+```
 
 ### Q7: どのファイルを修正すれば機能を追加できますか？
 
@@ -304,10 +333,22 @@ uv run streamlit run streamlit_app.py
 
 このガイドでコードの全体像が理解できたら、以下のドキュメントも読んでみてください：
 
-1. **[コード構造ガイド (CODE_STRUCTURE.md)](CODE_STRUCTURE.md)** - より詳細な技術ドキュメント
+### 🎓 初級者向け（推奨）
+
+1. **[モデル技術ガイド (MODELS_TECHNICAL_GUIDE.md)](MODELS_TECHNICAL_GUIDE.md)** ⭐ **初級者向け！**
+   - Matrix Factorization（行列分解）の仕組みと使い方
+   - 多様性再ランキング戦略の選び方
+   - グラフベース推薦とハイブリッド推薦
+   - モデル選択ガイドとFAQ
+
 2. **[Streamlitアプリガイド (STREAMLIT_GUIDE.md)](STREAMLIT_GUIDE.md)** - Webアプリの使い方
-3. **[クイックスタート (QUICKSTART.md)](QUICKSTART.md)** - コマンドライン使い方
-4. **[機械学習技術詳細 (ML_TECHNICAL_DETAILS.md)](ML_TECHNICAL_DETAILS.md)** - ML推薦システムの仕組み
+
+### 📖 中級者向け
+
+3. **[コード構造ガイド (CODE_STRUCTURE.md)](CODE_STRUCTURE.md)** - より詳細な技術ドキュメント
+4. **[クイックスタート (QUICKSTART.md)](QUICKSTART.md)** - コマンドライン使い方
+5. **[機械学習技術詳細 (ML_TECHNICAL_DETAILS.md)](ML_TECHNICAL_DETAILS.md)** - ML推薦システムの仕組み
+6. **[テスト実装ガイド (TESTING_QUICKSTART.md)](TESTING_QUICKSTART.md)** - テストの書き方
 
 ---
 

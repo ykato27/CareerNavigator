@@ -44,14 +44,18 @@ CareerNavigator/
 │   │   └── career_path.py         # キャリアパス
 │   └── scripts/                   # 実行スクリプト（現在未使用）
 │
-├── tests/                         # テストコード
+├── tests/                         # テストコード（393テスト、カバレッジ47%）
 │   ├── test_data_loader.py
 │   ├── test_directory_scan.py
 │   ├── test_data_transformer.py
 │   ├── test_evaluator.py
 │   ├── test_matrix_factorization.py
 │   ├── test_diversity.py
-│   └── test_ml_recommender.py
+│   ├── test_ml_recommender.py
+│   ├── test_knowledge_graph.py
+│   ├── test_hyperparameter_tuning.py
+│   ├── test_feature_engineering.py
+│   └── test_visualization.py
 │
 ├── docs/                          # ドキュメント
 │   ├── EVALUATION.md              # 評価ガイド
@@ -575,6 +579,23 @@ uv pip install -e .
 - **[新規ユーザーCSVテンプレート (templates/)](templates/)** - 新規ユーザー用CSVテンプレートと使い方
 
 ## バージョン履歴
+
+- **v1.2.1 (2025-11-07)** - **テストカバレッジ大幅向上とドキュメント拡充**
+  - **テストカバレッジ向上** (30% → 47%)
+    - 156個の新規テスト追加（253 → 393テスト）
+    - 4つの新規テストファイル追加
+      - tests/test_knowledge_graph.py - グラフベース推薦のテスト
+      - tests/test_hyperparameter_tuning.py - ハイパーパラメータ調整のテスト
+      - tests/test_feature_engineering.py - 特徴量エンジニアリングのテスト
+      - tests/test_visualization.py - 可視化機能のテスト
+  - **ドキュメント拡充**
+    - MODELS_TECHNICAL_GUIDE.md追加（初級者向けモデル技術ガイド）
+    - 既存ドキュメント5ファイル更新
+      - BEGINNER_GUIDE.md - テスト情報と新規ドキュメントへの参照追加
+      - EVALUATION.md - 評価手法の詳細説明追加
+      - ML_TECHNICAL_DETAILS.md - 機械学習技術の詳細解説更新
+      - CODE_STRUCTURE.md - コード構造ガイド更新
+      - TESTING_QUICKSTART.md - テスト実装ガイド更新
 
 - **v1.2.0 (2025-10-24)** - **機械学習推薦システム + エンタープライズ機能強化**
   - **機械学習ベース推薦システム追加** (skillnote_recommendation/ml/)
