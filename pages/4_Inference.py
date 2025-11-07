@@ -138,39 +138,44 @@ def create_growth_path_timeline(growth_path, role_name: str):
         for skill, rec_order, priority, stage in zip(sorted_skills, recommended_orders, priority_scores, stages)
     ]
 
-    # 累積スキル取得割合を計算
-    total_skills = len(sorted_skills)
-    cumulative_percentages = [(i + 1) / total_skills * 100 for i in range(total_skills)]
+    # スキルの貴重度スコアを計算
+    # 取得率が低い（レア）= 高得点、取得率が高い（コモン）= 低得点
+    # 貴重度 = (1 - 取得率) × 100
+    rarity_scores = [(1 - skill.acquisition_rate) * 100 for skill in sorted_skills]
 
     # 時間軸（平均取得順序）を取得
     time_axis = [skill.average_order for skill in sorted_skills]
 
-    # マーカーサイズ：取得率に応じて変化（10～30）
-    marker_sizes = [10 + (rate / 100) * 20 for rate in acquisition_rates]
+    # マーカーサイズ：貴重度に応じて変化（10～30）
+    # 貴重度が高い（レア）= 大きいマーカー
+    marker_sizes = [10 + (score / 100) * 20 for score in rarity_scores]
 
     # 折れ線グラフを作成
     fig = go.Figure()
 
-    # メインの折れ線：累積スキル取得割合
+    # メインの折れ線：スキルの貴重度スコア
     fig.add_trace(go.Scatter(
         x=time_axis,
-        y=cumulative_percentages,
+        y=rarity_scores,
         mode='lines+markers',
-        name='累積スキル習得割合',
+        name='スキル貴重度',
         line=dict(color='#2E7D32', width=3),
         marker=dict(
             size=marker_sizes,
-            color=acquisition_rates,  # 取得率で色分け
+            color=rarity_scores,  # 貴重度で色分け
             colorscale=[
-                [0, '#2E7D32'],      # 0%: 濃緑（上級・専門スキル）
-                [0.3, '#4CAF50'],    # 30%: 緑（中級）
-                [0.7, '#90EE90'],    # 70%: 薄緑（初級・基本スキル）
-                [1, '#C8E6C9']       # 100%: 非常に薄い緑
+                [0, '#C8E6C9'],      # 0点: 非常に薄い緑（コモン・基本スキル）
+                [0.3, '#90EE90'],    # 30点: 薄緑（低レア）
+                [0.7, '#4CAF50'],    # 70点: 緑（中レア）
+                [1, '#FFD700']       # 100点: 金色（レア・専門スキル）
             ],
             colorbar=dict(
-                title="取得率(%)",
+                title="貴重度<br>スコア",
                 thickness=15,
-                len=0.7
+                len=0.7,
+                tickmode='linear',
+                tick0=0,
+                dtick=20
             ),
             line=dict(color='white', width=2),
             symbol='circle',
@@ -180,42 +185,46 @@ def create_growth_path_timeline(growth_path, role_name: str):
         hoverinfo='text'
     ))
 
-    # 重要なマイルストーン（25%, 50%, 75%, 100%）にグリッド線を追加
-    for milestone in [25, 50, 75, 100]:
+    # 貴重度の階層線を追加（20点刻み）
+    for level in [20, 40, 60, 80]:
         fig.add_hline(
-            y=milestone,
+            y=level,
             line_dash="dot",
             line_color="gray",
             opacity=0.5,
-            annotation_text=f"{milestone}%",
+            annotation_text=f"{level}点",
             annotation_position="right"
         )
 
-    # 上位5件のスキル名を表示
-    for i in range(min(5, len(sorted_skills))):
+    # レアスキル（上位5件）のスキル名を表示
+    # 貴重度でソートして上位5件を取得
+    skills_by_rarity = sorted(enumerate(sorted_skills), key=lambda x: rarity_scores[x[0]], reverse=True)
+    top_rare_indices = [idx for idx, _ in skills_by_rarity[:5]]
+
+    for i in top_rare_indices:
         fig.add_annotation(
             x=time_axis[i],
-            y=cumulative_percentages[i],
+            y=rarity_scores[i],
             text=skill_names[i],
             showarrow=True,
             arrowhead=2,
             arrowsize=1,
             arrowwidth=1,
-            arrowcolor='gray',
+            arrowcolor='#FFD700',  # 金色の矢印
             ax=60 if i % 2 == 0 else -60,
             ay=-40 if i % 2 == 0 else 40,
-            font=dict(size=9, color='black'),
-            bgcolor='rgba(255,255,255,0.9)',
-            bordercolor='gray',
-            borderwidth=1,
+            font=dict(size=9, color='black', weight='bold'),
+            bgcolor='rgba(255,215,0,0.2)',  # 薄い金色の背景
+            bordercolor='#FFD700',
+            borderwidth=2,
             borderpad=2
         )
 
     # レイアウト設定
     fig.update_layout(
         title=dict(
-            text=f"<b>役職「{role_name}」のスキル取得シナリオ（累積表示）</b><br>"
-                 f"<sup>時間軸に沿った累積スキル習得割合の推移（{growth_path.total_members}名のデータから分析）</sup>",
+            text=f"<b>役職「{role_name}」のスキル取得シナリオ（貴重度評価）</b><br>"
+                 f"<sup>時間軸に沿った各スキルの貴重度（レアリティ）評価（{growth_path.total_members}名のデータから分析）</sup>",
             x=0.5,
             xanchor='center'
         ),
@@ -225,13 +234,13 @@ def create_growth_path_timeline(growth_path, role_name: str):
             showgrid=True
         ),
         yaxis=dict(
-            title="<b>累積スキル習得割合 (%)</b>",
+            title="<b>スキル貴重度スコア（点）</b><br><sub>※レアなスキルほど高得点</sub>",
             gridcolor='lightgray',
             showgrid=True,
-            range=[0, 105]
+            range=[-5, 105]
         ),
         height=600,
-        margin=dict(l=80, r=100, t=100, b=80),
+        margin=dict(l=90, r=120, t=100, b=80),
         plot_bgcolor='white',
         hovermode='closest',
         showlegend=False
@@ -1527,7 +1536,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     timeline_fig = create_growth_path_timeline(growth_path, role_name)
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
-                                        st.caption("💡 横軸：時間軸（平均取得順序）、縦軸：累積スキル習得割合（0%→100%）。マーカーの色：各スキルの取得率（濃緑=専門スキル、薄緑=基本スキル）、マーカーのサイズ：取得率の高さ。点線は25%/50%/75%/100%のマイルストーン。上位5件のスキル名を表示。")
+                                        st.caption("💡 横軸：時間軸（平均取得順序）、縦軸：スキルの貴重度スコア（0点→100点）。貴重度 = (1 - 取得率) × 100。レアなスキル（取得率が低い）ほど高得点。マーカーの色：薄緑=コモン、緑=中レア、金色=レア。マーカーのサイズ：貴重度の高さ。金色のラベルはレア度トップ5のスキル。")
 
                                 with stages_tab:
                                     # 段階別チャートを作成
