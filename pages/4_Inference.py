@@ -47,7 +47,7 @@ from skillnote_recommendation.utils.ui_components import (
 # ヘルパー関数
 # =========================================================
 
-def create_growth_path_timeline(growth_path, role_name: str, members_df=None, member_competence_df=None, selected_types=None):
+def create_growth_path_timeline(growth_path, role_name: str, members_df=None, member_competence_df=None, selected_types=None, target_member_code=None):
     """
     役職の成長パス（スキル取得シナリオ）をタイムライン形式で可視化
 
@@ -56,6 +56,7 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
         role_name: 役職名
         members_df: メンバーマスタ（職種情報を含む）
         member_competence_df: メンバー保有力量データ
+        target_member_code: 推薦対象メンバーコード（指定した場合、未習得スキルのみ表示）
 
     Returns:
         Plotlyのfigureオブジェクト
@@ -65,6 +66,22 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
 
     # データ準備
     skills = growth_path.skills_in_order
+
+    # 推薦対象メンバーが指定された場合、保有スキルを取得
+    member_skills_set = set()
+    if target_member_code and member_competence_df is not None:
+        member_skills = member_competence_df[
+            member_competence_df['メンバーコード'] == target_member_code
+        ]['力量コード'].unique()
+        member_skills_set = set(member_skills)
+
+    # 未習得スキルのみフィルタリング（target_member_codeが指定された場合）
+    if target_member_code:
+        skills = [skill for skill in skills if skill.competence_code not in member_skills_set]
+
+    # フィルタ後にスキルが空の場合はNoneを返す
+    if not skills:
+        return None
 
     # 優先度スコアを計算（取得率と取得順序を組み合わせる）
     # スコアが高いほど早期に習得すべきスキル
@@ -1251,31 +1268,84 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     recs = []
                     graph_recommendations = None
                 else:
-                    # 全役職について推薦を生成（役職全体の視点で）
-                    all_role_recommendations = {}
+                    # 選択されたメンバーの役職に対して推薦を生成
+                    member_role = td["members_clean"][
+                        td["members_clean"]['メンバーコード'] == selected_member_code
+                    ]['役職'].iloc[0] if len(td["members_clean"][
+                        td["members_clean"]['メンバーコード'] == selected_member_code
+                    ]) > 0 else None
 
-                    with st.spinner("各役職の推薦を生成中..."):
-                        for role_name, growth_path in growth_paths.items():
-                            # 役職全体に対して推薦を生成（個人ベースではない）
-                            role_recs = analyzer.recommend_for_role(
-                                role_name=role_name,
-                                top_n=top_n,
-                                min_acquisition_rate=min_acquisition_rate
-                            )
+                    if not member_role or member_role not in growth_paths:
+                        st.warning(f"⚠️ メンバーの役職「{member_role}」の成長パスが見つかりません。")
+                        recs = []
+                        graph_recommendations = None
+                    else:
+                        growth_path = growth_paths[member_role]
 
-                            all_role_recommendations[role_name] = role_recs
+                        # メンバーの保有スキルを取得
+                        member_skills = td["member_competence"][
+                            td["member_competence"]['メンバーコード'] == selected_member_code
+                        ]['力量コード'].unique()
+                        member_skills_set = set(member_skills)
 
-                            # デバッグログ出力（ユーザーには表示しない）
-                            logger.info(f"役職 '{role_name}': {len(role_recs)}件の推薦を生成")
+                        # 未習得スキルを抽出し、成長段階別に分類
+                        beginner_recs = []  # 初級（acquisition_rate >= 0.7）
+                        intermediate_recs = []  # 中級（0.3 <= acquisition_rate < 0.7）
+                        advanced_recs = []  # 上級（acquisition_rate < 0.3）
 
-                    # セッションステートに保存
-                    st.session_state.role_based_growth_paths = growth_paths
-                    st.session_state.role_based_analyzer = analyzer
-                    st.session_state.role_based_recommendations = all_role_recommendations
+                        for skill_pattern in growth_path.skills_in_order:
+                            # 既に習得済みのスキルはスキップ
+                            if skill_pattern.competence_code in member_skills_set:
+                                continue
 
-                    # 統合用のrecsは空にする（役職別に表示するため）
-                    recs = []
-                    graph_recommendations = None
+                            # 取得率が低すぎるスキルはスキップ（最小閾値）
+                            if skill_pattern.acquisition_rate < min_acquisition_rate:
+                                continue
+
+                            # 推薦オブジェクトを作成
+                            rec = {
+                                'competence_code': skill_pattern.competence_code,
+                                'competence_name': skill_pattern.competence_name,
+                                'competence_type': skill_pattern.competence_type,
+                                'category': skill_pattern.category,
+                                'priority_score': 1.0 / (skill_pattern.average_order + 1),
+                                'average_order': skill_pattern.average_order,
+                                'acquisition_rate': skill_pattern.acquisition_rate,
+                                'reason': f"役職「{member_role}」の成長パス上のスキル（取得率: {skill_pattern.acquisition_rate*100:.1f}%、平均取得順序: {skill_pattern.average_order:.1f}番目）"
+                            }
+
+                            # 成長段階別に分類
+                            if skill_pattern.acquisition_rate >= 0.7:
+                                beginner_recs.append(rec)
+                            elif skill_pattern.acquisition_rate >= 0.3:
+                                intermediate_recs.append(rec)
+                            else:
+                                advanced_recs.append(rec)
+
+                        # 各段階で優先度順にソート
+                        beginner_recs.sort(key=lambda x: x['priority_score'], reverse=True)
+                        intermediate_recs.sort(key=lambda x: x['priority_score'], reverse=True)
+                        advanced_recs.sort(key=lambda x: x['priority_score'], reverse=True)
+
+                        # 各段階から5個ずつ取得
+                        role_recs = (
+                            beginner_recs[:5] +
+                            intermediate_recs[:5] +
+                            advanced_recs[:5]
+                        )
+
+                        # 役職別の推薦として保存
+                        all_role_recommendations = {member_role: role_recs}
+
+                        # セッションステートに保存
+                        st.session_state.role_based_growth_paths = growth_paths
+                        st.session_state.role_based_analyzer = analyzer
+                        st.session_state.role_based_recommendations = all_role_recommendations
+                        st.session_state.selected_member_code = selected_member_code
+
+                        # 統合用のrecsは空にする（役職別に表示するため）
+                        recs = []
+                        graph_recommendations = None
 
                 # パターン別推薦情報をクリア
                 if 'pattern_recommendations' in st.session_state:
@@ -1622,19 +1692,21 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                 timeline_tab, stages_tab = st.tabs(["🔄 取得順序タイムライン", "📊 段階別分布"])
 
                                 with timeline_tab:
-                                    # タイムライン図を作成
+                                    # タイムライン図を作成（推薦対象メンバーの未習得スキルのみ表示）
+                                    target_member = st.session_state.get('selected_member_code')
                                     timeline_fig = create_growth_path_timeline(
                                         growth_path,
                                         role_name,
                                         members_df=td["members_clean"],
                                         member_competence_df=td["member_competence"],
-                                        selected_types=selected_competence_types
+                                        selected_types=selected_competence_types,
+                                        target_member_code=target_member
                                     )
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
-                                        st.caption("💡 4象限マトリックス：横軸=取得難易度（0-100点）、縦軸=貴重度（0-100点）。赤い十字線で50点を中心に4象限に分割。右上=難しい×レア（最優先）、左上=簡単×レア（すぐ習得）、右下=難しい×コモン（優先度低）、左下=簡単×コモン（基本）。マーカーの色=職種、サイズ=固定。凡例クリックで職種別にフィルター可能。力量タイプの絞り込みも可能。")
+                                        st.caption("💡 4象限マトリックス：横軸=取得難易度（0-100点）、縦軸=貴重度（0-100点）。赤い十字線で50点を中心に4象限に分割。右上=難しい×レア（最優先）、左上=簡単×レア（すぐ習得）、右下=難しい×コモン（優先度低）、左下=簡単×コモン（基本）。マーカーの色=職種、サイズ=固定。凡例クリックで職種別にフィルター可能。力量タイプの絞り込みも可能。あなたが未習得のスキルのみ表示されています。")
                                     else:
-                                        st.warning("選択された力量タイプに該当するスキルがありません。")
+                                        st.warning("選択された力量タイプに該当するスキル、またはあなたが未習得のスキルがありません。")
 
                                 with stages_tab:
                                     # 段階別チャートを作成
@@ -1654,9 +1726,24 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                        "- この役職の成長パスで推薦可能なスキルが存在しない")
                                 continue
 
+                            # 成長段階別の推薦メッセージ
+                            st.markdown("#### 📚 推薦スキル一覧")
+                            st.info("初級・中級・上級の各段階から、優先度が高いスキルを最大5個ずつ推薦しています。")
+
                             # 推薦結果をシンプルなリストで表示
                             for idx, rec_dict in enumerate(role_recs_list, 1):
-                                title = f"🎯 推薦 {idx}: {rec_dict['competence_name']} (優先度スコア: {rec_dict['priority_score']:.3f})"
+                                # 成長段階を判定
+                                if rec_dict['acquisition_rate'] >= 0.7:
+                                    stage_emoji = "🌱"
+                                    stage_name = "初級"
+                                elif rec_dict['acquisition_rate'] >= 0.3:
+                                    stage_emoji = "🌿"
+                                    stage_name = "中級"
+                                else:
+                                    stage_emoji = "🌳"
+                                    stage_name = "上級"
+
+                                title = f"{stage_emoji} 推薦 {idx}: [{stage_name}] {rec_dict['competence_name']} (優先度: {rec_dict['priority_score']:.3f})"
 
                                 with st.expander(title):
                                     # スキル情報
@@ -1669,15 +1756,18 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                         st.markdown(f"**平均取得順序:** {rec_dict['average_order']:.1f}番目")
                                     with col3:
                                         st.markdown(f"**役職内取得率:** {rec_dict['acquisition_rate']*100:.1f}%")
-                                        # 成長段階のラベル
-                                        # 取得率が高い = 基本スキル = 初級、取得率が低い = 専門スキル = 上級
+                                        # 成長段階の詳細説明
                                         if rec_dict['acquisition_rate'] >= 0.7:
                                             stage = "🌱 初級（基本スキル）"
+                                            stage_desc = "多くの人が習得している基本的なスキル"
                                         elif rec_dict['acquisition_rate'] >= 0.3:
                                             stage = "🌿 中級（中堅スキル）"
+                                            stage_desc = "中堅レベルで習得されるスキル"
                                         else:
                                             stage = "🌳 上級（専門スキル）"
+                                            stage_desc = "専門的で高度なスキル"
                                         st.markdown(f"**成長段階:** {stage}")
+                                        st.caption(stage_desc)
 
                                     # 推薦理由
                                     st.markdown("---")
