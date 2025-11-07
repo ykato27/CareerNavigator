@@ -136,25 +136,64 @@ def create_growth_path_timeline(growth_path, role_name: str):
         for skill, rec_order, priority, stage in zip(sorted_skills, recommended_orders, priority_scores, stages)
     ]
 
-    # タイムライン図を作成
+    # 折れ線グラフを作成
     fig = go.Figure()
 
-    # スキルをバーで表示
-    fig.add_trace(go.Bar(
+    # メインの折れ線：取得率の推移
+    fig.add_trace(go.Scatter(
         x=recommended_orders,
-        y=skill_names,
-        orientation='h',
+        y=acquisition_rates,
+        mode='lines+markers',
+        name='取得率',
+        line=dict(color='#2E7D32', width=3),
         marker=dict(
+            size=10,
             color=colors,
-            line=dict(color='white', width=1)
+            line=dict(color='white', width=2),
+            symbol='circle'
         ),
         hovertext=hover_texts,
         hoverinfo='text',
-        text=[f"{rate:.0f}%" for rate in acquisition_rates],
-        textposition='inside',
-        textfont=dict(color='white', size=10),
-        name='スキル取得順序'
+        yaxis='y1'
     ))
+
+    # 優先度スコアの推移（第2軸）
+    priority_scores_percent = [p * 100 for p in priority_scores]
+    fig.add_trace(go.Scatter(
+        x=recommended_orders,
+        y=priority_scores_percent,
+        mode='lines+markers',
+        name='優先度スコア',
+        line=dict(color='#FF9800', width=2, dash='dash'),
+        marker=dict(
+            size=8,
+            color='#FF9800',
+            line=dict(color='white', width=1),
+            symbol='diamond'
+        ),
+        yaxis='y2',
+        hovertemplate='<b>優先度スコア</b>: %{y:.1f}<extra></extra>'
+    ))
+
+    # スキル名を表示するためのアノテーション（上位5件のみ）
+    for i in range(min(5, len(sorted_skills))):
+        fig.add_annotation(
+            x=recommended_orders[i],
+            y=acquisition_rates[i],
+            text=skill_names[i],
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1,
+            arrowwidth=1,
+            arrowcolor='gray',
+            ax=40 if i % 2 == 0 else -40,
+            ay=-30 if i % 2 == 0 else 30,
+            font=dict(size=9, color='black'),
+            bgcolor='rgba(255,255,255,0.8)',
+            bordercolor='gray',
+            borderwidth=1,
+            borderpad=2
+        )
 
     # レイアウト設定
     fig.update_layout(
@@ -165,20 +204,43 @@ def create_growth_path_timeline(growth_path, role_name: str):
             xanchor='center'
         ),
         xaxis=dict(
-            title="推奨取得順序（多くの人が早期に取得しているスキル順）",
+            title="<b>推奨取得順序（左から右へ：優先度が高いスキル順）</b>",
             gridcolor='lightgray',
-            showgrid=True
+            showgrid=True,
+            tickmode='linear',
+            tick0=1,
+            dtick=1
         ),
         yaxis=dict(
-            title="",
-            autorange="reversed"  # 上から下に表示
+            title="<b>役職内取得率 (%)</b>",
+            gridcolor='lightgray',
+            showgrid=True,
+            side='left',
+            range=[0, max(105, max(acquisition_rates) + 5)]
         ),
-        height=max(400, len(sorted_skills) * 30),  # スキル数に応じて高さを調整
-        margin=dict(l=200, r=50, t=100, b=50),
+        yaxis2=dict(
+            title="<b>優先度スコア (%)</b>",
+            overlaying='y',
+            side='right',
+            showgrid=False,
+            range=[0, 105]
+        ),
+        height=600,
+        margin=dict(l=80, r=80, t=100, b=80),
         plot_bgcolor='white',
-        hovermode='closest',
-        showlegend=False
+        hovermode='x unified',
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='center',
+            x=0.5
+        )
     )
+
+    # グリッド線を追加
+    fig.update_xaxes(showline=True, linewidth=1, linecolor='gray', mirror=True)
+    fig.update_yaxes(showline=True, linewidth=1, linecolor='gray', mirror=True)
 
     return fig
 
@@ -1466,7 +1528,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     timeline_fig = create_growth_path_timeline(growth_path, role_name)
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
-                                        st.caption("💡 横軸は推奨取得順序（左から右へ：多くの人が早期に習得しているスキル順）。バーの色は成長段階（緑が薄い=初級、濃い=上級）。バー内の数値は役職内での取得率（%）です。")
+                                        st.caption("💡 緑色の実線：取得率の推移、オレンジ色の破線：優先度スコアの推移。マーカーの色は成長段階（薄緑=初級、緑=中級、濃緑=上級）。上位5件のスキル名を表示しています。")
 
                                 with stages_tab:
                                     # 段階別チャートを作成
