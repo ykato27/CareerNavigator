@@ -17,6 +17,8 @@
 
 本システムは、**協調フィルタリング**に基づく機械学習推薦システムです。Non-negative Matrix Factorization (NMF) を用いてメンバーの習得パターンをモデル化し、多様性再ランキングにより推薦の質を向上させます。
 
+> **関連ドキュメント**: より詳細なモデル実装については、[MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md)を参照してください。
+
 ### 主な特徴
 
 - ✅ **NMFベースの協調フィルタリング**
@@ -53,6 +55,8 @@ skillnote_recommendation/ml/
    ↓
 6. 推薦結果出力
 ```
+
+> **詳細**: データ前処理とハイパーパラメータチューニングについては、[MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md)を参照してください。
 
 ---
 
@@ -544,28 +548,37 @@ $$
 #### 時系列分割
 
 ```python
-from skillnote_recommendation.core.evaluator import Evaluator
+from skillnote_recommendation.core.evaluator import RecommendationEvaluator
+from skillnote_recommendation.ml.ml_recommender import MLRecommender
 
-evaluator = Evaluator(data)
+evaluator = RecommendationEvaluator()
 
 # 時系列分割 (80%学習、20%テスト)
-train_data, test_data = evaluator.temporal_split(split_ratio=0.8)
+train_data, test_data = evaluator.temporal_train_test_split(
+    member_competence=member_competence,
+    train_ratio=0.8
+)
 
-# MLモデル学習
-ml_recommender = MLRecommender(train_data)
+# MLモデル学習（n_componentsパラメータを指定可能）
+ml_recommender = MLRecommender.build(
+    member_competence=train_data,
+    competence_master=competence_master,
+    member_master=member_master,
+    use_preprocessing=False,
+    use_tuning=False,
+    n_components=20  # 潜在因子数を明示的に指定
+)
 
 # 評価
 metrics = evaluator.evaluate_with_diversity(
-    train_data,
-    test_data,
-    competence_master,
+    train_data=train_data,
+    test_data=test_data,
+    competence_master=competence_master,
     top_k=10
 )
 
-print(f"Precision@10: {metrics['precision@10']:.3f}")
-print(f"Recall@10: {metrics['recall@10']:.3f}")
-print(f"NDCG@10: {metrics['ndcg@10']:.3f}")
-print(f"Category Diversity: {metrics['avg_category_diversity']:.3f}")
+# 結果表示
+evaluator.print_evaluation_results(metrics)
 ```
 
 ---
@@ -903,12 +916,29 @@ ml_recommender.recommend(
 ```python
 # 定期的な再学習スクリプト例
 import schedule
+from skillnote_recommendation.core.data_loader import DataLoader
+from skillnote_recommendation.core.data_transformer import DataTransformer
+from skillnote_recommendation.ml.ml_recommender import MLRecommender
 
 def retrain_model():
     loader = DataLoader()
     data = loader.load_all_data()
-    ml_recommender = MLRecommender(data)
-    ml_recommender.model.save('models/ml_model_latest.pkl')
+
+    transformer = DataTransformer()
+    competence_master = transformer.create_competence_master(data)
+    member_competence, _ = transformer.create_member_competence(data, competence_master)
+
+    ml_recommender = MLRecommender.build(
+        member_competence=member_competence,
+        competence_master=competence_master,
+        member_master=data['members'],
+        use_preprocessing=True,
+        use_tuning=False,
+        n_components=20
+    )
+
+    # モデルの保存（必要に応じて）
+    ml_recommender.mf_model.save('models/ml_model_latest.pkl')
 
 # 毎月1日に実行
 schedule.every().month.at("01 00:00").do(retrain_model)
@@ -923,10 +953,20 @@ import random
 def get_recommendation(member_code):
     if random.random() < 0.5:
         # グループA: ハイブリッド戦略
-        return ml_recommender.recommend(member_code, diversity_strategy='hybrid')
+        return ml_recommender.recommend(
+            member_code=member_code,
+            top_n=10,
+            use_diversity=True,
+            diversity_strategy='hybrid'
+        )
     else:
         # グループB: MMR戦略
-        return ml_recommender.recommend(member_code, diversity_strategy='mmr')
+        return ml_recommender.recommend(
+            member_code=member_code,
+            top_n=10,
+            use_diversity=True,
+            diversity_strategy='mmr'
+        )
 
 # 効果測定
 # - 力量習得率
@@ -990,6 +1030,7 @@ logger.info(f"Reconstruction error: {model.model.reconstruction_err_:.4f}")
 ✅ **NMFによる協調フィルタリング**
 - 非負制約により解釈可能
 - 潜在因子数 k=20 が推奨
+- `MLRecommender.build(n_components=20)` で明示的に指定可能
 
 ✅ **4つの多様性戦略**
 - Hybrid が最もバランスが良い
@@ -1010,5 +1051,15 @@ logger.info(f"Reconstruction error: {model.model.reconstruction_err_:.4f}")
 
 ---
 
+## 関連ドキュメント
+
+- [MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md) - モデル実装の詳細、データ前処理、ハイパーパラメータチューニング
+- [EVALUATION.md](EVALUATION.md) - 推薦システムの評価方法
+- [QUICKSTART.md](QUICKSTART.md) - クイックスタートガイド
+- [CODE_STRUCTURE.md](CODE_STRUCTURE.md) - コード構造とモジュール設計
+
+---
+
 **更新履歴:**
+- 2025-11-07: MLRecommender.build()のn_componentsパラメータ、関連ドキュメントへのリンク追加
 - 2025-10-24: 初版作成

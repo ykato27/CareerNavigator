@@ -1,8 +1,10 @@
-# StreamlitアプリケーションガイD
+# Streamlitアプリケーションガイド
 
 ## 概要
 
 スキルノート推薦システムのStreamlitアプリケーションは、ブラウザベースのインタラクティブなWebアプリケーションです。
+
+> **関連ドキュメント**: モデルの詳細については、[MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md)および[ML_TECHNICAL_DETAILS.md](ML_TECHNICAL_DETAILS.md)を参照してください。
 
 **主な機能:**
 - ✅ 全6種類のCSVファイルアップロード
@@ -296,10 +298,18 @@ Streamlitは以下の状態を管理しています：
 - 表示項目
 - グラフのスタイル
 
+## 関連ドキュメント
+
+- [MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md) - モデル実装の詳細、データ前処理、ハイパーパラメータチューニング
+- [ML_TECHNICAL_DETAILS.md](ML_TECHNICAL_DETAILS.md) - 機械学習推薦システムの技術詳細
+- [EVALUATION.md](EVALUATION.md) - 推薦システムの評価方法
+- [CODE_STRUCTURE.md](CODE_STRUCTURE.md) - コード構造とモジュール設計（238テスト、カバレッジ30%）
+- [QUICKSTART.md](QUICKSTART.md) - クイックスタートガイド
+- [本プロジェクトREADME](../README.md) - プロジェクト全体の概要
+
 ## 参考リンク
 
 - [Streamlit公式ドキュメント](https://docs.streamlit.io/)
 - [Plotly公式ドキュメント](https://plotly.com/python/)
-- [本プロジェクトREADME](../README.md)
 - [新規ユーザーCSVテンプレート](../templates/new_user_template.csv)
 - [テンプレート使い方ガイド](../templates/README.md)

@@ -2,6 +2,14 @@
 
 このドキュメントでは、CareerNavigatorプロジェクトのコード構造と各モジュールの役割について説明します。
 
+## テスト品質
+
+- **テスト数**: 238テスト
+- **カバレッジ**: 30%
+- **テスト実行**: `uv run pytest`
+
+> **関連ドキュメント**: モデル実装の詳細については、[MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md)を参照してください。
+
 ## プロジェクト構造
 
 ```
@@ -286,20 +294,30 @@ tests/
 ├── test_matrix_factorization.py    # 行列分解テスト
 ├── test_diversity.py               # 多様性テスト
 ├── test_ml_recommender.py          # ML推薦システムテスト
+├── test_hyperparameter_tuning.py   # ハイパーパラメータチューニングテスト
 └── conftest.py                     # テストフィクスチャ
 ```
+
+### テスト統計
+
+- **総テスト数**: 238テスト
+- **テストカバレッジ**: 30%
+- **テストフレームワーク**: pytest
 
 ### テストの実行
 
 ```bash
-# すべてのテストを実行
+# すべてのテストを実行（238テスト）
 uv run pytest
 
 # 特定のモジュールのテストのみ
 uv run pytest tests/test_ml_recommender.py
 
-# カバレッジ付き
+# カバレッジ付き（現在30%）
 uv run pytest --cov=skillnote_recommendation
+
+# カバレッジレポートをHTMLで出力
+uv run pytest --cov=skillnote_recommendation --cov-report=html
 ```
 
 ## 拡張ガイド
@@ -397,6 +415,17 @@ logger.error("エラーが発生しました")
 2. **可読性**: 明確な命名規則とドキュメント
 3. **保守性**: 単一責任の原則により、変更が容易
 4. **拡張性**: 新しい機能の追加が簡単
-5. **テスト性**: 小さな関数単位でテスト可能
+5. **テスト性**: 小さな関数単位でテスト可能（238テスト、カバレッジ30%）
 
 新しいコードを書く際は、この構造とパターンに従ってください。
+
+---
+
+## 関連ドキュメント
+
+- [MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md) - モデル実装の詳細、データ前処理、ハイパーパラメータチューニング
+- [ML_TECHNICAL_DETAILS.md](ML_TECHNICAL_DETAILS.md) - 機械学習推薦システムの技術詳細
+- [EVALUATION.md](EVALUATION.md) - 推薦システムの評価方法
+- [TEST_DESIGN.md](TEST_DESIGN.md) - テスト設計ドキュメント（238テストケースの詳細）
+- [QUICKSTART.md](QUICKSTART.md) - クイックスタートガイド
+- [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md) - Streamlitアプリケーションガイド
