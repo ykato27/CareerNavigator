@@ -143,118 +143,142 @@ def create_growth_path_timeline(growth_path, role_name: str):
     # 貴重度 = (1 - 取得率) × 100
     rarity_scores = [(1 - skill.acquisition_rate) * 100 for skill in sorted_skills]
 
-    # 各スキルの習得時間を計算（難しいスキルほど時間がかかる）
-    # 習得時間（ヶ月）= 0.5 + (貴重度 / 100) × 1.5
-    # 貴重度0（簡単）：0.5ヶ月、貴重度50（中級）：1.25ヶ月、貴重度100（難しい）：2.0ヶ月
-    learning_times = [0.5 + (score / 100) * 1.5 for score in rarity_scores]
+    # 取得難易度スコアを計算
+    # 取得率が低い（少数しか取得していない）= 難しい
+    # 平均取得順序が遅い（後で取得される）= 難しい
+    # 両方を組み合わせて難易度スコアを算出
+    difficulty_scores = []
+    max_order = max(s.average_order for s in sorted_skills) if sorted_skills else 1
 
-    # 累積時間軸を計算（順番にスキルを取っていく想定）
-    cumulative_times = []
-    total_time = 0
-    for learning_time in learning_times:
-        total_time += learning_time
-        cumulative_times.append(total_time)
+    for skill in sorted_skills:
+        # 取得率ベースの難易度（0～50点）
+        acquisition_difficulty = (1 - skill.acquisition_rate) * 50
 
-    time_axis = cumulative_times
+        # 取得順序ベースの難易度（0～50点）
+        order_difficulty = (skill.average_order / max_order) * 50
 
-    # マーカーサイズ：貴重度に応じて変化（10～30）
-    # 貴重度が高い（レア）= 大きいマーカー
-    marker_sizes = [10 + (score / 100) * 20 for score in rarity_scores]
+        # 合計難易度スコア（0～100点）
+        total_difficulty = acquisition_difficulty + order_difficulty
+        difficulty_scores.append(total_difficulty)
 
-    # 折れ線グラフを作成
+    # 力量タイプごとにデータを分類
+    skills_by_type = {}
+    for i, skill in enumerate(sorted_skills):
+        comp_type = skill.competence_type
+        if comp_type not in skills_by_type:
+            skills_by_type[comp_type] = {
+                'difficulty': [],
+                'rarity': [],
+                'names': [],
+                'hover_texts': []
+            }
+
+        skills_by_type[comp_type]['difficulty'].append(difficulty_scores[i])
+        skills_by_type[comp_type]['rarity'].append(rarity_scores[i])
+        skills_by_type[comp_type]['names'].append(skill.competence_name)
+        skills_by_type[comp_type]['hover_texts'].append(hover_texts[i])
+
+    # 力量タイプごとの色を定義
+    type_colors = {
+        'TECHNICAL': '#1f77b4',     # 青
+        'BUSINESS': '#ff7f0e',      # オレンジ
+        'MANAGEMENT': '#2ca02c',    # 緑
+        'COMMUNICATION': '#d62728', # 赤
+        'CREATIVE': '#9467bd',      # 紫
+        'OTHER': '#8c564b'          # 茶色
+    }
+
+    # 散布図を作成
     fig = go.Figure()
 
-    # メインの折れ線：スキルの貴重度スコア
-    fig.add_trace(go.Scatter(
-        x=time_axis,
-        y=rarity_scores,
-        mode='lines+markers',
-        name='スキル貴重度',
-        line=dict(color='#2E7D32', width=3),
-        marker=dict(
-            size=marker_sizes,
-            color=rarity_scores,  # 貴重度で色分け
-            colorscale=[
-                [0, '#C8E6C9'],      # 0点: 非常に薄い緑（コモン・基本スキル）
-                [0.3, '#90EE90'],    # 30点: 薄緑（低レア）
-                [0.7, '#4CAF50'],    # 70点: 緑（中レア）
-                [1, '#FFD700']       # 100点: 金色（レア・専門スキル）
-            ],
-            colorbar=dict(
-                title="貴重度<br>スコア",
-                thickness=15,
-                len=0.7,
-                tickmode='linear',
-                tick0=0,
-                dtick=20
+    # 力量タイプごとにトレースを追加（フィルター可能にするため）
+    for comp_type, data in skills_by_type.items():
+        color = type_colors.get(comp_type, '#7f7f7f')  # デフォルトはグレー
+
+        fig.add_trace(go.Scatter(
+            x=data['difficulty'],
+            y=data['rarity'],
+            mode='markers',
+            name=comp_type,
+            marker=dict(
+                size=12,  # 固定サイズ
+                color=color,
+                line=dict(color='white', width=1),
+                opacity=0.8
             ),
-            line=dict(color='white', width=2),
-            symbol='circle',
-            showscale=True
-        ),
-        hovertext=hover_texts,
-        hoverinfo='text'
-    ))
+            text=data['names'],
+            hovertext=data['hover_texts'],
+            hoverinfo='text',
+            legendgroup=comp_type,
+            showlegend=True
+        ))
 
-    # 貴重度の階層線を追加（20点刻み）
-    for level in [20, 40, 60, 80]:
-        fig.add_hline(
-            y=level,
-            line_dash="dot",
-            line_color="gray",
-            opacity=0.5,
-            annotation_text=f"{level}点",
-            annotation_position="right"
-        )
+    # 中央の十字線を追加（50点の位置）
+    # 垂直線（難易度 = 50）
+    fig.add_vline(
+        x=50,
+        line_dash="dash",
+        line_color="red",
+        line_width=2,
+        opacity=0.7,
+        annotation_text="難易度50",
+        annotation_position="top"
+    )
 
-    # レアスキル（上位5件）のスキル名を表示
-    # 貴重度でソートして上位5件を取得
-    skills_by_rarity = sorted(enumerate(sorted_skills), key=lambda x: rarity_scores[x[0]], reverse=True)
-    top_rare_indices = [idx for idx, _ in skills_by_rarity[:5]]
+    # 水平線（貴重度 = 50）
+    fig.add_hline(
+        y=50,
+        line_dash="dash",
+        line_color="red",
+        line_width=2,
+        opacity=0.7,
+        annotation_text="貴重度50",
+        annotation_position="right"
+    )
 
-    for i in top_rare_indices:
-        fig.add_annotation(
-            x=time_axis[i],
-            y=rarity_scores[i],
-            text=skill_names[i],
-            showarrow=True,
-            arrowhead=2,
-            arrowsize=1,
-            arrowwidth=1,
-            arrowcolor='#FFD700',  # 金色の矢印
-            ax=60 if i % 2 == 0 else -60,
-            ay=-40 if i % 2 == 0 else 40,
-            font=dict(size=9, color='black', weight='bold'),
-            bgcolor='rgba(255,215,0,0.2)',  # 薄い金色の背景
-            bordercolor='#FFD700',
-            borderwidth=2,
-            borderpad=2
-        )
+    # 4象限のラベルを追加
+    fig.add_annotation(x=25, y=75, text="<b>簡単×レア</b><br>すぐ習得すべき",
+                      showarrow=False, font=dict(size=11, color='gray'), opacity=0.6)
+    fig.add_annotation(x=75, y=75, text="<b>難しい×レア</b><br>最優先習得候補",
+                      showarrow=False, font=dict(size=11, color='gray'), opacity=0.6)
+    fig.add_annotation(x=25, y=25, text="<b>簡単×コモン</b><br>基本スキル",
+                      showarrow=False, font=dict(size=11, color='gray'), opacity=0.6)
+    fig.add_annotation(x=75, y=25, text="<b>難しい×コモン</b><br>習得優先度低",
+                      showarrow=False, font=dict(size=11, color='gray'), opacity=0.6)
 
     # レイアウト設定
     fig.update_layout(
         title=dict(
-            text=f"<b>役職「{role_name}」のスキル取得シナリオ（貴重度評価）</b><br>"
-                 f"<sup>時間軸に沿った各スキルの貴重度（レアリティ）評価（{growth_path.total_members}名のデータから分析）</sup>",
+            text=f"<b>役職「{role_name}」のスキルマトリックス（難易度×貴重度）</b><br>"
+                 f"<sup>4象限分析：職種別に色分け、凡例クリックでフィルター可能（{growth_path.total_members}名のデータから分析）</sup>",
             x=0.5,
             xanchor='center'
         ),
         xaxis=dict(
-            title="<b>累積習得時間（ヶ月）</b><br><sub>※難しいスキルほど習得に時間がかかる想定</sub>",
-            gridcolor='lightgray',
-            showgrid=True
-        ),
-        yaxis=dict(
-            title="<b>スキル貴重度スコア（点）</b><br><sub>※レアなスキルほど高得点</sub>",
+            title="<b>取得難易度スコア（点）</b><br><sub>左：簡単、右：難しい</sub>",
             gridcolor='lightgray',
             showgrid=True,
-            range=[-5, 105]
+            range=[0, 100]
         ),
-        height=600,
-        margin=dict(l=90, r=120, t=100, b=80),
+        yaxis=dict(
+            title="<b>スキル貴重度スコア（点）</b><br><sub>下：コモン、上：レア</sub>",
+            gridcolor='lightgray',
+            showgrid=True,
+            range=[0, 100]
+        ),
+        height=700,
+        margin=dict(l=90, r=150, t=100, b=80),
         plot_bgcolor='white',
         hovermode='closest',
-        showlegend=False
+        showlegend=True,
+        legend=dict(
+            title=dict(text='<b>力量タイプ</b><br><sub>クリックでフィルター</sub>'),
+            orientation='v',
+            yanchor='top',
+            y=1,
+            xanchor='left',
+            x=1.02
+        )
     )
 
     # グリッド線を追加
@@ -1547,7 +1571,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     timeline_fig = create_growth_path_timeline(growth_path, role_name)
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
-                                        st.caption("💡 横軸：累積習得時間（ヶ月）。難しいスキルほど習得に時間がかかる想定。縦軸：スキルの貴重度スコア（0点→100点）。貴重度 = (1 - 取得率) × 100。レアなスキルほど高得点。マーカーの色：薄緑=コモン、金色=レア。マーカーのサイズ：貴重度の高さ。金色のラベルはレア度トップ5のスキル。")
+                                        st.caption("💡 4象限マトリックス：横軸=取得難易度（0-100点）、縦軸=貴重度（0-100点）。赤い十字線で50点を中心に4象限に分割。右上=難しい×レア（最優先）、左上=簡単×レア（すぐ習得）、右下=難しい×コモン（優先度低）、左下=簡単×コモン（基本）。マーカーの色=力量タイプ、サイズ=固定。凡例クリックで職種別にフィルター可能。")
 
                                 with stages_tab:
                                     # 段階別チャートを作成
