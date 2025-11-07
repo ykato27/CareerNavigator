@@ -47,7 +47,7 @@ from skillnote_recommendation.utils.ui_components import (
 # ヘルパー関数
 # =========================================================
 
-def create_growth_path_timeline(growth_path, role_name: str, members_df=None, member_competence_df=None):
+def create_growth_path_timeline(growth_path, role_name: str, members_df=None, member_competence_df=None, selected_types=None):
     """
     役職の成長パス（スキル取得シナリオ）をタイムライン形式で可視化
 
@@ -94,6 +94,14 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
     # ソート済みスキルリストを取得
     sorted_skills = [item['skill'] for item in skills_with_priority]
 
+    # 力量タイプでフィルタリング（指定がある場合）
+    if selected_types is not None and len(selected_types) > 0:
+        sorted_skills = [skill for skill in sorted_skills if skill.competence_type in selected_types]
+
+    # スキルが空の場合は None を返す
+    if len(sorted_skills) == 0:
+        return None
+
     # 成長段階を決定（取得率に基づく）
     # 取得率が高い = 多くの人が習得 = 基本スキル = 初級
     # 取得率が低い = 一部の専門家のみ = 高度なスキル = 上級
@@ -129,6 +137,7 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
     # ホバーテキスト
     hover_texts = [
         f"<b>{skill.competence_name}</b><br>"
+        f"力量タイプ: {skill.competence_type}<br>"
         f"推奨取得順序: {rec_order}番目<br>"
         f"優先度スコア: {priority:.3f}<br>"
         f"<br>"
@@ -166,23 +175,34 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
     # 各スキルの主要職種を特定
     skill_occupations = []
     if members_df is not None and member_competence_df is not None:
-        # 職種カラム名を動的に検出
+        # 必要なカラム名を動的に検出
         occupation_col = None
+        member_code_col_in_members = None
+        member_code_col_in_competence = None
+        competence_code_col = None
+
         for col in members_df.columns:
             if '職種' in col:
                 occupation_col = col
-                break
+            if 'メンバーコード' in col:
+                member_code_col_in_members = col
 
-        if occupation_col:
+        for col in member_competence_df.columns:
+            if 'メンバーコード' in col:
+                member_code_col_in_competence = col
+            if '力量コード' in col:
+                competence_code_col = col
+
+        if occupation_col and member_code_col_in_members and member_code_col_in_competence and competence_code_col:
             for skill in sorted_skills:
                 # このスキルを保有しているメンバーを取得
                 skill_holders = member_competence_df[
-                    member_competence_df['力量コード'] == skill.competence_code
-                ]['メンバーコード'].unique()
+                    member_competence_df[competence_code_col] == skill.competence_code
+                ][member_code_col_in_competence].unique()
 
                 # メンバーの職種を取得
                 holder_occupations = members_df[
-                    members_df['メンバーコード'].isin(skill_holders)
+                    members_df[member_code_col_in_members].isin(skill_holders)
                 ][occupation_col].dropna()
 
                 # 最も多い職種を特定
@@ -193,11 +213,11 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
 
                 skill_occupations.append(main_occupation)
         else:
-            # 職種カラムが見つからない場合は力量タイプを使用
-            skill_occupations = [skill.competence_type for skill in sorted_skills]
+            # 必要なカラムが見つからない場合は不明を設定
+            skill_occupations = ['不明' for _ in sorted_skills]
     else:
-        # データがない場合は力量タイプを使用
-        skill_occupations = [skill.competence_type for skill in sorted_skills]
+        # データがない場合は不明を設定
+        skill_occupations = ['不明' for _ in sorted_skills]
 
     # 職種ごとにデータを分類
     skills_by_occupation = {}
@@ -1600,6 +1620,16 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                 st.markdown("#### 📈 スキル取得シナリオ")
                                 st.info("この役職のメンバーの実データ（取得率と取得時期）を分析し、推奨取得順序を算出しています。左から右へ：多くの人が早期に習得しているスキル順です。")
 
+                                # 力量タイプフィルター
+                                available_types = ["SKILL", "EDUCATION", "LICENSE"]
+                                selected_competence_types = st.multiselect(
+                                    "力量タイプで絞り込み",
+                                    options=available_types,
+                                    default=available_types,
+                                    key=f"competence_type_filter_{role_name}",
+                                    help="表示する力量タイプを選択してください。複数選択可能です。"
+                                )
+
                                 # タブで表示
                                 timeline_tab, stages_tab = st.tabs(["🔄 取得順序タイムライン", "📊 段階別分布"])
 
@@ -1609,11 +1639,14 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                         growth_path,
                                         role_name,
                                         members_df=td["members_clean"],
-                                        member_competence_df=td["member_competence"]
+                                        member_competence_df=td["member_competence"],
+                                        selected_types=selected_competence_types
                                     )
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
-                                        st.caption("💡 4象限マトリックス：横軸=取得難易度（0-100点）、縦軸=貴重度（0-100点）。赤い十字線で50点を中心に4象限に分割。右上=難しい×レア（最優先）、左上=簡単×レア（すぐ習得）、右下=難しい×コモン（優先度低）、左下=簡単×コモン（基本）。マーカーの色=職種、サイズ=固定。凡例クリックで職種別にフィルター可能。")
+                                        st.caption("💡 4象限マトリックス：横軸=取得難易度（0-100点）、縦軸=貴重度（0-100点）。赤い十字線で50点を中心に4象限に分割。右上=難しい×レア（最優先）、左上=簡単×レア（すぐ習得）、右下=難しい×コモン（優先度低）、左下=簡単×コモン（基本）。マーカーの色=職種、サイズ=固定。凡例クリックで職種別にフィルター可能。力量タイプの絞り込みも可能。")
+                                    else:
+                                        st.warning("選択された力量タイプに該当するスキルがありません。")
 
                                 with stages_tab:
                                     # 段階別チャートを作成
