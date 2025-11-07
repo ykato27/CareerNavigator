@@ -955,6 +955,18 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                 # HybridRecommendationを標準のRecommendationに変換
                 recs = [convert_hybrid_to_recommendation(hr) for hr in graph_recommendations]
 
+                # 学習パスを生成（グラフベース推薦専用）
+                from skillnote_recommendation.graph import generate_learning_path_from_recommendations
+                learning_path = generate_learning_path_from_recommendations(
+                    recommendations=graph_recommendations_raw,
+                    knowledge_graph=st.session_state.knowledge_graph,
+                    member_code=selected_member_code,
+                    competence_master_df=td["competence_master"],
+                    member_competence_df=td["member_competence"]
+                )
+                # セッションステートに保存
+                st.session_state.graph_learning_path = learning_path
+
             elif internal_method == "ハイブリッド推薦":
                 # Knowledge Graphの確認
                 if 'knowledge_graph' not in st.session_state:
@@ -1133,8 +1145,145 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     for idx, rec in enumerate(recs, 1):
                         display_recommendation_details(rec, idx)
 
-                # グラフベースまたはハイブリッド推薦の場合
-                elif recommendation_method in ["グラフベース推薦", "ハイブリッド推薦"]:
+                # グラフベース推薦の場合（学習パス表示）
+                elif internal_method == "グラフベース推薦":
+                    # 学習パスを表示
+                    learning_path = st.session_state.get('graph_learning_path')
+
+                    if learning_path:
+                        st.markdown("---")
+                        st.markdown("## 📚 段階的な学習ロードマップ")
+                        st.info("推薦された力量を、習得しやすい順序で3つのフェーズに分類しました。基礎から順番に学習することをお勧めします。")
+
+                        # Phase 1: 基礎固め
+                        if learning_path.phase_1_basic:
+                            st.markdown("### 🌱 Phase 1: 基礎固め")
+                            st.markdown(f"**{len(learning_path.phase_1_basic)}個の力量**　まずはこれらから始めましょう")
+
+                            for idx, comp in enumerate(learning_path.phase_1_basic, 1):
+                                with st.expander(f"**{idx}. {comp['competence_name']}** (優先度: {comp['priority_score']:.2f})"):
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("グラフスコア", f"{comp['rwr_score']:.3f}")
+                                    with col2:
+                                        st.metric("習得容易性", f"{comp['ease_score']:.2f}")
+                                    with col3:
+                                        st.markdown(f"**カテゴリ**: {comp['category']}")
+
+                                    st.caption(f"力量タイプ: {comp['competence_type']} | 階層レベル: {comp['hierarchy_level']}")
+
+                        # Phase 2: 専門性構築
+                        if learning_path.phase_2_intermediate:
+                            st.markdown("---")
+                            st.markdown("### 🌿 Phase 2: 専門性構築")
+                            st.markdown(f"**{len(learning_path.phase_2_intermediate)}個の力量**　Phase 1の後に取り組みましょう")
+
+                            for idx, comp in enumerate(learning_path.phase_2_intermediate, 1):
+                                with st.expander(f"**{idx}. {comp['competence_name']}** (優先度: {comp['priority_score']:.2f})"):
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("グラフスコア", f"{comp['rwr_score']:.3f}")
+                                    with col2:
+                                        st.metric("習得容易性", f"{comp['ease_score']:.2f}")
+                                    with col3:
+                                        st.markdown(f"**カテゴリ**: {comp['category']}")
+
+                                    st.caption(f"力量タイプ: {comp['competence_type']} | 階層レベル: {comp['hierarchy_level']}")
+
+                        # Phase 3: エキスパート
+                        if learning_path.phase_3_expert:
+                            st.markdown("---")
+                            st.markdown("### 🌳 Phase 3: エキスパート")
+                            st.markdown(f"**{len(learning_path.phase_3_expert)}個の力量**　高度な専門性を身につけましょう")
+
+                            for idx, comp in enumerate(learning_path.phase_3_expert, 1):
+                                with st.expander(f"**{idx}. {comp['competence_name']}** (優先度: {comp['priority_score']:.2f})"):
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("グラフスコア", f"{comp['rwr_score']:.3f}")
+                                    with col2:
+                                        st.metric("習得容易性", f"{comp['ease_score']:.2f}")
+                                    with col3:
+                                        st.markdown(f"**カテゴリ**: {comp['category']}")
+
+                                    st.caption(f"力量タイプ: {comp['competence_type']} | 階層レベル: {comp['hierarchy_level']}")
+
+                    # 従来の詳細表示も残す
+                    st.markdown("---")
+                    st.markdown("## 📋 推薦詳細（パス可視化）")
+
+                    graph_recs_display = st.session_state.get('graph_recommendations', [])
+                    if graph_recs_display:
+                        for idx, hybrid_rec in enumerate(graph_recs_display, 1):
+                            rec = convert_hybrid_to_recommendation(hybrid_rec)
+                            title = f"🎯 推薦 {idx}: {rec.competence_name} (グラフスコア: {hybrid_rec.graph_score:.3f})"
+
+                            with st.expander(title):
+                                # スコア情報を表示
+                                col_s1, col_s2 = st.columns(2)
+                                with col_s1:
+                                    st.metric("グラフスコア（RWR）", f"{hybrid_rec.graph_score:.3f}")
+                                with col_s2:
+                                    st.metric("パス数", f"{len(hybrid_rec.paths)}個")
+
+                                # 推薦理由
+                                st.markdown("### 📋 推薦理由")
+                                st.markdown(rec.reason)
+
+                                # パス可視化
+                                if show_paths and hybrid_rec.paths:
+                                    st.markdown("---")
+                                    st.markdown("### 🔗 推薦パスの可視化")
+
+                                    from skillnote_recommendation.graph import RecommendationPathVisualizer
+                                    from skillnote_recommendation.graph.visualization_utils import (
+                                        ExplanationGenerator,
+                                        format_explanation_for_display,
+                                        export_figure_as_html
+                                    )
+
+                                    visualizer = RecommendationPathVisualizer()
+                                    category_hierarchy = st.session_state.knowledge_graph.category_hierarchy if st.session_state.get('knowledge_graph') else None
+                                    explainer = ExplanationGenerator(category_hierarchy=category_hierarchy)
+
+                                    # 詳細説明を生成
+                                    explanation = explainer.generate_detailed_explanation(
+                                        paths=hybrid_rec.paths,
+                                        rwr_score=hybrid_rec.graph_score,
+                                        nmf_score=hybrid_rec.cf_score,
+                                        competence_info=hybrid_rec.competence_info
+                                    )
+
+                                    # グラフ可視化と詳細説明をタブで表示
+                                    tab1, tab2 = st.tabs(["📊 グラフ可視化", "📝 詳細説明"])
+
+                                    with tab1:
+                                        member_name = members_df[
+                                            members_df["メンバーコード"] == selected_member_code
+                                        ]["メンバー名"].iloc[0]
+
+                                        fig = visualizer.visualize_recommendation_path(
+                                            paths=hybrid_rec.paths,
+                                            target_member_name=member_name,
+                                            target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)
+                                        )
+                                        st.plotly_chart(fig, use_container_width=True)
+
+                                        # エクスポートボタン
+                                        if st.button(f"📥 HTMLとしてエクスポート", key=f"export_{idx}"):
+                                            try:
+                                                filename = f"recommendation_path_{hybrid_rec.competence_code}.html"
+                                                filepath = export_figure_as_html(fig, filename)
+                                                st.success(f"✅ エクスポート完了: {filepath}")
+                                            except Exception as e:
+                                                st.error(f"エクスポートエラー: {str(e)}")
+
+                                    with tab2:
+                                        formatted_explanation = format_explanation_for_display(explanation)
+                                        st.markdown(formatted_explanation)
+
+                # ハイブリッド推薦の場合
+                elif recommendation_method in ["ハイブリッド推薦"]:
                     graph_recs_display = st.session_state.get('graph_recommendations', [])
 
                     if graph_recs_display:

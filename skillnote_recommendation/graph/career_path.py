@@ -401,3 +401,218 @@ class LearningPathGenerator:
         # 簡易実装: 空リストを返す
         # 実際には、カテゴリー階層やグラフ構造から前提関係を抽出
         return []
+
+
+# ===================================================================
+# グラフベース推薦専用の学習パス生成
+# ===================================================================
+
+@dataclass
+class RecommendationLearningPath:
+    """グラフベース推薦の学習パス
+
+    Attributes:
+        phase_1_basic: Phase 1（基礎固め）の力量リスト
+        phase_2_intermediate: Phase 2（専門性構築）の力量リスト
+        phase_3_expert: Phase 3（エキスパート）の力量リスト
+        all_recommendations: 全推薦力量（元のスコア順）
+    """
+    phase_1_basic: List[Dict]
+    phase_2_intermediate: List[Dict]
+    phase_3_expert: List[Dict]
+    all_recommendations: List[Dict]
+
+
+def generate_learning_path_from_recommendations(
+    recommendations: List[Tuple[str, float, List]],
+    knowledge_graph: CompetenceKnowledgeGraph,
+    member_code: str,
+    competence_master_df: pd.DataFrame,
+    member_competence_df: pd.DataFrame
+) -> RecommendationLearningPath:
+    """
+    グラフベース推薦結果から段階的な学習パスを生成
+
+    Args:
+        recommendations: RandomWalkRecommenderのrecommend()結果
+            [(力量コード, スコア, パス), ...]
+        knowledge_graph: ナレッジグラフ
+        member_code: 対象メンバーコード
+        competence_master_df: 力量マスタ
+        member_competence_df: メンバー保有力量データ
+
+    Returns:
+        RecommendationLearningPath オブジェクト
+    """
+    # メンバーの既習得力量を取得
+    member_competences = _get_member_competence_dict(member_code, member_competence_df)
+
+    # 推薦力量を分析してスコアリング
+    scored_recommendations = []
+    for comp_code, rwr_score, paths in recommendations:
+        comp_info = _get_competence_info_dict(comp_code, competence_master_df)
+        if not comp_info:
+            continue
+
+        # 階層レベルを判定
+        hierarchy_level = _determine_hierarchy_level_simple(comp_info)
+
+        # 習得容易性を計算
+        ease_score = _calculate_ease_score_simple(
+            comp_info, member_competences, knowledge_graph
+        )
+
+        # 総合優先度スコア
+        # RWRスコアを重視しつつ、階層と容易性も考慮
+        priority_score = (
+            0.5 * rwr_score +  # RWRスコアを50%
+            0.3 * (1.0 - (hierarchy_level - 1) / 2.0) +  # 基礎ほど高スコア（30%）
+            0.2 * ease_score  # 習得容易性（20%）
+        )
+
+        # フェーズを決定
+        if hierarchy_level == 1:
+            phase = PHASE_BASIC
+        elif hierarchy_level == 2:
+            phase = PHASE_INTERMEDIATE
+        else:
+            phase = PHASE_EXPERT
+
+        scored_recommendations.append({
+            'competence_code': comp_code,
+            'competence_name': comp_info['competence_name'],
+            'competence_type': comp_info['competence_type'],
+            'category': comp_info['category'],
+            'rwr_score': rwr_score,
+            'hierarchy_level': hierarchy_level,
+            'ease_score': ease_score,
+            'priority_score': priority_score,
+            'phase': phase,
+            'paths': paths
+        })
+
+    # フェーズごとに分類（各フェーズ内では優先度順）
+    phase_1 = sorted(
+        [r for r in scored_recommendations if r['phase'] == PHASE_BASIC],
+        key=lambda x: x['priority_score'],
+        reverse=True
+    )
+
+    phase_2 = sorted(
+        [r for r in scored_recommendations if r['phase'] == PHASE_INTERMEDIATE],
+        key=lambda x: x['priority_score'],
+        reverse=True
+    )
+
+    phase_3 = sorted(
+        [r for r in scored_recommendations if r['phase'] == PHASE_EXPERT],
+        key=lambda x: x['priority_score'],
+        reverse=True
+    )
+
+    return RecommendationLearningPath(
+        phase_1_basic=phase_1,
+        phase_2_intermediate=phase_2,
+        phase_3_expert=phase_3,
+        all_recommendations=scored_recommendations
+    )
+
+
+def _get_member_competence_dict(
+    member_code: str,
+    member_competence_df: pd.DataFrame
+) -> Dict[str, float]:
+    """メンバーの保有力量を辞書形式で取得"""
+    member_data = member_competence_df[
+        member_competence_df['メンバーコード'] == member_code
+    ]
+
+    competences = {}
+    for _, row in member_data.iterrows():
+        competences[row['力量コード']] = row['正規化レベル']
+
+    return competences
+
+
+def _get_competence_info_dict(
+    competence_code: str,
+    competence_master_df: pd.DataFrame
+) -> Optional[Dict]:
+    """力量の詳細情報を辞書形式で取得"""
+    comp_data = competence_master_df[
+        competence_master_df['力量コード'] == competence_code
+    ]
+
+    if len(comp_data) == 0:
+        return None
+
+    row = comp_data.iloc[0]
+    return {
+        'competence_code': row['力量コード'],
+        'competence_name': row['力量名'],
+        'competence_type': row['力量タイプ'],
+        'category': row.get('力量カテゴリー名', 'その他'),
+    }
+
+
+def _determine_hierarchy_level_simple(comp_info: Dict) -> int:
+    """
+    力量の階層レベルを簡易判定
+
+    Returns:
+        1=基礎, 2=応用, 3=専門
+    """
+    comp_name = comp_info.get('competence_name', '').lower()
+    category = comp_info.get('category', '').lower()
+
+    # キーワードベースの判定
+    basic_keywords = ['基礎', '入門', '初級', '基本', '概論', 'basic', 'intro']
+    intermediate_keywords = ['応用', '中級', '実践', '活用', 'intermediate', 'practical']
+    expert_keywords = ['専門', '上級', 'エキスパート', '高度', 'advanced', 'expert']
+
+    # 力量名でチェック
+    if any(keyword in comp_name for keyword in basic_keywords):
+        return 1
+    elif any(keyword in comp_name for keyword in expert_keywords):
+        return 3
+    elif any(keyword in comp_name for keyword in intermediate_keywords):
+        return 2
+
+    # カテゴリー名でチェック
+    if any(keyword in category for keyword in basic_keywords):
+        return 1
+    elif any(keyword in category for keyword in expert_keywords):
+        return 3
+
+    # デフォルトは中間レベル
+    return 2
+
+
+def _calculate_ease_score_simple(
+    comp_info: Dict,
+    member_competences: Dict[str, float],
+    knowledge_graph: CompetenceKnowledgeGraph
+) -> float:
+    """
+    習得容易性を簡易計算
+
+    同じカテゴリーの力量を既に持っていれば習得しやすい
+
+    Returns:
+        0.0-1.0 のスコア（1.0=非常に習得しやすい）
+    """
+    category = comp_info.get('category', '')
+
+    # 同じカテゴリーの保有力量数をカウント
+    same_category_count = 0
+    for comp_code in member_competences.keys():
+        comp_node = f"competence_{comp_code}"
+        if knowledge_graph.G.has_node(comp_node):
+            node_data = knowledge_graph.get_node_info(comp_node)
+            if node_data.get('category') == category:
+                same_category_count += 1
+
+    # 保有数に応じたスコア（最大10個で飽和）
+    ease_score = min(same_category_count / 10.0, 1.0)
+
+    return ease_score
