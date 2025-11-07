@@ -428,6 +428,16 @@ class RoleBasedGrowthPathAnalyzer:
 
             recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
 
+        # 最終フォールバック：それでも0件の場合、全スキルから推薦
+        if len(recommendations) == 0:
+            logger.warning(
+                f"メンバー {member_code} は成長パス上の全スキルを習得済み。"
+                f"全スキルから推薦します。"
+            )
+            return self._fallback_recommend_from_all_skills(
+                member_code, top_n, min_acquisition_rate
+            )
+
         return recommendations[:top_n]
 
     def _generate_recommendation_reason(self,
