@@ -143,8 +143,19 @@ def create_growth_path_timeline(growth_path, role_name: str):
     # 貴重度 = (1 - 取得率) × 100
     rarity_scores = [(1 - skill.acquisition_rate) * 100 for skill in sorted_skills]
 
-    # 時間軸（平均取得順序）を取得
-    time_axis = [skill.average_order for skill in sorted_skills]
+    # 各スキルの習得時間を計算（難しいスキルほど時間がかかる）
+    # 習得時間（ヶ月）= 0.5 + (貴重度 / 100) × 1.5
+    # 貴重度0（簡単）：0.5ヶ月、貴重度50（中級）：1.25ヶ月、貴重度100（難しい）：2.0ヶ月
+    learning_times = [0.5 + (score / 100) * 1.5 for score in rarity_scores]
+
+    # 累積時間軸を計算（順番にスキルを取っていく想定）
+    cumulative_times = []
+    total_time = 0
+    for learning_time in learning_times:
+        total_time += learning_time
+        cumulative_times.append(total_time)
+
+    time_axis = cumulative_times
 
     # マーカーサイズ：貴重度に応じて変化（10～30）
     # 貴重度が高い（レア）= 大きいマーカー
@@ -229,7 +240,7 @@ def create_growth_path_timeline(growth_path, role_name: str):
             xanchor='center'
         ),
         xaxis=dict(
-            title="<b>時間軸（平均取得順序：番目）</b>",
+            title="<b>累積習得時間（ヶ月）</b><br><sub>※難しいスキルほど習得に時間がかかる想定</sub>",
             gridcolor='lightgray',
             showgrid=True
         ),
@@ -1536,7 +1547,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     timeline_fig = create_growth_path_timeline(growth_path, role_name)
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
-                                        st.caption("💡 横軸：時間軸（平均取得順序）、縦軸：スキルの貴重度スコア（0点→100点）。貴重度 = (1 - 取得率) × 100。レアなスキル（取得率が低い）ほど高得点。マーカーの色：薄緑=コモン、緑=中レア、金色=レア。マーカーのサイズ：貴重度の高さ。金色のラベルはレア度トップ5のスキル。")
+                                        st.caption("💡 横軸：累積習得時間（ヶ月）。難しいスキルほど習得に時間がかかる想定。縦軸：スキルの貴重度スコア（0点→100点）。貴重度 = (1 - 取得率) × 100。レアなスキルほど高得点。マーカーの色：薄緑=コモン、金色=レア。マーカーのサイズ：貴重度の高さ。金色のラベルはレア度トップ5のスキル。")
 
                                 with stages_tab:
                                     # 段階別チャートを作成
