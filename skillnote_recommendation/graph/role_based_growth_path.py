@@ -483,3 +483,200 @@ class RoleBasedGrowthPathAnalyzer:
             'acquired_skills': acquired_skills,
             'not_acquired_skills': not_acquired_skills
         }
+
+    def recommend_next_skills_with_paths(self,
+                                          member_code: str,
+                                          top_n: int = 10,
+                                          min_acquisition_rate: float = 0.3,
+                                          max_paths: int = 5) -> List[Dict]:
+        """
+        メンバーに対して次に習得すべきスキルをパス情報付きで推薦
+
+        Args:
+            member_code: メンバーコード
+            top_n: 推薦するスキル数
+            min_acquisition_rate: 推薦対象とする最小取得率
+            max_paths: 各スキルに対する最大パス数
+
+        Returns:
+            パス情報を含む推薦スキルのリスト
+        """
+        # 基本の推薦を取得
+        recommendations = self.recommend_next_skills(member_code, top_n, min_acquisition_rate)
+
+        # 各推薦にパス情報を追加
+        recommendations_with_paths = []
+        for rec in recommendations:
+            paths = self._generate_paths_for_skill(
+                member_code=member_code,
+                competence_code=rec['competence_code'],
+                max_paths=max_paths
+            )
+
+            rec_with_paths = rec.copy()
+            rec_with_paths['paths'] = paths
+            recommendations_with_paths.append(rec_with_paths)
+
+        return recommendations_with_paths
+
+    def _generate_paths_for_skill(self,
+                                   member_code: str,
+                                   competence_code: str,
+                                   max_paths: int = 5) -> List[List[Dict]]:
+        """
+        特定のスキルに対するパス（メンバー → 類似メンバー → スキル）を生成
+
+        Args:
+            member_code: メンバーコード
+            competence_code: スキルコード
+            max_paths: 最大パス数
+
+        Returns:
+            パスのリスト
+        """
+        # メンバー情報を取得
+        member_info = self.members_df[
+            self.members_df[self.member_code_column] == member_code
+        ]
+
+        if member_info.empty:
+            return []
+
+        member_name = member_info.iloc[0].get('メンバー名', member_code)
+        role = member_info.iloc[0][self.role_column]
+
+        # 同じ役職のメンバーでこのスキルを習得している人を取得
+        role_members = self.members_df[
+            self.members_df[self.role_column] == role
+        ][self.member_code_column].unique()
+
+        # このスキルを習得しているメンバーを取得
+        skill_holders = self.member_competence_df[
+            (self.member_competence_df[self.competence_code_column] == competence_code) &
+            (self.member_competence_df[self.member_code_column].isin(role_members))
+        ].copy()
+
+        if skill_holders.empty:
+            return []
+
+        # 取得日でソート（早期に習得した人を優先）
+        skill_holders = skill_holders[
+            skill_holders[self.acquired_date_column].notna()
+        ].copy()
+
+        if skill_holders.empty:
+            # 取得日がない場合は、そのまま使用
+            skill_holders = self.member_competence_df[
+                (self.member_competence_df[self.competence_code_column] == competence_code) &
+                (self.member_competence_df[self.member_code_column].isin(role_members))
+            ].copy()
+
+        skill_holders[self.acquired_date_column] = pd.to_datetime(
+            skill_holders[self.acquired_date_column],
+            errors='coerce'
+        )
+        skill_holders = skill_holders.sort_values(self.acquired_date_column)
+
+        # スキル情報を取得
+        skill_info = self.competence_master_df[
+            self.competence_master_df['力量コード'] == competence_code
+        ]
+
+        skill_name = skill_info.iloc[0]['力量名'] if not skill_info.empty else competence_code
+
+        # パスを生成
+        paths = []
+        for _, holder_row in skill_holders.head(max_paths).iterrows():
+            similar_member_code = holder_row[self.member_code_column]
+
+            # 自分自身は除外
+            if similar_member_code == member_code:
+                continue
+
+            # 類似メンバーの名前を取得
+            similar_member_info = self.members_df[
+                self.members_df[self.member_code_column] == similar_member_code
+            ]
+
+            similar_member_name = similar_member_info.iloc[0].get('メンバー名', similar_member_code) if not similar_member_info.empty else similar_member_code
+
+            # パスを構築
+            path = [
+                {
+                    'id': f'member_{member_code}',
+                    'type': 'member',
+                    'name': member_name,
+                    'code': member_code
+                },
+                {
+                    'id': f'similar_member_{similar_member_code}',
+                    'type': 'similar_member',
+                    'name': similar_member_name,
+                    'code': similar_member_code,
+                    'role': role
+                },
+                {
+                    'id': f'competence_{competence_code}',
+                    'type': 'competence',
+                    'name': skill_name
+                }
+            ]
+
+            paths.append(path)
+
+        return paths
+
+    def recommend_all_roles(self,
+                            top_n_per_role: int = 10,
+                            min_acquisition_rate: float = 0.3,
+                            max_paths: int = 5) -> Dict[str, List[Dict]]:
+        """
+        全役職について推薦を生成
+
+        Args:
+            top_n_per_role: 各役職での推薦数
+            min_acquisition_rate: 推薦対象とする最小取得率
+            max_paths: 各スキルに対する最大パス数
+
+        Returns:
+            役職名をキーとした推薦辞書
+        """
+        if not self._growth_paths_cache:
+            self.analyze_all_roles()
+
+        all_recommendations = {}
+
+        for role_name, growth_path in self._growth_paths_cache.items():
+            # この役職のメンバーを取得（代表として最初のメンバーを使用）
+            role_members = self.members_df[
+                self.members_df[self.role_column] == role_name
+            ][self.member_code_column].unique()
+
+            if len(role_members) == 0:
+                continue
+
+            # 各メンバーについて推薦を生成（重複を避けるため、スキルのリストとして）
+            role_recommendations = []
+            processed_skills = set()
+
+            for member_code in role_members[:5]:  # 最大5名まで
+                member_recs = self.recommend_next_skills_with_paths(
+                    member_code=member_code,
+                    top_n=top_n_per_role * 2,  # 多めに取得
+                    min_acquisition_rate=min_acquisition_rate,
+                    max_paths=max_paths
+                )
+
+                for rec in member_recs:
+                    if rec['competence_code'] not in processed_skills:
+                        role_recommendations.append(rec)
+                        processed_skills.add(rec['competence_code'])
+
+                if len(role_recommendations) >= top_n_per_role:
+                    break
+
+            # 優先度スコアでソート
+            role_recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+            all_recommendations[role_name] = role_recommendations[:top_n_per_role]
+
+        return all_recommendations
