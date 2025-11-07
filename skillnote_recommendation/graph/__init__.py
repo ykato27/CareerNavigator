@@ -20,6 +20,11 @@ from .career_path import (
     generate_progressive_learning_paths
 )
 from .career_path_visualizer import CareerPathVisualizer, format_career_path_summary
+from .role_based_growth_path import (
+    RoleBasedGrowthPathAnalyzer,
+    RoleGrowthPath,
+    SkillAcquisitionPattern
+)
 
 # 新しい改善版モジュール
 from .enhanced_path_visualizer import EnhancedPathVisualizer, EdgeStatistics, create_comparison_view
@@ -46,6 +51,10 @@ __all__ = [
     'generate_progressive_learning_paths',
     'CareerPathVisualizer',
     'format_career_path_summary',
+    # 役職ベースの成長パス
+    'RoleBasedGrowthPathAnalyzer',
+    'RoleGrowthPath',
+    'SkillAcquisitionPattern',
     # 新しい改善版
     'EnhancedPathVisualizer',
     'EdgeStatistics',

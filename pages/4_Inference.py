@@ -437,7 +437,7 @@ with st.expander("⚙️ 詳細設定（オプション）"):
     # デフォルトはハイブリッド推薦（最も精度が高い）
     recommendation_method = st.radio(
         "推薦方法",
-        options=["ハイブリッド推薦（推奨）", "NMF推薦", "グラフベース推薦", "キャリアパターン別推薦"],
+        options=["ハイブリッド推薦（推奨）", "NMF推薦", "グラフベース推薦", "キャリアパターン別推薦", "役職ベースの成長パス推薦"],
         index=0,
         help="通常はハイブリッド推薦をお勧めします",
         horizontal=False
@@ -717,7 +717,8 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
         "ハイブリッド推薦（推奨）": "ハイブリッド推薦",
         "NMF推薦": "NMF推薦",
         "グラフベース推薦": "グラフベース推薦",
-        "キャリアパターン別推薦": "キャリアパターン別推薦"
+        "キャリアパターン別推薦": "キャリアパターン別推薦",
+        "役職ベースの成長パス推薦": "役職ベースの成長パス推薦"
     }
     internal_method = method_map.get(recommendation_method, recommendation_method)
 
@@ -775,6 +776,70 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     recs.extend(pattern_rec.recommendations)
 
                 graph_recommendations = None
+
+            elif internal_method == "役職ベースの成長パス推薦":
+                # 役職ベースの成長パス推薦
+                from skillnote_recommendation.graph import RoleBasedGrowthPathAnalyzer
+
+                # 役職情報が含まれているか確認
+                if '役職' not in td["members_clean"].columns:
+                    st.error("❌ メンバーマスタに「役職」カラムが含まれていません。")
+                    st.stop()
+
+                # 取得日情報が含まれているか確認
+                if '取得日' not in td["member_competence"].columns:
+                    st.error("❌ メンバー保有力量データに「取得日」カラムが含まれていません。")
+                    st.stop()
+
+                # RoleBasedGrowthPathAnalyzerを初期化
+                analyzer = RoleBasedGrowthPathAnalyzer(
+                    members_df=td["members_clean"],
+                    member_competence_df=td["member_competence"],
+                    competence_master_df=td["competence_master"]
+                )
+
+                # 全役職の成長パスを分析
+                with st.spinner("役職ごとの成長パスを分析中..."):
+                    growth_paths = analyzer.analyze_all_roles(min_members=3)
+
+                if not growth_paths:
+                    st.warning("⚠️ 成長パスを生成できませんでした。各役職に最低3名のメンバーが必要です。")
+                    recs = []
+                    graph_recommendations = None
+                else:
+                    # 対象メンバーへの推薦を生成
+                    role_recommendations = analyzer.recommend_next_skills(
+                        member_code=selected_member_code,
+                        top_n=top_n,
+                        min_acquisition_rate=0.3
+                    )
+
+                    # Recommendation形式に変換
+                    from skillnote_recommendation.core.models import Recommendation
+                    recs = []
+                    for rec_dict in role_recommendations:
+                        recs.append(Recommendation(
+                            competence_code=rec_dict['competence_code'],
+                            competence_name=rec_dict['competence_name'],
+                            competence_type=rec_dict['competence_type'],
+                            category=rec_dict['category'],
+                            priority_score=rec_dict['priority_score'],
+                            category_importance=0.5,
+                            acquisition_ease=rec_dict['acquisition_rate'],
+                            popularity=rec_dict['acquisition_rate'],
+                            reason=rec_dict['reason'],
+                            reference_persons=[]
+                        ))
+
+                    # セッションステートに保存
+                    st.session_state.role_based_growth_paths = growth_paths
+                    st.session_state.role_based_analyzer = analyzer
+
+                    graph_recommendations = None
+
+                # パターン別推薦情報をクリア
+                if 'pattern_recommendations' in st.session_state:
+                    del st.session_state['pattern_recommendations']
 
             elif internal_method == "NMF推薦":
                 # NMF推薦のみ
@@ -1076,8 +1141,88 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                 # 推薦結果の表示
                 st.markdown("---")
 
+                # 役職ベースの成長パス推薦の場合
+                if internal_method == "役職ベースの成長パス推薦":
+                    # 成長パス情報を取得
+                    analyzer = st.session_state.get('role_based_analyzer')
+                    growth_paths = st.session_state.get('role_based_growth_paths', {})
+
+                    if analyzer:
+                        # メンバーの進捗状況を表示
+                        progress_info = analyzer.get_member_progress(selected_member_code)
+
+                        if progress_info:
+                            st.markdown("## 📊 あなたの成長パス上での進捗状況")
+
+                            # メトリクス表示
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric("役職", progress_info['role_name'])
+                            with col2:
+                                st.metric("進捗率", f"{progress_info['progress_rate']*100:.1f}%")
+                            with col3:
+                                st.metric("習得済み", f"{progress_info['acquired_count']}個")
+                            with col4:
+                                st.metric("未習得", f"{progress_info['not_acquired_count']}個")
+
+                            # プログレスバー
+                            st.progress(progress_info['progress_rate'])
+
+                            st.markdown("---")
+                            st.markdown("## 🎯 次に習得すべきスキル")
+                            st.info(f"役職「{progress_info['role_name']}」の典型的な成長パスに基づいて、次に習得すべきスキルを推薦します。")
+
+                    # 推薦結果の詳細表示
+                    for idx, rec in enumerate(recs, 1):
+                        with st.expander(f"**推薦 {idx}**: {rec.competence_name} (優先度: {rec.priority_score:.2f})"):
+                            # 力量情報
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.markdown(f"**力量タイプ**: {rec.competence_type}")
+                            with col2:
+                                st.markdown(f"**カテゴリ**: {rec.category}")
+                            with col3:
+                                st.metric("取得率", f"{rec.acquisition_ease*100:.1f}%")
+
+                            # 推薦理由
+                            st.markdown("---")
+                            st.markdown("**推薦理由**")
+                            st.markdown(rec.reason)
+
+                    # 成長パスの詳細情報（オプション）
+                    if growth_paths:
+                        st.markdown("---")
+                        with st.expander("📚 全役職の成長パス詳細を見る"):
+                            st.markdown("### 分析された役職と成長パス")
+
+                            for role_name, growth_path in growth_paths.items():
+                                st.markdown(f"#### 役職: {role_name}")
+                                st.markdown(f"- メンバー数: {growth_path.total_members}名")
+                                st.markdown(f"- 分析されたスキル数: {len(growth_path.skills_in_order)}個")
+
+                                # 初期・中期・後期のスキルを表示
+                                early_skills = growth_path.get_early_stage_skills(threshold=0.3)
+                                mid_skills = growth_path.get_mid_stage_skills(0.3, 0.7)
+                                late_skills = growth_path.get_late_stage_skills(threshold=0.7)
+
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.markdown("**初期段階のスキル**")
+                                    for skill in early_skills[:5]:
+                                        st.caption(f"- {skill.competence_name}")
+                                with col2:
+                                    st.markdown("**中期段階のスキル**")
+                                    for skill in mid_skills[:5]:
+                                        st.caption(f"- {skill.competence_name}")
+                                with col3:
+                                    st.markdown("**後期段階のスキル**")
+                                    for skill in late_skills[:5]:
+                                        st.caption(f"- {skill.competence_name}")
+
+                                st.markdown("---")
+
                 # キャリアパターン別推薦の場合
-                if internal_method == "キャリアパターン別推薦":
+                elif internal_method == "キャリアパターン別推薦":
                     pattern_recs = st.session_state.get('pattern_recommendations', {})
 
                     if pattern_recs:
