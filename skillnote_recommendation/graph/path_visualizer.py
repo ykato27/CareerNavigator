@@ -26,6 +26,13 @@ class RecommendationPathVisualizer:
             'similar_member': '#FFA07A',  # オレンジ系（類似メンバー）
         }
 
+        # フェーズ別の色設定（力量ノード用）
+        self.phase_colors = {
+            1: '#28a745',  # Phase 1: 緑（基礎固め）
+            2: '#ffc107',  # Phase 2: 黄（専門性構築）
+            3: '#dc3545',  # Phase 3: 赤（エキスパート）
+        }
+
         # ノードタイプ別のサイズ
         self.node_sizes = {
             'member': 20,
@@ -38,7 +45,8 @@ class RecommendationPathVisualizer:
                                       paths: List[List[Dict]],
                                       target_member_name: str,
                                       target_competence_name: str,
-                                      scores: Optional[List[float]] = None) -> go.Figure:
+                                      scores: Optional[List[float]] = None,
+                                      phase_info: Optional[Dict[str, int]] = None) -> go.Figure:
         """
         推薦パスを可視化
 
@@ -47,6 +55,7 @@ class RecommendationPathVisualizer:
             target_member_name: 対象メンバー名
             target_competence_name: 推薦力量名
             scores: 各パスのスコア（オプション）
+            phase_info: 力量コード → フェーズ番号(1/2/3)のマッピング（オプション）
 
         Returns:
             Plotly Figure オブジェクト
@@ -55,35 +64,50 @@ class RecommendationPathVisualizer:
             return self._create_empty_figure("推薦パスが見つかりませんでした")
 
         # NetworkXグラフを構築
-        G = self._build_graph_from_paths(paths)
+        G = self._build_graph_from_paths(paths, phase_info)
 
         # レイアウトを計算
         pos = self._calculate_layout(G, paths)
 
         # Plotly Figure を作成
-        fig = self._create_plotly_figure(G, pos, paths, scores)
+        fig = self._create_plotly_figure(G, pos, paths, scores, phase_info)
 
         # レイアウト設定
+        title_text = (
+            f"<b>推薦パス: {target_member_name} → {target_competence_name}</b><br>"
+            f"<sub>📊 推薦ロジック: あなたの既習得力量 → 類似メンバー → 推薦力量</sub><br>"
+            f"<sub style='font-size:10px'>💡 各ノードにカーソルを合わせると詳しい説明が表示されます</sub>"
+        )
+
         fig.update_layout(
             title=dict(
-                text=f"推薦パス: {target_member_name} → {target_competence_name}",
+                text=title_text,
                 x=0.5,
                 xanchor='center',
-                font=dict(size=20)
+                font=dict(size=18)
             ),
             showlegend=True,
             hovermode='closest',
-            margin=dict(b=20, l=5, r=5, t=60),
+            margin=dict(b=20, l=5, r=5, t=120),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             plot_bgcolor='white',
             width=1000,
             height=600,
+            legend=dict(
+                orientation="v",
+                yanchor="top",
+                y=1,
+                xanchor="left",
+                x=1.02,
+                title=dict(text="<b>ノードの種類</b>", font=dict(size=12)),
+                font=dict(size=11)
+            )
         )
 
         return fig
 
-    def _build_graph_from_paths(self, paths: List[List[Dict]]) -> nx.DiGraph:
+    def _build_graph_from_paths(self, paths: List[List[Dict]], phase_info: Optional[Dict[str, int]] = None) -> nx.DiGraph:
         """パスからNetworkXグラフを構築"""
         G = nx.DiGraph()
 
@@ -98,10 +122,18 @@ class RecommendationPathVisualizer:
                     if node_type == 'member' and i > 0:  # 最初以外のメンバーノードは類似メンバー
                         node_type = 'similar_member'
 
+                    # フェーズ情報を取得（力量ノードの場合）
+                    phase = None
+                    if node_type == 'competence' and phase_info:
+                        # node_idから力量コードを抽出（例: "competence_C001" -> "C001"）
+                        comp_code = node_id.replace('competence_', '')
+                        phase = phase_info.get(comp_code)
+
                     G.add_node(
                         node_id,
                         name=node['name'],
                         type=node_type,
+                        phase=phase,
                         path_indices={path_idx}
                     )
                 else:
@@ -167,7 +199,8 @@ class RecommendationPathVisualizer:
                               G: nx.DiGraph,
                               pos: Dict,
                               paths: List[List[Dict]],
-                              scores: Optional[List[float]]) -> go.Figure:
+                              scores: Optional[List[float]],
+                              phase_info: Optional[Dict[str, int]] = None) -> go.Figure:
         """Plotly Figureを作成"""
         fig = go.Figure()
 
@@ -175,7 +208,7 @@ class RecommendationPathVisualizer:
         self._add_paths_as_traces(fig, pos, paths, scores)
 
         # ノードを描画
-        self._add_nodes_to_figure(fig, G, pos)
+        self._add_nodes_to_figure(fig, G, pos, phase_info)
 
         return fig
 
@@ -325,48 +358,98 @@ class RecommendationPathVisualizer:
                 showlegend=False,
             ))
 
-    def _add_nodes_to_figure(self, fig: go.Figure, G: nx.DiGraph, pos: Dict):
+    def _get_node_role_explanation(self, node_type: str, is_start_path: bool = False) -> str:
+        """ノードタイプごとの役割説明を取得"""
+        explanations = {
+            'member': '推薦を受ける対象者',
+            'competence': 'パスの起点となる既習得力量、または<br>パスの終点となる推薦力量',
+            'category': '力量が属するカテゴリー。<br>同じカテゴリーの力量を探すのに使用',
+            'similar_member': 'あなたと同じ力量を持つメンバー。<br>このメンバーが習得している力量が推薦されます',
+        }
+        return explanations.get(node_type, 'グラフのノード')
+
+    def _add_nodes_to_figure(self, fig: go.Figure, G: nx.DiGraph, pos: Dict, phase_info: Optional[Dict[str, int]] = None):
         """ノードを描画"""
-        # ノードタイプごとにグループ化
+        # ノードタイプごとの説明
+        type_descriptions = {
+            'member': '👤 あなた（対象メンバー）',
+            'competence': '📚 あなたの既習得力量',
+            'category': '📁 カテゴリー',
+            'similar_member': '🤝 類似メンバー（あなたと似たスキルを持つ人）',
+        }
+
+        # フェーズ情報がある場合は、力量ノードをフェーズごとに分類
+        # それ以外のノードタイプは通常通り分類
         node_groups = {}
         for node_id in G.nodes():
             node_data = G.nodes[node_id]
             node_type = node_data['type']
+            phase = node_data.get('phase')
 
-            if node_type not in node_groups:
-                node_groups[node_type] = {
+            # グループキーを決定（力量ノードでフェーズ情報がある場合は"competence_phase_X"、それ以外は通常のタイプ）
+            if node_type == 'competence' and phase is not None:
+                group_key = f'competence_phase_{phase}'
+            else:
+                group_key = node_type
+
+            if group_key not in node_groups:
+                node_groups[group_key] = {
                     'ids': [],
                     'x': [],
                     'y': [],
                     'text': [],
                     'hovertext': [],
+                    'type': node_type,
+                    'phase': phase if node_type == 'competence' else None,
                 }
 
-            node_groups[node_type]['ids'].append(node_id)
+            node_groups[group_key]['ids'].append(node_id)
             x, y = pos[node_id]
-            node_groups[node_type]['x'].append(x)
-            node_groups[node_type]['y'].append(y)
-            node_groups[node_type]['text'].append(node_data['name'])
-            node_groups[node_type]['hovertext'].append(
-                f"{node_data['name']}<br>タイプ: {node_type}"
-            )
+            node_groups[group_key]['x'].append(x)
+            node_groups[group_key]['y'].append(y)
+            node_groups[group_key]['text'].append(node_data['name'])
 
-        # タイプごとに描画
+            # ホバーテキストに役割の説明を追加（フェーズ情報も含める）
+            role_description = type_descriptions.get(node_type, f'タイプ: {node_type}')
+            hover_text = f"<b>{node_data['name']}</b><br><br>{role_description}"
+
+            # フェーズ情報がある場合は追加
+            if phase is not None:
+                phase_names = {1: '🌱 Phase 1: 基礎固め', 2: '🌿 Phase 2: 専門性構築', 3: '🌳 Phase 3: エキスパート'}
+                hover_text += f"<br><br>📚 {phase_names.get(phase, f'Phase {phase}')}"
+
+            hover_text += f"<br><br>💡 このノードの役割:<br>{self._get_node_role_explanation(node_type)}"
+
+            node_groups[group_key]['hovertext'].append(hover_text)
+
+        # タイプ/フェーズごとに描画
         type_labels = {
-            'member': '対象メンバー',
-            'competence': '推薦力量',
-            'category': 'カテゴリー',
-            'similar_member': '類似メンバー',
+            'member': '👤 あなた（対象メンバー）',
+            'competence': '📚 既習得力量',
+            'category': '📁 カテゴリー',
+            'similar_member': '🤝 類似メンバー',
+            'competence_phase_1': '🌱 Phase 1: 基礎固め',
+            'competence_phase_2': '🌿 Phase 2: 専門性構築',
+            'competence_phase_3': '🌳 Phase 3: エキスパート',
         }
 
-        for node_type, group in node_groups.items():
+        for group_key, group in node_groups.items():
+            node_type = group['type']
+            phase = group['phase']
+
+            # 色を決定（フェーズ情報がある力量ノードの場合はフェーズ色、それ以外は通常色）
+            if node_type == 'competence' and phase is not None:
+                color = self.phase_colors.get(phase, self.node_colors['competence'])
+            else:
+                color = self.node_colors.get(node_type, '#999999')
+
             fig.add_trace(go.Scatter(
                 x=group['x'],
                 y=group['y'],
                 mode='markers+text',
                 marker=dict(
                     size=self.node_sizes.get(node_type, 15),
-                    color=self.node_colors.get(node_type, '#999999'),
+                    color=color,
                     line=dict(color='white', width=2),
                 ),
                 text=group['text'],
@@ -374,7 +457,7 @@ class RecommendationPathVisualizer:
                 textfont=dict(size=10),
                 hovertext=group['hovertext'],
                 hoverinfo='text',
-                name=type_labels.get(node_type, node_type),
+                name=type_labels.get(group_key, group_key),
                 showlegend=True,
             ))
 
