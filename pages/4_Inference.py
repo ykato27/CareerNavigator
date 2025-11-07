@@ -252,42 +252,87 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
         for i, occupation in enumerate(sorted(unique_occupations))
     }
 
-    # 力量タイプごとのマーカーシンボルを定義
+    # 力量タイプごとのマーカーシンボルと名前を定義
     competence_type_symbols = {
         'SKILL': 'circle',
         'EDUCATION': 'square',
         'LICENSE': 'diamond'
     }
+    competence_type_names = {
+        'SKILL': '●SKILL',
+        'EDUCATION': '■EDUCATION',
+        'LICENSE': '◆LICENSE'
+    }
 
     # 散布図を作成
     fig = go.Figure()
 
-    # 職種×力量タイプの組み合わせごとにトレースを追加
-    for (occupation, competence_type), data in skills_by_group.items():
-        color = occupation_colors.get(occupation, '#7f7f7f')
-        symbol = competence_type_symbols.get(competence_type, 'circle')
+    # セクション1: 職種別にグループ化（力量タイプをサブカテゴリとして表示）
+    for occupation in sorted(unique_occupations):
+        is_first_for_occupation = True
+        for competence_type in ['SKILL', 'EDUCATION', 'LICENSE']:
+            group_key = (occupation, competence_type)
+            if group_key not in skills_by_group:
+                continue
 
-        # 凡例名を「職種 - 力量タイプ」形式にする
-        legend_name = f"{occupation} - {competence_type}"
+            data = skills_by_group[group_key]
+            color = occupation_colors.get(occupation, '#7f7f7f')
+            symbol = competence_type_symbols.get(competence_type, 'circle')
 
-        fig.add_trace(go.Scatter(
-            x=data['difficulty'],
-            y=data['rarity'],
-            mode='markers',
-            name=legend_name,
-            marker=dict(
-                size=12,
-                color=color,
-                symbol=symbol,
-                line=dict(color='white', width=1),
-                opacity=0.8
-            ),
-            text=data['names'],
-            hovertext=data['hover_texts'],
-            hoverinfo='text',
-            legendgroup=occupation,
-            showlegend=True
-        ))
+            fig.add_trace(go.Scatter(
+                x=data['difficulty'],
+                y=data['rarity'],
+                mode='markers',
+                name=competence_type_names[competence_type],
+                marker=dict(
+                    size=12,
+                    color=color,
+                    symbol=symbol,
+                    line=dict(color='white', width=1),
+                    opacity=0.8
+                ),
+                text=data['names'],
+                hovertext=data['hover_texts'],
+                hoverinfo='text',
+                legendgroup=f"occupation_{occupation}",
+                legendgrouptitle_text=f"【職種】{occupation}" if is_first_for_occupation else None,
+                showlegend=True
+            ))
+            is_first_for_occupation = False
+
+    # セクション2: 力量タイプ別にグループ化（職種をサブカテゴリとして表示）
+    for competence_type in ['SKILL', 'EDUCATION', 'LICENSE']:
+        is_first_for_type = True
+        for occupation in sorted(unique_occupations):
+            group_key = (occupation, competence_type)
+            if group_key not in skills_by_group:
+                continue
+
+            data = skills_by_group[group_key]
+            color = occupation_colors.get(occupation, '#7f7f7f')
+            symbol = competence_type_symbols.get(competence_type, 'circle')
+
+            fig.add_trace(go.Scatter(
+                x=data['difficulty'],
+                y=data['rarity'],
+                mode='markers',
+                name=occupation,
+                marker=dict(
+                    size=12,
+                    color=color,
+                    symbol=symbol,
+                    line=dict(color='white', width=1),
+                    opacity=0.8
+                ),
+                text=data['names'],
+                hovertext=data['hover_texts'],
+                hoverinfo='text',
+                legendgroup=f"competence_type_{competence_type}",
+                legendgrouptitle_text=f"【力量タイプ】{competence_type_names[competence_type]}" if is_first_for_type else None,
+                showlegend=True,
+                visible='legendonly'  # デフォルトで非表示
+            ))
+            is_first_for_type = False
 
     # 中央の十字線を追加（50点の位置）
     # 垂直線（難易度 = 50）
@@ -326,7 +371,7 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
     fig.update_layout(
         title=dict(
             text=f"<b>役職「{role_name}」のスキルマトリックス（難易度×貴重度）</b><br>"
-                 f"<sup>4象限分析：色=職種、形=力量タイプ（●SKILL/■EDUCATION/◆LICENSE）、凡例クリックでフィルター可能（{growth_path.total_members}名のデータから分析）</sup>",
+                 f"<sup>4象限分析：凡例は【職種】と【力量タイプ】の2セクションで構成、各セクション内の項目をクリックしてフィルター可能（{growth_path.total_members}名のデータから分析）</sup>",
             x=0.5,
             xanchor='center'
         ),
@@ -1721,9 +1766,9 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
                                         if role_name == selected_member_role:
-                                            st.caption("💡 4象限マトリックス：横軸=取得難易度（0-100点）、縦軸=貴重度（0-100点）。赤い十字線で50点を中心に4象限に分割。右上=難しい×レア（最優先）、左上=簡単×レア（すぐ習得）、右下=難しい×コモン（優先度低）、左下=簡単×コモン（基本）。色=職種、形=力量タイプ（●SKILL/■EDUCATION/◆LICENSE）。凡例クリックでフィルター可能。**あなたが未習得のスキルのみ表示されています。**")
+                                            st.caption("💡 4象限マトリックス：横軸=取得難易度、縦軸=貴重度。凡例は【職種】セクションと【力量タイプ】セクションに分かれています。【職種】セクション内の項目をクリックすると職種別にフィルタリング、【力量タイプ】セクション内の項目をクリックすると力量タイプ別にフィルタリングできます。色=職種、形=力量タイプ（●SKILL/■EDUCATION/◆LICENSE）。**あなたが未習得のスキルのみ表示されています。**")
                                         else:
-                                            st.caption("💡 4象限マトリックス：横軸=取得難易度（0-100点）、縦軸=貴重度（0-100点）。赤い十字線で50点を中心に4象限に分割。右上=難しい×レア（最優先）、左上=簡単×レア（すぐ習得）、右下=難しい×コモン（優先度低）、左下=簡単×コモン（基本）。色=職種、形=力量タイプ（●SKILL/■EDUCATION/◆LICENSE）。凡例クリックでフィルター可能。")
+                                            st.caption("💡 4象限マトリックス：横軸=取得難易度、縦軸=貴重度。凡例は【職種】セクションと【力量タイプ】セクションに分かれています。【職種】セクション内の項目をクリックすると職種別にフィルタリング、【力量タイプ】セクション内の項目をクリックすると力量タイプ別にフィルタリングできます。色=職種、形=力量タイプ（●SKILL/■EDUCATION/◆LICENSE）。")
                                     else:
                                         if role_name == selected_member_role:
                                             st.warning("あなたが未習得のスキルがありません。")
