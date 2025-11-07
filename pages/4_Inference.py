@@ -93,18 +93,20 @@ def create_growth_path_timeline(growth_path, role_name: str):
     sorted_skills = [item['skill'] for item in skills_with_priority]
 
     # 成長段階を決定（取得率に基づく）
+    # 取得率が高い = 多くの人が習得 = 基本スキル = 初級
+    # 取得率が低い = 一部の専門家のみ = 高度なスキル = 上級
     stages = []
     colors = []
     for skill in sorted_skills:
-        if skill.acquisition_rate < 0.3:
+        if skill.acquisition_rate >= 0.7:
             stages.append("🌱 初級")
-            colors.append("#90EE90")  # Light green
-        elif skill.acquisition_rate < 0.7:
+            colors.append("#90EE90")  # Light green - 基本的・必須スキル
+        elif skill.acquisition_rate >= 0.3:
             stages.append("🌿 中級")
-            colors.append("#4CAF50")  # Green
+            colors.append("#4CAF50")  # Green - 中堅レベルのスキル
         else:
             stages.append("🌳 上級")
-            colors.append("#2E7D32")  # Dark green
+            colors.append("#2E7D32")  # Dark green - 専門的・高度なスキル
 
     # スキル名（長すぎる場合は省略）
     skill_names = [
@@ -1528,7 +1530,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     timeline_fig = create_growth_path_timeline(growth_path, role_name)
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
-                                        st.caption("💡 緑色の実線：取得率の推移、オレンジ色の破線：優先度スコアの推移。マーカーの色は成長段階（薄緑=初級、緑=中級、濃緑=上級）。上位5件のスキル名を表示しています。")
+                                        st.caption("💡 緑色の実線：取得率の推移、オレンジ色の破線：優先度スコアの推移。マーカーの色は難易度レベル（薄緑=初級[取得率≥70%、基本スキル]、緑=中級[取得率30-70%、中堅スキル]、濃緑=上級[取得率<30%、専門スキル]）。上位5件のスキル名を表示。")
 
                                 with stages_tab:
                                     # 段階別チャートを作成
@@ -1564,12 +1566,13 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     with col3:
                                         st.markdown(f"**役職内取得率:** {rec_dict['acquisition_rate']*100:.1f}%")
                                         # 成長段階のラベル
-                                        if rec_dict['acquisition_rate'] < 0.3:
-                                            stage = "🌱 初級"
-                                        elif rec_dict['acquisition_rate'] < 0.7:
-                                            stage = "🌿 中級"
+                                        # 取得率が高い = 基本スキル = 初級、取得率が低い = 専門スキル = 上級
+                                        if rec_dict['acquisition_rate'] >= 0.7:
+                                            stage = "🌱 初級（基本スキル）"
+                                        elif rec_dict['acquisition_rate'] >= 0.3:
+                                            stage = "🌿 中級（中堅スキル）"
                                         else:
-                                            stage = "🌳 上級"
+                                            stage = "🌳 上級（専門スキル）"
                                         st.markdown(f"**成長段階:** {stage}")
 
                                     # 推薦理由
