@@ -884,49 +884,31 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     recs = []
                     graph_recommendations = None
                 else:
-                    # 全役職について推薦を生成（パス情報付き）
-                    all_role_recommendations = analyzer.recommend_all_roles(
-                        top_n_per_role=top_n,
-                        min_acquisition_rate=min_acquisition_rate,
-                        max_paths=max_paths
-                    )
+                    # 全役職について推薦を生成（パス情報なし、シンプルな推薦）
+                    all_role_recommendations = {}
 
-                    # HybridRecommendation形式に変換（グラフ可視化のため）
-                    from skillnote_recommendation.graph.hybrid_recommender import HybridRecommendation
-                    role_based_recommendations_by_role = {}
+                    for role_name, growth_path in growth_paths.items():
+                        # この役職のメンバーを取得（代表として最初のメンバーを使用）
+                        role_members = td["members_clean"][
+                            td["members_clean"]['役職'] == role_name
+                        ]['メンバーコード'].unique()
 
-                    for role_name, role_recs in all_role_recommendations.items():
-                        hybrid_recs = []
+                        if len(role_members) == 0:
+                            continue
 
-                        for rec_dict in role_recs:
-                            # 力量情報を構築
-                            comp_info = {
-                                '力量名': rec_dict['competence_name'],
-                                '力量タイプ': rec_dict['competence_type'],
-                                'カテゴリー': rec_dict['category'],
-                                '概要': None
-                            }
+                        # 最初のメンバーについて推薦を生成（パス情報なし）
+                        role_recs = analyzer.recommend_next_skills(
+                            member_code=role_members[0],
+                            top_n=top_n,
+                            min_acquisition_rate=min_acquisition_rate
+                        )
 
-                            # HybridRecommendationオブジェクトを作成
-                            hybrid_rec = HybridRecommendation(
-                                competence_code=rec_dict['competence_code'],
-                                score=rec_dict['priority_score'],
-                                graph_score=rec_dict['priority_score'],
-                                cf_score=0.0,
-                                content_score=0.0,
-                                paths=rec_dict.get('paths', []),
-                                reasons=[rec_dict['reason']],
-                                competence_info=comp_info
-                            )
-
-                            hybrid_recs.append(hybrid_rec)
-
-                        role_based_recommendations_by_role[role_name] = hybrid_recs
+                        all_role_recommendations[role_name] = role_recs
 
                     # セッションステートに保存
                     st.session_state.role_based_growth_paths = growth_paths
                     st.session_state.role_based_analyzer = analyzer
-                    st.session_state.role_based_recommendations_by_role = role_based_recommendations_by_role
+                    st.session_state.role_based_recommendations = all_role_recommendations
 
                     # 統合用のrecsは空にする（役職別に表示するため）
                     recs = []
@@ -1241,7 +1223,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     # 成長パス情報を取得
                     analyzer = st.session_state.get('role_based_analyzer')
                     growth_paths = st.session_state.get('role_based_growth_paths', {})
-                    role_based_recs = st.session_state.get('role_based_recommendations_by_role', {})
+                    role_based_recs = st.session_state.get('role_based_recommendations', {})
 
                     if analyzer:
                         # 対象メンバーの進捗状況を表示
@@ -1270,164 +1252,46 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                         st.markdown("## 🎯 役職別の推薦スキル")
                         st.info("各役職における典型的な成長パスに基づいて、次に習得すべきスキルを推薦します。")
 
-                        # 役職ごとにタブで表示
-                        role_tabs = st.tabs(list(role_based_recs.keys()))
+                        # 役職ごとにシンプルに表示
+                        for role_name, role_recs in role_based_recs.items():
+                            st.markdown(f"### 役職: {role_name}")
 
-                        for role_idx, (role_name, role_recs) in enumerate(role_based_recs.items()):
-                            with role_tabs[role_idx]:
-                                st.markdown(f"### 役職: {role_name}")
+                            # この役職の情報を表示
+                            if role_name in growth_paths:
+                                growth_path = growth_paths[role_name]
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.metric("メンバー数", f"{growth_path.total_members}名")
+                                with col2:
+                                    st.metric("分析されたスキル数", f"{len(growth_path.skills_in_order)}個")
 
-                                # この役職の情報を表示
-                                if role_name in growth_paths:
-                                    growth_path = growth_paths[role_name]
+                            st.markdown("---")
+
+                            # 推薦が0件の場合
+                            if not role_recs:
+                                st.warning("この役職の推薦スキルはありません。")
+                                continue
+
+                            # 推薦結果をシンプルなリストで表示
+                            for idx, rec_dict in enumerate(role_recs, 1):
+                                title = f"🎯 推薦 {idx}: {rec_dict['competence_name']} (優先度スコア: {rec_dict['priority_score']:.3f})"
+
+                                with st.expander(title):
+                                    # スキル情報
                                     col1, col2 = st.columns(2)
                                     with col1:
-                                        st.metric("メンバー数", f"{growth_path.total_members}名")
+                                        st.markdown(f"**力量タイプ:** {rec_dict['competence_type']}")
+                                        st.markdown(f"**カテゴリー:** {rec_dict['category']}")
                                     with col2:
-                                        st.metric("分析されたスキル数", f"{len(growth_path.skills_in_order)}個")
+                                        st.markdown(f"**優先度スコア:** {rec_dict['priority_score']:.3f}")
+                                        st.markdown(f"**取得率:** {rec_dict['acquisition_rate']*100:.1f}%")
 
-                                st.markdown("---")
+                                    # 推薦理由
+                                    st.markdown("---")
+                                    st.markdown("### 📋 推薦理由")
+                                    st.markdown(rec_dict['reason'])
 
-                                # 推薦結果の詳細表示（グラフベース推薦と同じ形式）
-                                for idx, hybrid_rec in enumerate(role_recs, 1):
-                                    rec = convert_hybrid_to_recommendation(hybrid_rec)
-                                    title = f"🎯 推薦 {idx}: {rec.competence_name} (優先度スコア: {hybrid_rec.score:.3f})"
-
-                                    with st.expander(title):
-                                        # スコア情報を表示
-                                        col_s1, col_s2 = st.columns(2)
-                                        with col_s1:
-                                            st.metric("優先度スコア", f"{hybrid_rec.score:.3f}")
-                                        with col_s2:
-                                            st.metric("パス数", f"{len(hybrid_rec.paths)}個")
-
-                                        # 推薦理由
-                                        st.markdown("### 📋 推薦理由")
-                                        st.markdown('\n'.join(hybrid_rec.reasons))
-
-                                        # パス可視化
-                                        if show_paths and hybrid_rec.paths:
-                                            st.markdown("---")
-                                            st.markdown("### 🔗 推薦パスの可視化")
-
-                                            from skillnote_recommendation.graph import RecommendationPathVisualizer
-                                            from skillnote_recommendation.graph.visualization_utils import (
-                                                ExplanationGenerator,
-                                                format_explanation_for_display,
-                                                export_figure_as_html
-                                            )
-
-                                            visualizer = RecommendationPathVisualizer()
-                                            category_hierarchy = st.session_state.knowledge_graph.category_hierarchy if st.session_state.get('knowledge_graph') else None
-                                            explainer = ExplanationGenerator(category_hierarchy=category_hierarchy)
-
-                                            # 詳細説明を生成
-                                            explanation = explainer.generate_detailed_explanation(
-                                                paths=hybrid_rec.paths,
-                                                rwr_score=hybrid_rec.graph_score,
-                                                nmf_score=0.0,
-                                                competence_info=hybrid_rec.competence_info
-                                            )
-
-                                            # グラフ可視化と詳細説明をタブで表示
-                                            tab1, tab2 = st.tabs(["📊 グラフ可視化", "📝 詳細説明"])
-
-                                            with tab1:
-                                                member_name = members_df[
-                                                    members_df["メンバーコード"] == selected_member_code
-                                                ]["メンバー名"].iloc[0] if not members_df[
-                                                    members_df["メンバーコード"] == selected_member_code
-                                                ].empty else selected_member_code
-
-                                                fig = visualizer.visualize_recommendation_path(
-                                                    paths=hybrid_rec.paths,
-                                                    target_member_name=member_name,
-                                                    target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code),
-                                                    phase_info=None
-                                                )
-                                                st.plotly_chart(fig, use_container_width=True)
-
-                                                # エクスポートボタン
-                                                if st.button(f"📥 HTMLとしてエクスポート", key=f"export_role_rec_{role_idx}_{idx}"):
-                                                    try:
-                                                        filename = f"role_recommendation_path_{role_name}_{hybrid_rec.competence_code}.html"
-                                                        filepath = export_figure_as_html(fig, filename)
-                                                        st.success(f"✅ エクスポート完了: {filepath}")
-                                                    except Exception as e:
-                                                        st.error(f"エクスポートエラー: {str(e)}")
-
-                                            with tab2:
-                                                formatted_explanation = format_explanation_for_display(explanation)
-                                                st.markdown(formatted_explanation)
-
-                    # グラフ可視化
-                    if growth_paths:
-                        st.markdown("---")
-                        st.markdown("## 📊 成長パスのグラフ可視化")
-                        st.info("各役職の成長ルートをグラフ構造で表示します。左から右へ：初期段階 → 中期段階 → 後期段階")
-
-                        from skillnote_recommendation.graph import RoleGrowthPathVisualizer
-
-                        visualizer = RoleGrowthPathVisualizer()
-
-                        # 全役職のグラフを生成
-                        with st.spinner("グラフを生成中..."):
-                            role_figures = visualizer.visualize_multiple_roles(
-                                growth_paths=growth_paths,
-                                max_skills_per_role=30
-                            )
-
-                        if role_figures:
-                            # タブで各役職のグラフを表示
-                            role_tabs = st.tabs(list(role_figures.keys()))
-
-                            for idx, (role_name, fig) in enumerate(role_figures.items()):
-                                with role_tabs[idx]:
-                                    st.plotly_chart(fig, use_container_width=True)
-
-                                    # エクスポートボタン
-                                    if st.button(f"📥 {role_name}のグラフをHTMLとしてエクスポート", key=f"export_role_{idx}"):
-                                        try:
-                                            from skillnote_recommendation.graph.visualization_utils import export_figure_as_html
-                                            filename = f"role_growth_path_{role_name}.html"
-                                            filepath = export_figure_as_html(fig, filename)
-                                            st.success(f"✅ エクスポート完了: {filepath}")
-                                        except Exception as e:
-                                            st.error(f"エクスポートエラー: {str(e)}")
-                        else:
-                            st.warning("グラフを生成できませんでした。")
-
-                    # 成長パスの詳細情報（オプション）
-                    if growth_paths:
-                        st.markdown("---")
-                        with st.expander("📚 全役職の成長パス詳細を見る"):
-                            st.markdown("### 分析された役職と成長パス")
-
-                            for role_name, growth_path in growth_paths.items():
-                                st.markdown(f"#### 役職: {role_name}")
-                                st.markdown(f"- メンバー数: {growth_path.total_members}名")
-                                st.markdown(f"- 分析されたスキル数: {len(growth_path.skills_in_order)}個")
-
-                                # 初期・中期・後期のスキルを表示
-                                early_skills = growth_path.get_early_stage_skills(threshold=0.3)
-                                mid_skills = growth_path.get_mid_stage_skills(0.3, 0.7)
-                                late_skills = growth_path.get_late_stage_skills(threshold=0.7)
-
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    st.markdown("**初期段階のスキル**")
-                                    for skill in early_skills[:5]:
-                                        st.caption(f"- {skill.competence_name}")
-                                with col2:
-                                    st.markdown("**中期段階のスキル**")
-                                    for skill in mid_skills[:5]:
-                                        st.caption(f"- {skill.competence_name}")
-                                with col3:
-                                    st.markdown("**後期段階のスキル**")
-                                    for skill in late_skills[:5]:
-                                        st.caption(f"- {skill.competence_name}")
-
-                                st.markdown("---")
+                            st.markdown("---")
 
                 # キャリアパターン別推薦の場合
                 elif internal_method == "キャリアパターン別推薦":
