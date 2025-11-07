@@ -175,23 +175,11 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
     # 各スキルの主要職種を特定
     skill_occupations = []
     if members_df is not None and member_competence_df is not None:
-        # 必要なカラム名を動的に検出
-        occupation_col = None
-        member_code_col_in_members = None
-        member_code_col_in_competence = None
-        competence_code_col = None
-
-        for col in members_df.columns:
-            if '職種' in col:
-                occupation_col = col
-            if 'メンバーコード' in col:
-                member_code_col_in_members = col
-
-        for col in member_competence_df.columns:
-            if 'メンバーコード' in col:
-                member_code_col_in_competence = col
-            if '力量コード' in col:
-                competence_code_col = col
+        # カラム名の存在確認（data_transformerで標準名に正規化済み）
+        occupation_col = '職種' if '職種' in members_df.columns else None
+        member_code_col_in_members = 'メンバーコード' if 'メンバーコード' in members_df.columns else None
+        member_code_col_in_competence = 'メンバーコード' if 'メンバーコード' in member_competence_df.columns else None
+        competence_code_col = '力量コード' if '力量コード' in member_competence_df.columns else None
 
         if occupation_col and member_code_col_in_members and member_code_col_in_competence and competence_code_col:
             for skill in sorted_skills:
