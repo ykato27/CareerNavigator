@@ -71,8 +71,8 @@ class Config:
 
     # Knowledge Graph パラメータ
     GRAPH_PARAMS = {
-        'member_similarity_threshold': 0.3,  # メンバー類似度の閾値
-        'member_similarity_top_k': 5,  # 各メンバーに対する類似メンバー数
+        'member_similarity_threshold': 0.15,  # メンバー類似度の閾値（0.3 → 0.15に緩和）
+        'member_similarity_top_k': 10,  # 各メンバーに対する類似メンバー数（5 → 10に増加）
     }
 
     # Matrix Factorization パラメータ
