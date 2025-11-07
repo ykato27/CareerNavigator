@@ -16,7 +16,8 @@ from .career_path import (
     CareerPathAnalysis,
     CompetenceGap,
     RecommendationLearningPath,
-    generate_learning_path_from_recommendations
+    generate_learning_path_from_recommendations,
+    generate_progressive_learning_paths
 )
 from .career_path_visualizer import CareerPathVisualizer, format_career_path_summary
 
@@ -42,6 +43,7 @@ __all__ = [
     'CompetenceGap',
     'RecommendationLearningPath',
     'generate_learning_path_from_recommendations',
+    'generate_progressive_learning_paths',
     'CareerPathVisualizer',
     'format_career_path_summary',
     # 新しい改善版
