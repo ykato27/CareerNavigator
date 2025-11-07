@@ -166,24 +166,35 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
     # 各スキルの主要職種を特定
     skill_occupations = []
     if members_df is not None and member_competence_df is not None:
-        for skill in sorted_skills:
-            # このスキルを保有しているメンバーを取得
-            skill_holders = member_competence_df[
-                member_competence_df['力量コード'] == skill.competence_code
-            ]['メンバーコード'].unique()
+        # 職種カラム名を動的に検出
+        occupation_col = None
+        for col in members_df.columns:
+            if '職種' in col:
+                occupation_col = col
+                break
 
-            # メンバーの職種を取得
-            holder_occupations = members_df[
-                members_df['メンバーコード'].isin(skill_holders)
-            ]['職種'].dropna()
+        if occupation_col:
+            for skill in sorted_skills:
+                # このスキルを保有しているメンバーを取得
+                skill_holders = member_competence_df[
+                    member_competence_df['力量コード'] == skill.competence_code
+                ]['メンバーコード'].unique()
 
-            # 最も多い職種を特定
-            if len(holder_occupations) > 0:
-                main_occupation = holder_occupations.mode()[0] if len(holder_occupations.mode()) > 0 else '不明'
-            else:
-                main_occupation = '不明'
+                # メンバーの職種を取得
+                holder_occupations = members_df[
+                    members_df['メンバーコード'].isin(skill_holders)
+                ][occupation_col].dropna()
 
-            skill_occupations.append(main_occupation)
+                # 最も多い職種を特定
+                if len(holder_occupations) > 0:
+                    main_occupation = holder_occupations.mode()[0] if len(holder_occupations.mode()) > 0 else '不明'
+                else:
+                    main_occupation = '不明'
+
+                skill_occupations.append(main_occupation)
+        else:
+            # 職種カラムが見つからない場合は力量タイプを使用
+            skill_occupations = [skill.competence_type for skill in sorted_skills]
     else:
         # データがない場合は力量タイプを使用
         skill_occupations = [skill.competence_type for skill in sorted_skills]
