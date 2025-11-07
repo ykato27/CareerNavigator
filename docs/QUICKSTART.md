@@ -85,26 +85,40 @@ uv run black skillnote_recommendation/
 ### 機械学習ベース推薦
 
 ```python
-from skillnote_recommendation.ml import MLRecommender
+from skillnote_recommendation.ml.ml_recommender import MLRecommender
 from skillnote_recommendation.core.data_loader import DataLoader
+from skillnote_recommendation.core.data_transformer import DataTransformer
 
 # データ読み込み
 loader = DataLoader()
 data = loader.load_all_data()
 
+# データ変換
+transformer = DataTransformer()
+competence_master = transformer.create_competence_master(data)
+member_competence, _ = transformer.create_member_competence(data, competence_master)
+
 # ML推薦システム初期化
-ml_recommender = MLRecommender(data)
+ml_recommender = MLRecommender.build(
+    member_competence=member_competence,
+    competence_master=competence_master,
+    member_master=data['members'],
+    use_preprocessing=False,
+    use_tuning=False,
+    n_components=20  # 潜在因子数を指定（省略可能、デフォルトは20）
+)
 
 # 基本的な推薦
 recommendations = ml_recommender.recommend(
     member_code='m48',
-    top_n=10
+    top_n=10,
+    use_diversity=False
 )
 
 # 推薦結果表示
 for rec in recommendations:
-    print(f"{rec['力量名']}: {rec['MLスコア']:.3f}")
-    print(f"  理由: {rec['推薦理由']}")
+    print(f"{rec.competence_name}: {rec.priority_score:.3f}")
+    print(f"  理由: {rec.reason}")
 ```
 
 ### 多様性を重視した推薦
@@ -119,12 +133,11 @@ recommendations = ml_recommender.recommend(
 )
 
 # 多様性メトリクス確認
-diversity = ml_recommender.calculate_diversity_metrics(
-    recommendations,
-    ml_recommender.competence_master
-)
+diversity = ml_recommender.calculate_diversity_metrics(recommendations)
 print(f"カテゴリ多様性: {diversity['category_diversity']:.3f}")
 print(f"タイプ多様性: {diversity['type_diversity']:.3f}")
+print(f"カバレッジ: {diversity['coverage']:.3f}")
+print(f"リスト内多様性: {diversity['intra_list_diversity']:.3f}")
 ```
 
 ## トラブルシューティング
@@ -163,7 +176,9 @@ ls -la output/
 ## 次のステップ
 
 - [README](../README.md) - すべての機能と使い方
-- [評価ガイド](EVALUATION.md) - 推薦システムの評価方法（時系列分割、多様性メトリクス）
-- [テスト設計](TEST_DESIGN.md) - テストコードの設計書（100+テストケース）
-- [開発ガイド](../README.md#開発環境のセットアップ) - 開発環境の構築とテスト方法
-- [カスタマイズ](../README.md#カスタマイズ) - パラメータ調整と拡張方法
+- [MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md) - モデル実装の詳細、データ前処理、ハイパーパラメータチューニング
+- [ML_TECHNICAL_DETAILS.md](ML_TECHNICAL_DETAILS.md) - 機械学習推薦システムの技術詳細
+- [EVALUATION.md](EVALUATION.md) - 推薦システムの評価方法（時系列分割、多様性メトリクス）
+- [CODE_STRUCTURE.md](CODE_STRUCTURE.md) - コード構造とモジュール設計
+- [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md) - StreamlitアプリケーションガイD
+- [TEST_DESIGN.md](TEST_DESIGN.md) - テストコードの設計書（238テストケース）

@@ -5,6 +5,8 @@
 CareerNavigator推薦システムは、時系列分割による評価機能を提供しています。
 過去のデータで学習し、未来のデータで評価することで、推薦精度を定量的に測定できます。
 
+> **関連ドキュメント**: モデル評価の詳細については、[MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md)も参照してください。
+
 ## 評価の流れ
 
 ### 1. 時系列分割（Temporal Split）
@@ -55,7 +57,7 @@ train_data, test_data = evaluator.temporal_train_test_split(
 学習データで推薦を生成し、評価データで精度を測定します。
 
 ```python
-# 評価実行
+# 評価実行（238テスト全体のカバレッジは30%）
 metrics = evaluator.evaluate_recommendations(
     train_data=train_data,
     test_data=test_data,
@@ -63,7 +65,7 @@ metrics = evaluator.evaluate_recommendations(
     top_k=10  # Top-10推薦の精度を評価
 )
 
-# 結果表示
+# 結果表示（print()を使用して標準出力に表示）
 evaluator.print_evaluation_results(metrics)
 ```
 
@@ -75,11 +77,12 @@ evaluator.print_evaluation_results(metrics)
 
 評価対象メンバー数: 150名
 
-【Top-10 推薦の評価】
-  Precision@10: 0.3245
-  Recall@10:    0.4521
-  NDCG@10:      0.3876
-  Hit Rate:     0.7200
+【Top-10 推薦の精度評価】
+  Precision@10:  0.3245  (推薦のうち正解の割合)
+  Recall@10:     0.4521  (正解のうち推薦された割合)
+  F1@10:         0.3776  (PrecisionとRecallの調和平均)
+  NDCG@10:       0.3876  (ランキング品質)
+  Hit Rate:      0.7200  (少なくとも1つ正解があった割合)
 
 ================================================================================
 ```
@@ -314,18 +317,23 @@ members_data = pd.DataFrame({
     'メンバーコード': train_data['メンバーコード'].unique()
 })
 
-# MLモデルを学習
+# MLモデルを学習（n_componentsを明示的に指定可能）
 ml_recommender = MLRecommender.build(
     member_competence=train_data,
     competence_master=competence_master,
     member_master=members_data,
     use_preprocessing=False,
-    use_tuning=False
+    use_tuning=False,
+    n_components=20  # 潜在因子数を指定（省略可能）
 )
 
 # サンプルメンバーで推薦を確認
 sample_member = train_data['メンバーコード'].iloc[0]
-recommendations = ml_recommender.recommend(sample_member, top_n=10, use_diversity=False)
+recommendations = ml_recommender.recommend(
+    member_code=sample_member,
+    top_n=10,
+    use_diversity=False
+)
 
 print(f"メンバー {sample_member} の推薦:")
 for rec in recommendations[:5]:
@@ -350,8 +358,10 @@ print("\n元データ(acquired)のカラム:")
 print(data['acquired'].columns.tolist())
 ```
 
-## 参考
+## 関連ドキュメント
 
-- [TEST_DESIGN.md](../TEST_DESIGN.md): 評価器のテスト設計
-- [tests/test_evaluator.py](../tests/test_evaluator.py): 評価器のテストコード
-- [skillnote_recommendation/core/evaluator.py](../skillnote_recommendation/core/evaluator.py): 評価器の実装
+- [MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md) - モデル実装の詳細、評価手法の解説
+- [ML_TECHNICAL_DETAILS.md](ML_TECHNICAL_DETAILS.md) - 機械学習推薦システムの技術詳細
+- [TEST_DESIGN.md](TEST_DESIGN.md) - 評価器のテスト設計（238テストケース、カバレッジ30%）
+- [tests/test_evaluator.py](../tests/test_evaluator.py) - 評価器のテストコード
+- [skillnote_recommendation/core/evaluator.py](../skillnote_recommendation/core/evaluator.py) - 評価器の実装
