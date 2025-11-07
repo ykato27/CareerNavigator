@@ -865,14 +865,28 @@ class RoleBasedGrowthPathAnalyzer:
 
             # 推薦理由を生成
             reason = self._generate_recommendation_reason(skill_pattern, growth_path)
-            reason += f"\n\n現在、この役職の{(1-skill_pattern.acquisition_rate)*100:.1f}%のメンバーがまだ習得していません。"
+
+            # 次のステップとしての位置づけを明確に
+            not_yet_pct = (1-skill_pattern.acquisition_rate)*100
+            if skill_pattern.acquisition_rate < 0.3:
+                step_label = "これから多くの人が習得する、次のステップのスキルです"
+            elif skill_pattern.acquisition_rate < 0.7:
+                step_label = "中級レベルで習得する、成長の要となるスキルです"
+            else:
+                step_label = "上級レベルで習得する、さらなる成長のためのスキルです"
+
+            reason += f"\n\n{step_label}。\n現在、この役職の{not_yet_pct:.1f}%のメンバーがまだ習得していません。"
+
+            # 優先度スコア：早い段階 × 未習得者の割合
+            # → まだ習得していない人が多く、成長パス上で基礎的なスキルが高スコア
+            priority_score = (1 - skill_pattern.acquisition_rate) * (1.0 / (skill_pattern.average_order + 1))
 
             recommendations.append({
                 'competence_code': skill_pattern.competence_code,
                 'competence_name': skill_pattern.competence_name,
                 'competence_type': skill_pattern.competence_type,
                 'category': skill_pattern.category,
-                'priority_score': skill_pattern.acquisition_rate * (1.0 / (skill_pattern.average_order + 1)),
+                'priority_score': priority_score,
                 'average_order': skill_pattern.average_order,
                 'acquisition_rate': skill_pattern.acquisition_rate,
                 'reason': reason
@@ -891,12 +905,15 @@ class RoleBasedGrowthPathAnalyzer:
                 reason = self._generate_recommendation_reason(skill_pattern, growth_path)
                 reason += f"\n\n※ 取得率は低いですが、成長パス上の重要なスキルです。"
 
+                # 優先度スコア：早い段階 × 未習得者の割合
+                priority_score = (1 - skill_pattern.acquisition_rate) * (1.0 / (skill_pattern.average_order + 1))
+
                 recommendations.append({
                     'competence_code': skill_pattern.competence_code,
                     'competence_name': skill_pattern.competence_name,
                     'competence_type': skill_pattern.competence_type,
                     'category': skill_pattern.category,
-                    'priority_score': skill_pattern.acquisition_rate * (1.0 / (skill_pattern.average_order + 1)),
+                    'priority_score': priority_score,
                     'average_order': skill_pattern.average_order,
                     'acquisition_rate': skill_pattern.acquisition_rate,
                     'reason': reason
