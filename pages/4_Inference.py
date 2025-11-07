@@ -884,26 +884,25 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     recs = []
                     graph_recommendations = None
                 else:
-                    # 全役職について推薦を生成（パス情報なし、シンプルな推薦）
+                    # 全役職について推薦を生成（役職全体の視点で）
                     all_role_recommendations = {}
 
-                    for role_name, growth_path in growth_paths.items():
-                        # この役職のメンバーを取得（代表として最初のメンバーを使用）
-                        role_members = td["members_clean"][
-                            td["members_clean"]['役職'] == role_name
-                        ]['メンバーコード'].unique()
+                    with st.spinner("各役職の推薦を生成中..."):
+                        for role_name, growth_path in growth_paths.items():
+                            # 役職全体に対して推薦を生成（個人ベースではない）
+                            role_recs = analyzer.recommend_for_role(
+                                role_name=role_name,
+                                top_n=top_n,
+                                min_acquisition_rate=min_acquisition_rate
+                            )
 
-                        if len(role_members) == 0:
-                            continue
+                            all_role_recommendations[role_name] = role_recs
 
-                        # 最初のメンバーについて推薦を生成（パス情報なし）
-                        role_recs = analyzer.recommend_next_skills(
-                            member_code=role_members[0],
-                            top_n=top_n,
-                            min_acquisition_rate=min_acquisition_rate
-                        )
-
-                        all_role_recommendations[role_name] = role_recs
+                            # デバッグ情報
+                            if not role_recs:
+                                st.warning(f"⚠️ 役職 '{role_name}' の推薦が0件です。")
+                            else:
+                                logger.info(f"役職 '{role_name}': {len(role_recs)}件の推薦を生成")
 
                     # セッションステートに保存
                     st.session_state.role_based_growth_paths = growth_paths
