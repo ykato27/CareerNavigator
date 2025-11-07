@@ -316,10 +316,15 @@ class DataTransformer:
         ].copy()
 
         # 必要なカラムのみ抽出
-        columns = ['メンバーコード', 'メンバー名', 'よみがな', '生年月日', '性別',
-                  '入社年月日', '社員区分', '役職', '職能・等級']
+        base_columns = ['メンバーコード', 'メンバー名', 'よみがな', '生年月日', '性別',
+                       '入社年月日', '社員区分', '役職', '職能・等級']
 
         # 存在するカラムのみ選択
-        available_columns = [col for col in columns if col in members_clean.columns]
+        available_columns = [col for col in base_columns if col in members_clean.columns]
+
+        # 職種カラムを動的に検出して追加
+        for col in members_clean.columns:
+            if '職種' in col and col not in available_columns:
+                available_columns.append(col)
 
         return members_clean[available_columns]
