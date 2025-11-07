@@ -1189,6 +1189,43 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                             st.markdown("**推薦理由**")
                             st.markdown(rec.reason)
 
+                    # グラフ可視化
+                    if growth_paths:
+                        st.markdown("---")
+                        st.markdown("## 📊 成長パスのグラフ可視化")
+                        st.info("各役職の成長ルートをグラフ構造で表示します。左から右へ：初期段階 → 中期段階 → 後期段階")
+
+                        from skillnote_recommendation.graph import RoleGrowthPathVisualizer
+
+                        visualizer = RoleGrowthPathVisualizer()
+
+                        # 全役職のグラフを生成
+                        with st.spinner("グラフを生成中..."):
+                            role_figures = visualizer.visualize_multiple_roles(
+                                growth_paths=growth_paths,
+                                max_skills_per_role=30
+                            )
+
+                        if role_figures:
+                            # タブで各役職のグラフを表示
+                            role_tabs = st.tabs(list(role_figures.keys()))
+
+                            for idx, (role_name, fig) in enumerate(role_figures.items()):
+                                with role_tabs[idx]:
+                                    st.plotly_chart(fig, use_container_width=True)
+
+                                    # エクスポートボタン
+                                    if st.button(f"📥 {role_name}のグラフをHTMLとしてエクスポート", key=f"export_role_{idx}"):
+                                        try:
+                                            from skillnote_recommendation.graph.visualization_utils import export_figure_as_html
+                                            filename = f"role_growth_path_{role_name}.html"
+                                            filepath = export_figure_as_html(fig, filename)
+                                            st.success(f"✅ エクスポート完了: {filepath}")
+                                        except Exception as e:
+                                            st.error(f"エクスポートエラー: {str(e)}")
+                        else:
+                            st.warning("グラフを生成できませんでした。")
+
                     # 成長パスの詳細情報（オプション）
                     if growth_paths:
                         st.markdown("---")
