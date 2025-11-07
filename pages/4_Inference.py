@@ -902,11 +902,8 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                             all_role_recommendations[role_name] = role_recs
 
-                            # デバッグ情報
-                            if not role_recs:
-                                st.warning(f"⚠️ 役職 '{role_name}' の推薦が0件です。")
-                            else:
-                                logger.info(f"役職 '{role_name}': {len(role_recs)}件の推薦を生成")
+                            # デバッグログ出力（ユーザーには表示しない）
+                            logger.info(f"役職 '{role_name}': {len(role_recs)}件の推薦を生成")
 
                     # セッションステートに保存
                     st.session_state.role_based_growth_paths = growth_paths
@@ -1155,7 +1152,51 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                 st.session_state.graph_recommendations = graph_recommendations
 
             # セッション状態に保存
-            if not recs:
+            # 役職ベース推薦の場合は特別な判定が必要
+            if internal_method == "役職ベースの成長パス推薦":
+                role_based_recs = st.session_state.get('role_based_recommendations', {})
+                # 全役職の推薦件数の合計を計算
+                total_recs = sum(len(role_recs) for role_recs in role_based_recs.values())
+
+                if total_recs == 0:
+                    st.warning("⚠️ 推薦できる力量がありません。")
+
+                    # 診断情報を表示
+                    st.info("### 💡 推薦が空になった理由:")
+
+                    st.write("**全ての役職で推薦可能なスキルがありませんでした。**")
+                    st.write("これは以下のいずれかの理由が考えられます：")
+                    st.write("- 各役職のメンバーが成長パス上の全スキルを既に習得済み")
+                    st.write("- 最小取得率の設定が高すぎる（現在の設定を下げてみてください）")
+
+                    # 改善案を提示
+                    st.markdown("### 🔧 改善案:")
+                    suggestions = []
+                    suggestions.append("- **最小取得率を下げる**: 詳細設定で最小取得率を0.0～0.1に下げてみてください")
+                    suggestions.append("- **推薦数を増やす**: スライダーで推薦数を増やしてみてください")
+
+                    for suggestion in suggestions:
+                        st.write(suggestion)
+
+                    st.session_state.last_recommendations_df = None
+                    st.session_state.last_recommendations = None
+                    st.session_state.last_target_member_code = None
+                else:
+                    # 役職ベース推薦は成功
+                    # DataFrame作成はスキップ（役職別に表示するため）
+                    st.session_state.last_recommendations_df = None
+                    st.session_state.last_recommendations = None
+
+                    # リッチな成功メッセージ（実行時間を表示）
+                    render_success_message(
+                        title="✅ 推薦が完了しました",
+                        message=f"全{len(role_based_recs)}役職で合計{total_recs}件の力量を推薦しました",
+                        additional_info=f"実行時間: {elapsed_time:.2f}秒"
+                    )
+
+                    # 推薦結果の表示
+                    st.markdown("---")
+            elif not recs:
                 st.warning("⚠️ 推薦できる力量がありません。")
 
                 # 診断情報を表示
@@ -1272,7 +1313,11 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                             # 推薦が0件の場合
                             if not role_recs:
-                                st.warning("この役職の推薦スキルはありません。")
+                                st.info(f"💡 **役職「{role_name}」の推薦スキルはありません。**\n\n"
+                                       "これは以下のいずれかの理由が考えられます：\n"
+                                       "- この役職のメンバーが成長パス上の全スキルを既に習得済み\n"
+                                       "- 最小取得率の設定が高すぎる（詳細設定で下げてみてください）\n"
+                                       "- この役職の成長パスで推薦可能なスキルが存在しない")
                                 continue
 
                             # 推薦結果をシンプルなリストで表示
