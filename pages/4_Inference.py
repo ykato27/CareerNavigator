@@ -1272,8 +1272,21 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                             for comp in learning_path.phase_3_expert:
                                                 phase_info[comp['competence_code']] = 3
 
+                                        # 段階的な学習パスを生成（Phase 1 → Phase 2 → Phase 3）
+                                        combined_paths = list(hybrid_rec.paths) if hybrid_rec.paths else []
+                                        if learning_path:
+                                            from skillnote_recommendation.graph import generate_progressive_learning_paths
+                                            progressive_paths = generate_progressive_learning_paths(
+                                                learning_path=learning_path,
+                                                member_code=selected_member_code,
+                                                member_name=member_name,
+                                                max_paths=3  # 各フェーズから最大3つの力量でパスを生成
+                                            )
+                                            # 既存のRWRパスと段階的な学習パスを結合
+                                            combined_paths.extend(progressive_paths)
+
                                         fig = visualizer.visualize_recommendation_path(
-                                            paths=hybrid_rec.paths,
+                                            paths=combined_paths,
                                             target_member_name=member_name,
                                             target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code),
                                             phase_info=phase_info if phase_info else None

@@ -66,18 +66,25 @@ class RecommendationPathVisualizer:
         # NetworkXグラフを構築
         G = self._build_graph_from_paths(paths, phase_info)
 
-        # レイアウトを計算
-        pos = self._calculate_layout(G, paths)
+        # レイアウトを計算（フェーズ情報を考慮）
+        pos = self._calculate_layout(G, paths, phase_info)
 
         # Plotly Figure を作成
         fig = self._create_plotly_figure(G, pos, paths, scores, phase_info)
 
         # レイアウト設定
-        title_text = (
-            f"<b>推薦パス: {target_member_name} → {target_competence_name}</b><br>"
-            f"<sub>📊 推薦ロジック: あなたの既習得力量 → 類似メンバー → 推薦力量</sub><br>"
-            f"<sub style='font-size:10px'>💡 各ノードにカーソルを合わせると詳しい説明が表示されます</sub>"
-        )
+        if phase_info:
+            title_text = (
+                f"<b>推薦パス: {target_member_name} → {target_competence_name}</b><br>"
+                f"<sub>📊 推薦ロジック: RWRパス + 段階的学習パス（Phase 1 → 2 → 3）</sub><br>"
+                f"<sub style='font-size:10px'>💡 各ノードにカーソルを合わせると詳しい説明が表示されます</sub>"
+            )
+        else:
+            title_text = (
+                f"<b>推薦パス: {target_member_name} → {target_competence_name}</b><br>"
+                f"<sub>📊 推薦ロジック: あなたの既習得力量 → 類似メンバー → 推薦力量</sub><br>"
+                f"<sub style='font-size:10px'>💡 各ノードにカーソルを合わせると詳しい説明が表示されます</sub>"
+            )
 
         fig.update_layout(
             title=dict(
@@ -155,45 +162,118 @@ class RecommendationPathVisualizer:
 
         return G
 
-    def _calculate_layout(self, G: nx.DiGraph, paths: List[List[Dict]]) -> Dict:
-        """レイアウトを計算（階層レイアウト）"""
-        # 各ノードの階層を計算
+    def _calculate_layout(self, G: nx.DiGraph, paths: List[List[Dict]],
+                          phase_info: Optional[Dict[str, int]] = None) -> Dict:
+        """レイアウトを計算（階層レイアウト + フェーズベース）"""
+        # 各ノードの階層とフェーズを計算
         node_layers = {}
+        node_phases = {}
 
         for path in paths:
             for i, node in enumerate(path):
                 node_id = node['id']
+                node_type = node.get('type', '')
+
+                # 階層を計算
                 if node_id not in node_layers:
                     node_layers[node_id] = i
                 else:
                     # 最小の階層を採用
                     node_layers[node_id] = min(node_layers[node_id], i)
 
-        # 階層ごとにノードをグループ化
-        layers = {}
-        for node_id, layer in node_layers.items():
-            if layer not in layers:
-                layers[layer] = []
-            layers[layer].append(node_id)
+                # フェーズ情報を取得
+                if phase_info and node_type == 'competence':
+                    comp_code = node_id.replace('competence_', '')
+                    if comp_code in phase_info:
+                        node_phases[node_id] = phase_info[comp_code]
 
-        # 位置を計算
-        pos = {}
-        max_layer = max(layers.keys())
+        # フェーズ情報がある場合は、フェーズベースでグループ化
+        if node_phases:
+            # フェーズごとにノードをグループ化
+            phase_groups = {1: [], 2: [], 3: []}
+            member_nodes = []
+            other_nodes = []
 
-        for layer, nodes in layers.items():
-            x = layer / max_layer if max_layer > 0 else 0.5
-            n_nodes = len(nodes)
+            for node_id in G.nodes():
+                node_data = G.nodes[node_id]
+                node_type = node_data.get('type', '')
 
-            for i, node_id in enumerate(nodes):
-                # Y座標を計算（中央に配置）
-                if n_nodes == 1:
-                    y = 0.5
+                if node_type == 'member':
+                    member_nodes.append(node_id)
+                elif node_id in node_phases:
+                    phase = node_phases[node_id]
+                    phase_groups[phase].append(node_id)
                 else:
-                    y = i / (n_nodes - 1)
+                    other_nodes.append(node_id)
 
-                pos[node_id] = (x, y)
+            # 位置を計算
+            pos = {}
 
-        return pos
+            # メンバーノードを左端に配置
+            for i, node_id in enumerate(member_nodes):
+                y = 0.5 if len(member_nodes) == 1 else i / (len(member_nodes) - 1)
+                pos[node_id] = (0.0, y)
+
+            # Phase 1のノードを配置（x=0.25）
+            if phase_groups[1]:
+                n_nodes = len(phase_groups[1])
+                for i, node_id in enumerate(phase_groups[1]):
+                    y = 0.5 if n_nodes == 1 else i / (n_nodes - 1)
+                    pos[node_id] = (0.25, y)
+
+            # Phase 2のノードを配置（x=0.5）
+            if phase_groups[2]:
+                n_nodes = len(phase_groups[2])
+                for i, node_id in enumerate(phase_groups[2]):
+                    y = 0.5 if n_nodes == 1 else i / (n_nodes - 1)
+                    pos[node_id] = (0.5, y)
+
+            # Phase 3のノードを配置（x=0.75）
+            if phase_groups[3]:
+                n_nodes = len(phase_groups[3])
+                for i, node_id in enumerate(phase_groups[3]):
+                    y = 0.5 if n_nodes == 1 else i / (n_nodes - 1)
+                    pos[node_id] = (0.75, y)
+
+            # その他のノード（類似メンバーなど）を配置
+            if other_nodes:
+                n_nodes = len(other_nodes)
+                for i, node_id in enumerate(other_nodes):
+                    # 階層に基づいて配置
+                    layer = node_layers.get(node_id, 1)
+                    x = 0.15 + layer * 0.1  # 適切な位置に配置
+                    y = 0.5 if n_nodes == 1 else i / (n_nodes - 1)
+                    pos[node_id] = (x, y)
+
+            return pos
+
+        # フェーズ情報がない場合は従来の階層レイアウト
+        else:
+            # 階層ごとにノードをグループ化
+            layers = {}
+            for node_id, layer in node_layers.items():
+                if layer not in layers:
+                    layers[layer] = []
+                layers[layer].append(node_id)
+
+            # 位置を計算
+            pos = {}
+            max_layer = max(layers.keys()) if layers else 0
+
+            for layer, nodes in layers.items():
+                x = layer / max_layer if max_layer > 0 else 0.5
+                n_nodes = len(nodes)
+
+                for i, node_id in enumerate(nodes):
+                    # Y座標を計算（中央に配置）
+                    if n_nodes == 1:
+                        y = 0.5
+                    else:
+                        y = i / (n_nodes - 1)
+
+                    pos[node_id] = (x, y)
+
+            return pos
 
     def _create_plotly_figure(self,
                               G: nx.DiGraph,

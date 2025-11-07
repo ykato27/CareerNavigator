@@ -616,3 +616,143 @@ def _calculate_ease_score_simple(
     ease_score = min(same_category_count / 10.0, 1.0)
 
     return ease_score
+
+
+def generate_progressive_learning_paths(
+    learning_path: RecommendationLearningPath,
+    member_code: str,
+    member_name: str,
+    max_paths: int = 5
+) -> List[List[Dict]]:
+    """
+    段階的な学習パス（Phase 1 → Phase 2 → Phase 3）を生成
+
+    Args:
+        learning_path: 学習パスオブジェクト
+        member_code: メンバーコード
+        member_name: メンバー名
+        max_paths: 生成する最大パス数
+
+    Returns:
+        パスのリスト。各パスは [{'id': str, 'type': str, 'name': str}, ...] の形式
+    """
+    progressive_paths = []
+
+    # 各フェーズから最大max_paths個の力量を取得
+    phase_1_comps = learning_path.phase_1_basic[:max_paths] if learning_path.phase_1_basic else []
+    phase_2_comps = learning_path.phase_2_intermediate[:max_paths] if learning_path.phase_2_intermediate else []
+    phase_3_comps = learning_path.phase_3_expert[:max_paths] if learning_path.phase_3_expert else []
+
+    # メンバーノード（起点）
+    member_node = {
+        'id': f'member_{member_code}',
+        'type': 'member',
+        'name': member_name,
+        'code': member_code
+    }
+
+    # Phase 1のみの場合
+    if phase_1_comps and not phase_2_comps and not phase_3_comps:
+        for comp in phase_1_comps:
+            path = [
+                member_node,
+                {
+                    'id': f"competence_{comp['competence_code']}",
+                    'type': 'competence',
+                    'name': comp['competence_name']
+                }
+            ]
+            progressive_paths.append(path)
+        return progressive_paths
+
+    # Phase 1 → Phase 2のパス
+    if phase_1_comps and phase_2_comps:
+        for i, comp1 in enumerate(phase_1_comps):
+            # Phase 2から対応する力量を選択（同じインデックスまたは循環）
+            comp2 = phase_2_comps[i % len(phase_2_comps)]
+
+            if not phase_3_comps:
+                # Phase 3がない場合: Member → Phase1 → Phase2
+                path = [
+                    member_node,
+                    {
+                        'id': f"competence_{comp1['competence_code']}",
+                        'type': 'competence',
+                        'name': comp1['competence_name']
+                    },
+                    {
+                        'id': f"competence_{comp2['competence_code']}",
+                        'type': 'competence',
+                        'name': comp2['competence_name']
+                    }
+                ]
+                progressive_paths.append(path)
+            else:
+                # Phase 3がある場合: Member → Phase1 → Phase2 → Phase3
+                comp3 = phase_3_comps[i % len(phase_3_comps)]
+                path = [
+                    member_node,
+                    {
+                        'id': f"competence_{comp1['competence_code']}",
+                        'type': 'competence',
+                        'name': comp1['competence_name']
+                    },
+                    {
+                        'id': f"competence_{comp2['competence_code']}",
+                        'type': 'competence',
+                        'name': comp2['competence_name']
+                    },
+                    {
+                        'id': f"competence_{comp3['competence_code']}",
+                        'type': 'competence',
+                        'name': comp3['competence_name']
+                    }
+                ]
+                progressive_paths.append(path)
+
+    # Phase 2のみでPhase 1がない場合
+    elif phase_2_comps and not phase_1_comps:
+        for comp2 in phase_2_comps:
+            if not phase_3_comps:
+                # Phase 2のみ
+                path = [
+                    member_node,
+                    {
+                        'id': f"competence_{comp2['competence_code']}",
+                        'type': 'competence',
+                        'name': comp2['competence_name']
+                    }
+                ]
+                progressive_paths.append(path)
+            else:
+                # Phase 2 → Phase 3
+                comp3 = phase_3_comps[0]
+                path = [
+                    member_node,
+                    {
+                        'id': f"competence_{comp2['competence_code']}",
+                        'type': 'competence',
+                        'name': comp2['competence_name']
+                    },
+                    {
+                        'id': f"competence_{comp3['competence_code']}",
+                        'type': 'competence',
+                        'name': comp3['competence_name']
+                    }
+                ]
+                progressive_paths.append(path)
+
+    # Phase 3のみの場合
+    elif phase_3_comps and not phase_1_comps and not phase_2_comps:
+        for comp in phase_3_comps:
+            path = [
+                member_node,
+                {
+                    'id': f"competence_{comp['competence_code']}",
+                    'type': 'competence',
+                    'name': comp['competence_name']
+                }
+            ]
+            progressive_paths.append(path)
+
+    return progressive_paths
