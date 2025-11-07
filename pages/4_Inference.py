@@ -14,9 +14,13 @@ CareerNavigator - AI推薦実行
 
 from io import StringIO
 from typing import List
+import logging
 
 import streamlit as st
 import pandas as pd
+
+# ロガーの設定
+logger = logging.getLogger(__name__)
 
 from skillnote_recommendation.utils.streamlit_helpers import (
     check_data_loaded,
