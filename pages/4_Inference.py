@@ -1196,6 +1196,92 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                     # 推薦結果の表示
                     st.markdown("---")
+
+                    # 成長パス情報を取得
+                    analyzer = st.session_state.get('role_based_analyzer')
+                    growth_paths = st.session_state.get('role_based_growth_paths', {})
+
+                    if analyzer:
+                        # 対象メンバーの進捗状況を表示
+                        progress_info = analyzer.get_member_progress(selected_member_code)
+
+                        if progress_info:
+                            st.markdown("## 📊 あなたの成長パス上での進捗状況")
+
+                            # メトリクス表示
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric("役職", progress_info['role_name'])
+                            with col2:
+                                st.metric("進捗率", f"{progress_info['progress_rate']*100:.1f}%")
+                            with col3:
+                                st.metric("習得済み", f"{progress_info['acquired_count']}個")
+                            with col4:
+                                st.metric("未習得", f"{progress_info['not_acquired_count']}個")
+
+                            # プログレスバー
+                            st.progress(progress_info['progress_rate'])
+
+                    # 全役職の推薦を表示
+                    if role_based_recs:
+                        st.markdown("---")
+                        st.markdown("## 🎯 役職別：次に習得すべきスキル")
+                        st.info("各役職の成長パスを分析し、実際にその役職の人たちが習得してきた順序に基づいて、次のステップとして推薦すべきスキルを提示します。")
+
+                        # 役職ごとにシンプルに表示
+                        for role_name, role_recs_list in role_based_recs.items():
+                            st.markdown(f"### 役職: {role_name}")
+
+                            # この役職の情報を表示
+                            if role_name in growth_paths:
+                                growth_path = growth_paths[role_name]
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.metric("メンバー数", f"{growth_path.total_members}名")
+                                with col2:
+                                    st.metric("分析されたスキル数", f"{len(growth_path.skills_in_order)}個")
+
+                            st.markdown("---")
+
+                            # 推薦が0件の場合
+                            if not role_recs_list:
+                                st.info(f"💡 **役職「{role_name}」の推薦スキルはありません。**\n\n"
+                                       "これは以下のいずれかの理由が考えられます：\n"
+                                       "- この役職のメンバーが成長パス上の全スキルを既に習得済み\n"
+                                       "- 最小取得率の設定が高すぎる（詳細設定で下げてみてください）\n"
+                                       "- この役職の成長パスで推薦可能なスキルが存在しない")
+                                continue
+
+                            # 推薦結果をシンプルなリストで表示
+                            for idx, rec_dict in enumerate(role_recs_list, 1):
+                                title = f"🎯 推薦 {idx}: {rec_dict['competence_name']} (優先度スコア: {rec_dict['priority_score']:.3f})"
+
+                                with st.expander(title):
+                                    # スキル情報
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.markdown(f"**力量タイプ:** {rec_dict['competence_type']}")
+                                        st.markdown(f"**カテゴリー:** {rec_dict['category']}")
+                                    with col2:
+                                        st.markdown(f"**優先度スコア:** {rec_dict['priority_score']:.3f}")
+                                        st.markdown(f"**平均取得順序:** {rec_dict['average_order']:.1f}番目")
+                                    with col3:
+                                        st.markdown(f"**役職内取得率:** {rec_dict['acquisition_rate']*100:.1f}%")
+                                        # 成長段階のラベル
+                                        if rec_dict['acquisition_rate'] < 0.3:
+                                            stage = "🌱 初級"
+                                        elif rec_dict['acquisition_rate'] < 0.7:
+                                            stage = "🌿 中級"
+                                        else:
+                                            stage = "🌳 上級"
+                                        st.markdown(f"**成長段階:** {stage}")
+
+                                    # 推薦理由
+                                    st.markdown("---")
+                                    st.markdown("### 📋 推薦理由")
+                                    st.markdown(rec_dict['reason'])
+
+                            st.markdown("---")
             elif not recs:
                 st.warning("⚠️ 推薦できる力量がありません。")
 
@@ -1262,97 +1348,8 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                 # 推薦結果の表示
                 st.markdown("---")
 
-                # 役職ベースの成長パス推薦の場合
-                if internal_method == "役職ベースの成長パス推薦":
-                    # 成長パス情報を取得
-                    analyzer = st.session_state.get('role_based_analyzer')
-                    growth_paths = st.session_state.get('role_based_growth_paths', {})
-                    role_based_recs = st.session_state.get('role_based_recommendations', {})
-
-                    if analyzer:
-                        # 対象メンバーの進捗状況を表示
-                        progress_info = analyzer.get_member_progress(selected_member_code)
-
-                        if progress_info:
-                            st.markdown("## 📊 あなたの成長パス上での進捗状況")
-
-                            # メトリクス表示
-                            col1, col2, col3, col4 = st.columns(4)
-                            with col1:
-                                st.metric("役職", progress_info['role_name'])
-                            with col2:
-                                st.metric("進捗率", f"{progress_info['progress_rate']*100:.1f}%")
-                            with col3:
-                                st.metric("習得済み", f"{progress_info['acquired_count']}個")
-                            with col4:
-                                st.metric("未習得", f"{progress_info['not_acquired_count']}個")
-
-                            # プログレスバー
-                            st.progress(progress_info['progress_rate'])
-
-                    # 全役職の推薦を表示
-                    if role_based_recs:
-                        st.markdown("---")
-                        st.markdown("## 🎯 役職別：次に習得すべきスキル")
-                        st.info("各役職の成長パスを分析し、実際にその役職の人たちが習得してきた順序に基づいて、次のステップとして推薦すべきスキルを提示します。")
-
-                        # 役職ごとにシンプルに表示
-                        for role_name, role_recs in role_based_recs.items():
-                            st.markdown(f"### 役職: {role_name}")
-
-                            # この役職の情報を表示
-                            if role_name in growth_paths:
-                                growth_path = growth_paths[role_name]
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    st.metric("メンバー数", f"{growth_path.total_members}名")
-                                with col2:
-                                    st.metric("分析されたスキル数", f"{len(growth_path.skills_in_order)}個")
-
-                            st.markdown("---")
-
-                            # 推薦が0件の場合
-                            if not role_recs:
-                                st.info(f"💡 **役職「{role_name}」の推薦スキルはありません。**\n\n"
-                                       "これは以下のいずれかの理由が考えられます：\n"
-                                       "- この役職のメンバーが成長パス上の全スキルを既に習得済み\n"
-                                       "- 最小取得率の設定が高すぎる（詳細設定で下げてみてください）\n"
-                                       "- この役職の成長パスで推薦可能なスキルが存在しない")
-                                continue
-
-                            # 推薦結果をシンプルなリストで表示
-                            for idx, rec_dict in enumerate(role_recs, 1):
-                                title = f"🎯 推薦 {idx}: {rec_dict['competence_name']} (優先度スコア: {rec_dict['priority_score']:.3f})"
-
-                                with st.expander(title):
-                                    # スキル情報
-                                    col1, col2, col3 = st.columns(3)
-                                    with col1:
-                                        st.markdown(f"**力量タイプ:** {rec_dict['competence_type']}")
-                                        st.markdown(f"**カテゴリー:** {rec_dict['category']}")
-                                    with col2:
-                                        st.markdown(f"**優先度スコア:** {rec_dict['priority_score']:.3f}")
-                                        st.markdown(f"**平均取得順序:** {rec_dict['average_order']:.1f}番目")
-                                    with col3:
-                                        st.markdown(f"**役職内取得率:** {rec_dict['acquisition_rate']*100:.1f}%")
-                                        # 成長段階のラベル
-                                        if rec_dict['acquisition_rate'] < 0.3:
-                                            stage = "🌱 初級"
-                                        elif rec_dict['acquisition_rate'] < 0.7:
-                                            stage = "🌿 中級"
-                                        else:
-                                            stage = "🌳 上級"
-                                        st.markdown(f"**成長段階:** {stage}")
-
-                                    # 推薦理由
-                                    st.markdown("---")
-                                    st.markdown("### 📋 推薦理由")
-                                    st.markdown(rec_dict['reason'])
-
-                            st.markdown("---")
-
                 # キャリアパターン別推薦の場合
-                elif internal_method == "キャリアパターン別推薦":
+                if internal_method == "キャリアパターン別推薦":
                     pattern_recs = st.session_state.get('pattern_recommendations', {})
 
                     if pattern_recs:
