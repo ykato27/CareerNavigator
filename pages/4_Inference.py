@@ -1252,8 +1252,8 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     # 全役職の推薦を表示
                     if role_based_recs:
                         st.markdown("---")
-                        st.markdown("## 🎯 役職別の推薦スキル")
-                        st.info("各役職における典型的な成長パスに基づいて、次に習得すべきスキルを推薦します。")
+                        st.markdown("## 🎯 役職別：次に習得すべきスキル")
+                        st.info("各役職の成長パスを分析し、実際にその役職の人たちが習得してきた順序に基づいて、次のステップとして推薦すべきスキルを提示します。")
 
                         # 役職ごとにシンプルに表示
                         for role_name, role_recs in role_based_recs.items():
@@ -1281,13 +1281,23 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                                 with st.expander(title):
                                     # スキル情報
-                                    col1, col2 = st.columns(2)
+                                    col1, col2, col3 = st.columns(3)
                                     with col1:
                                         st.markdown(f"**力量タイプ:** {rec_dict['competence_type']}")
                                         st.markdown(f"**カテゴリー:** {rec_dict['category']}")
                                     with col2:
                                         st.markdown(f"**優先度スコア:** {rec_dict['priority_score']:.3f}")
-                                        st.markdown(f"**取得率:** {rec_dict['acquisition_rate']*100:.1f}%")
+                                        st.markdown(f"**平均取得順序:** {rec_dict['average_order']:.1f}番目")
+                                    with col3:
+                                        st.markdown(f"**役職内取得率:** {rec_dict['acquisition_rate']*100:.1f}%")
+                                        # 成長段階のラベル
+                                        if rec_dict['acquisition_rate'] < 0.3:
+                                            stage = "🌱 初級"
+                                        elif rec_dict['acquisition_rate'] < 0.7:
+                                            stage = "🌿 中級"
+                                        else:
+                                            stage = "🌳 上級"
+                                        st.markdown(f"**成長段階:** {stage}")
 
                                     # 推薦理由
                                     st.markdown("---")
