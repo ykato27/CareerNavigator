@@ -1262,10 +1262,21 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                             members_df["メンバーコード"] == selected_member_code
                                         ]["メンバー名"].iloc[0]
 
+                                        # 学習パス情報からフェーズマッピングを作成
+                                        phase_info = {}
+                                        if learning_path:
+                                            for comp in learning_path.phase_1_basic:
+                                                phase_info[comp['competence_code']] = 1
+                                            for comp in learning_path.phase_2_intermediate:
+                                                phase_info[comp['competence_code']] = 2
+                                            for comp in learning_path.phase_3_expert:
+                                                phase_info[comp['competence_code']] = 3
+
                                         fig = visualizer.visualize_recommendation_path(
                                             paths=hybrid_rec.paths,
                                             target_member_name=member_name,
-                                            target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)
+                                            target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code),
+                                            phase_info=phase_info if phase_info else None
                                         )
                                         st.plotly_chart(fig, use_container_width=True)
 
