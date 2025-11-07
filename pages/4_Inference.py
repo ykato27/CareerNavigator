@@ -47,13 +47,15 @@ from skillnote_recommendation.utils.ui_components import (
 # ヘルパー関数
 # =========================================================
 
-def create_growth_path_timeline(growth_path, role_name: str):
+def create_growth_path_timeline(growth_path, role_name: str, members_df=None, member_competence_df=None):
     """
     役職の成長パス（スキル取得シナリオ）をタイムライン形式で可視化
 
     Args:
         growth_path: RoleGrowthPathオブジェクト
         role_name: 役職名
+        members_df: メンバーマスタ（職種情報を含む）
+        member_competence_df: メンバー保有力量データ
 
     Returns:
         Plotlyのfigureオブジェクト
@@ -161,45 +163,69 @@ def create_growth_path_timeline(growth_path, role_name: str):
         total_difficulty = acquisition_difficulty + order_difficulty
         difficulty_scores.append(total_difficulty)
 
-    # 力量タイプごとにデータを分類
-    skills_by_type = {}
+    # 各スキルの主要職種を特定
+    skill_occupations = []
+    if members_df is not None and member_competence_df is not None:
+        for skill in sorted_skills:
+            # このスキルを保有しているメンバーを取得
+            skill_holders = member_competence_df[
+                member_competence_df['力量コード'] == skill.competence_code
+            ]['メンバーコード'].unique()
+
+            # メンバーの職種を取得
+            holder_occupations = members_df[
+                members_df['メンバーコード'].isin(skill_holders)
+            ]['職種'].dropna()
+
+            # 最も多い職種を特定
+            if len(holder_occupations) > 0:
+                main_occupation = holder_occupations.mode()[0] if len(holder_occupations.mode()) > 0 else '不明'
+            else:
+                main_occupation = '不明'
+
+            skill_occupations.append(main_occupation)
+    else:
+        # データがない場合は力量タイプを使用
+        skill_occupations = [skill.competence_type for skill in sorted_skills]
+
+    # 職種ごとにデータを分類
+    skills_by_occupation = {}
     for i, skill in enumerate(sorted_skills):
-        comp_type = skill.competence_type
-        if comp_type not in skills_by_type:
-            skills_by_type[comp_type] = {
+        occupation = skill_occupations[i]
+        if occupation not in skills_by_occupation:
+            skills_by_occupation[occupation] = {
                 'difficulty': [],
                 'rarity': [],
                 'names': [],
                 'hover_texts': []
             }
 
-        skills_by_type[comp_type]['difficulty'].append(difficulty_scores[i])
-        skills_by_type[comp_type]['rarity'].append(rarity_scores[i])
-        skills_by_type[comp_type]['names'].append(skill.competence_name)
-        skills_by_type[comp_type]['hover_texts'].append(hover_texts[i])
+        skills_by_occupation[occupation]['difficulty'].append(difficulty_scores[i])
+        skills_by_occupation[occupation]['rarity'].append(rarity_scores[i])
+        skills_by_occupation[occupation]['names'].append(skill.competence_name)
+        skills_by_occupation[occupation]['hover_texts'].append(hover_texts[i])
 
-    # 力量タイプごとの色を定義
-    type_colors = {
-        'TECHNICAL': '#1f77b4',     # 青
-        'BUSINESS': '#ff7f0e',      # オレンジ
-        'MANAGEMENT': '#2ca02c',    # 緑
-        'COMMUNICATION': '#d62728', # 赤
-        'CREATIVE': '#9467bd',      # 紫
-        'OTHER': '#8c564b'          # 茶色
+    # 職種ごとの色を定義（自動で色を割り当て）
+    unique_occupations = list(skills_by_occupation.keys())
+    # Plotlyのデフォルトカラーパレットを使用
+    plotly_colors = px.colors.qualitative.Plotly
+    occupation_colors = {
+        occupation: plotly_colors[i % len(plotly_colors)]
+        for i, occupation in enumerate(unique_occupations)
     }
 
     # 散布図を作成
     fig = go.Figure()
 
-    # 力量タイプごとにトレースを追加（フィルター可能にするため）
-    for comp_type, data in skills_by_type.items():
-        color = type_colors.get(comp_type, '#7f7f7f')  # デフォルトはグレー
+    # 職種ごとにトレースを追加（フィルター可能にするため）
+    for occupation, data in skills_by_occupation.items():
+        color = occupation_colors.get(occupation, '#7f7f7f')  # デフォルトはグレー
 
         fig.add_trace(go.Scatter(
             x=data['difficulty'],
             y=data['rarity'],
             mode='markers',
-            name=comp_type,
+            name=occupation,
             marker=dict(
                 size=12,  # 固定サイズ
                 color=color,
@@ -209,7 +235,7 @@ def create_growth_path_timeline(growth_path, role_name: str):
             text=data['names'],
             hovertext=data['hover_texts'],
             hoverinfo='text',
-            legendgroup=comp_type,
+            legendgroup=occupation,
             showlegend=True
         ))
 
@@ -272,7 +298,7 @@ def create_growth_path_timeline(growth_path, role_name: str):
         hovermode='closest',
         showlegend=True,
         legend=dict(
-            title=dict(text='<b>力量タイプ</b><br><sub>クリックでフィルター</sub>'),
+            title=dict(text='<b>職種</b><br><sub>クリックでフィルター</sub>'),
             orientation='v',
             yanchor='top',
             y=1,
@@ -1568,10 +1594,15 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                                 with timeline_tab:
                                     # タイムライン図を作成
-                                    timeline_fig = create_growth_path_timeline(growth_path, role_name)
+                                    timeline_fig = create_growth_path_timeline(
+                                        growth_path,
+                                        role_name,
+                                        members_df=td["members_clean"],
+                                        member_competence_df=td["member_competence"]
+                                    )
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
-                                        st.caption("💡 4象限マトリックス：横軸=取得難易度（0-100点）、縦軸=貴重度（0-100点）。赤い十字線で50点を中心に4象限に分割。右上=難しい×レア（最優先）、左上=簡単×レア（すぐ習得）、右下=難しい×コモン（優先度低）、左下=簡単×コモン（基本）。マーカーの色=力量タイプ、サイズ=固定。凡例クリックで職種別にフィルター可能。")
+                                        st.caption("💡 4象限マトリックス：横軸=取得難易度（0-100点）、縦軸=貴重度（0-100点）。赤い十字線で50点を中心に4象限に分割。右上=難しい×レア（最優先）、左上=簡単×レア（すぐ習得）、右下=難しい×コモン（優先度低）、左下=簡単×コモン（基本）。マーカーの色=職種、サイズ=固定。凡例クリックで職種別にフィルター可能。")
 
                                 with stages_tab:
                                     # 段階別チャートを作成
