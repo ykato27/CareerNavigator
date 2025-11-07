@@ -106,6 +106,12 @@ recommender = st.session_state.ml_recommender
 mf_model = recommender.mf_model
 
 # Knowledge Graphの初期化（グラフベース推薦とハイブリッド推薦で必要）
+# デフォルトパラメータをsession_stateで管理
+if 'graph_similarity_threshold' not in st.session_state:
+    from skillnote_recommendation.core.config import Config
+    st.session_state.graph_similarity_threshold = Config.GRAPH_PARAMS['member_similarity_threshold']
+    st.session_state.graph_similarity_top_k = Config.GRAPH_PARAMS['member_similarity_top_k']
+
 if 'knowledge_graph' not in st.session_state:
     from skillnote_recommendation.graph import CompetenceKnowledgeGraph
     with st.spinner("Knowledge Graphを初期化中..."):
@@ -113,7 +119,9 @@ if 'knowledge_graph' not in st.session_state:
             member_competence=td["member_competence"],
             member_master=td["members_clean"],
             competence_master=td["competence_master"],
-            use_category_hierarchy=True
+            use_category_hierarchy=True,
+            member_similarity_threshold=st.session_state.graph_similarity_threshold,
+            member_similarity_top_k=st.session_state.graph_similarity_top_k
         )
 
 
@@ -464,6 +472,61 @@ with st.expander("⚙️ 詳細設定（オプション）"):
 
     st.markdown("---")
     st.markdown("### グラフ設定（グラフベース・ハイブリッド推薦のみ）")
+
+    # メンバー類似度パラメータ調整
+    st.markdown("#### 🔧 メンバー類似度パラメータ")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        new_threshold = st.slider(
+            "類似度閾値",
+            min_value=0.05,
+            max_value=0.5,
+            value=st.session_state.graph_similarity_threshold,
+            step=0.05,
+            help="メンバー間の類似度がこの値以上の場合にエッジを張ります。小さいほど多くの接続が生成されます。"
+        )
+
+    with col2:
+        new_top_k = st.slider(
+            "類似メンバー数",
+            min_value=3,
+            max_value=20,
+            value=st.session_state.graph_similarity_top_k,
+            step=1,
+            help="各メンバーから接続する類似メンバーの最大数。多いほど推薦パスが豊富になります。"
+        )
+
+    # パラメータが変更された場合の通知
+    params_changed = (
+        new_threshold != st.session_state.graph_similarity_threshold or
+        new_top_k != st.session_state.graph_similarity_top_k
+    )
+
+    if params_changed:
+        st.info("⚠️ パラメータが変更されました。下のボタンでグラフを再構築してください。")
+
+    # グラフ再構築ボタン
+    if st.button("🔄 Knowledge Graphを再構築", help="新しいパラメータでグラフを再構築します"):
+        st.session_state.graph_similarity_threshold = new_threshold
+        st.session_state.graph_similarity_top_k = new_top_k
+
+        from skillnote_recommendation.graph import CompetenceKnowledgeGraph
+        with st.spinner("Knowledge Graphを再構築中..."):
+            st.session_state.knowledge_graph = CompetenceKnowledgeGraph(
+                member_competence=td["member_competence"],
+                member_master=td["members_clean"],
+                competence_master=td["competence_master"],
+                use_category_hierarchy=True,
+                member_similarity_threshold=new_threshold,
+                member_similarity_top_k=new_top_k
+            )
+        st.success(f"✅ グラフを再構築しました！（閾値={new_threshold}, 類似メンバー数={new_top_k}）")
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### 📊 パス表示設定")
 
     show_paths = st.checkbox(
         "学習パスを表示",

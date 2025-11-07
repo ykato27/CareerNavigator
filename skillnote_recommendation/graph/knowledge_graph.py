@@ -79,7 +79,9 @@ class CompetenceKnowledgeGraph:
         member_competence: pd.DataFrame,
         member_master: pd.DataFrame,
         competence_master: pd.DataFrame,
-        use_category_hierarchy: bool = True
+        use_category_hierarchy: bool = True,
+        member_similarity_threshold: Optional[float] = None,
+        member_similarity_top_k: Optional[int] = None
     ):
         """ナレッジグラフを初期化して構築
 
@@ -93,12 +95,16 @@ class CompetenceKnowledgeGraph:
                 必須列: 力量コード, 力量名, 力量タイプ
                 任意列: 力量カテゴリー名, 概要
             use_category_hierarchy: カテゴリー階層を使用するか（デフォルト: True）
+            member_similarity_threshold: メンバー類似度の閾値（Noneの場合はConfigから取得）
+            member_similarity_top_k: 各メンバーに対する類似メンバー数（Noneの場合はConfigから取得）
         """
         self.G = nx.Graph()
         self.member_competence_df = member_competence
         self.member_master_df = member_master
         self.competence_master_df = competence_master
         self.use_category_hierarchy = use_category_hierarchy
+        self.member_similarity_threshold = member_similarity_threshold
+        self.member_similarity_top_k = member_similarity_top_k
 
         # カテゴリー階層を構築
         if use_category_hierarchy:
@@ -147,7 +153,10 @@ class CompetenceKnowledgeGraph:
 
         # 7. メンバー間類似度エッジ
         logger.info("[%d/%d] メンバー間類似度エッジを追加中...", total_steps, total_steps)
-        self._add_member_similarity_edges()
+        self._add_member_similarity_edges(
+            threshold=self.member_similarity_threshold,
+            top_k=self.member_similarity_top_k
+        )
 
     def _add_member_nodes(self):
         """メンバーノードを追加"""
