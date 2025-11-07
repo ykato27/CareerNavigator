@@ -1,6 +1,6 @@
 [project]
 name = "skillnote-recommendation"
-version = "1.2.0"
+version = "1.2.1"
 description = "スキルノート推薦システム - 技術者向け力量推薦"
 authors = [
     {name = "Development Team"}

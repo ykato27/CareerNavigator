@@ -14,7 +14,7 @@ from skillnote_recommendation.core.models import (
 from skillnote_recommendation.core.data_loader import DataLoader
 from skillnote_recommendation.core.data_transformer import DataTransformer
 
-__version__ = "1.0.0"
+__version__ = "1.2.1"
 __all__ = [
     "Config",
     "Member",
