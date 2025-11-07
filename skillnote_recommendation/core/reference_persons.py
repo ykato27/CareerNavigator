@@ -63,7 +63,7 @@ class ReferencePersonFinder:
         member_competence: pd.DataFrame,
         member_master: pd.DataFrame,
         competence_master: pd.DataFrame,
-        config: Optional[ReferencePersonConfig] = None
+        config: Optional[ReferencePersonConfig] = None,
     ):
         """
         Args:
@@ -79,10 +79,7 @@ class ReferencePersonFinder:
 
         # メンバー×力量マトリクスを作成
         self.member_skill_matrix = member_competence.pivot_table(
-            index="メンバーコード",
-            columns="力量コード",
-            values="正規化レベル",
-            fill_value=0
+            index="メンバーコード", columns="力量コード", values="正規化レベル", fill_value=0
         )
 
         # ==========================================
@@ -103,7 +100,9 @@ class ReferencePersonFinder:
         self._competence_name_cache: Dict[str, str] = {}
         self._precompute_caches()
 
-        logger.info(f"ReferencePersonFinder initialized with {len(self.member_skill_matrix)} members")
+        logger.info(
+            f"ReferencePersonFinder initialized with {len(self.member_skill_matrix)} members"
+        )
 
     def _precompute_similarities(self) -> None:
         """類似度行列を事前計算（初期化時に1回だけ実行）"""
@@ -118,7 +117,7 @@ class ReferencePersonFinder:
         self._similarity_matrix = pd.DataFrame(
             similarity_values,
             index=self.member_skill_matrix.index,
-            columns=self.member_skill_matrix.index
+            columns=self.member_skill_matrix.index,
         )
 
         logger.debug(f"Similarity matrix precomputed: shape={self._similarity_matrix.shape}")
@@ -157,10 +156,7 @@ class ReferencePersonFinder:
         logger.debug(f"Caches precomputed: {len(self._member_competences_cache)} members")
 
     def find_reference_persons(
-        self,
-        target_member_code: str,
-        recommended_competence_code: str,
-        top_n: int = 3
+        self, target_member_code: str, recommended_competence_code: str, top_n: int = 3
     ) -> List[ReferencePerson]:
         """
         推薦された力量に対して参考になる人物を3タイプ検索
@@ -173,7 +169,9 @@ class ReferencePersonFinder:
         Returns:
             参考人物リスト（最大3人: 近い先輩1人、エキスパート1人、異分野1人）
         """
-        logger.info(f"Finding reference persons for {target_member_code}, competence: {recommended_competence_code}")
+        logger.info(
+            f"Finding reference persons for {target_member_code}, competence: {recommended_competence_code}"
+        )
 
         reference_persons = []
 
@@ -225,7 +223,7 @@ class ReferencePersonFinder:
         target_member_code: str,
         recommended_competence_code: str,
         similarities: Dict[str, float],
-        competence_holders: Set[str]
+        competence_holders: Set[str],
     ) -> Optional[ReferencePerson]:
         """
         近い距離の先輩を検索（追いつきやすい目標）
@@ -247,14 +245,17 @@ class ReferencePersonFinder:
 
             # 総合スキルレベルが適切な範囲か
             reference_total_level = self._get_total_skill_level(member_code)
-            skill_ratio = reference_total_level / target_total_level if target_total_level > 0 else 0
+            skill_ratio = (
+                reference_total_level / target_total_level if target_total_level > 0 else 0
+            )
 
-            return (self.config.close_senior_skill_ratio_min <= skill_ratio <=
-                    self.config.close_senior_skill_ratio_max)
+            return (
+                self.config.close_senior_skill_ratio_min
+                <= skill_ratio
+                <= self.config.close_senior_skill_ratio_max
+            )
 
-        candidates = self._filter_candidates(
-            target_member_code, similarities, filter_func
-        )
+        candidates = self._filter_candidates(target_member_code, similarities, filter_func)
 
         if not candidates:
             logger.debug("No close senior candidates found")
@@ -269,7 +270,7 @@ class ReferencePersonFinder:
             reference_member_code=best_member_code,
             reference_type="close_senior",
             similarity=similarity,
-            recommended_competence_code=recommended_competence_code
+            recommended_competence_code=recommended_competence_code,
         )
 
     def _find_expert(
@@ -277,7 +278,7 @@ class ReferencePersonFinder:
         target_member_code: str,
         recommended_competence_code: str,
         similarities: Dict[str, float],
-        competence_holders: Set[str]
+        competence_holders: Set[str],
     ) -> Optional[ReferencePerson]:
         """
         エキスパートを検索（専門性×最高レベル）
@@ -305,8 +306,7 @@ class ReferencePersonFinder:
 
         # レベルが最も高い人を選択（同レベルなら類似度で選択）
         best_member_code, best_level, similarity = max(
-            candidates_with_level,
-            key=lambda x: (x[1], x[2])  # レベル優先、次に類似度
+            candidates_with_level, key=lambda x: (x[1], x[2])  # レベル優先、次に類似度
         )
 
         logger.debug(f"Expert found with level={best_level}, similarity={similarity:.2f}")
@@ -317,7 +317,7 @@ class ReferencePersonFinder:
             reference_member_code=best_member_code,
             reference_type="expert",
             similarity=similarity,
-            recommended_competence_code=recommended_competence_code
+            recommended_competence_code=recommended_competence_code,
         )
 
     def _find_diverse_expert(
@@ -325,7 +325,7 @@ class ReferencePersonFinder:
         target_member_code: str,
         recommended_competence_code: str,
         similarities: Dict[str, float],
-        competence_holders: Set[str]
+        competence_holders: Set[str],
     ) -> Optional[ReferencePerson]:
         """
         異分野の達人を検索（多様性×異なるキャリア）
@@ -352,9 +352,7 @@ class ReferencePersonFinder:
             # 類似度が低いか
             return similarity <= self.config.diverse_expert_max_similarity
 
-        candidates = self._filter_candidates(
-            target_member_code, similarities, filter_func
-        )
+        candidates = self._filter_candidates(target_member_code, similarities, filter_func)
 
         # フォールバック: 類似度が低い人がいない場合は条件を緩和
         if not candidates and self.config.enable_fallback:
@@ -385,7 +383,7 @@ class ReferencePersonFinder:
             reference_member_code=best_member_code,
             reference_type="diverse_expert",
             similarity=similarity,
-            recommended_competence_code=recommended_competence_code
+            recommended_competence_code=recommended_competence_code,
         )
 
     # =========================================================
@@ -396,7 +394,7 @@ class ReferencePersonFinder:
         self,
         target_member_code: str,
         similarities: Dict[str, float],
-        filter_func: Callable[[str, float], bool]
+        filter_func: Callable[[str, float], bool],
     ) -> List[Tuple[str, float]]:
         """
         候補者をフィルタリング（共通処理）
@@ -427,7 +425,7 @@ class ReferencePersonFinder:
         reference_member_code: str,
         reference_type: str,
         similarity: float,
-        recommended_competence_code: str
+        recommended_competence_code: str,
     ) -> ReferencePerson:
         """
         ReferencePerson オブジェクトを構築（共通処理）
@@ -466,7 +464,7 @@ class ReferencePersonFinder:
             common_count=len(common),
             unique_count=len(unique),
             target_total_level=self._get_total_skill_level(target_member_code),
-            reference_total_level=self._get_total_skill_level(reference_member_code)
+            reference_total_level=self._get_total_skill_level(reference_member_code),
         )
 
         return ReferencePerson(
@@ -477,7 +475,7 @@ class ReferencePersonFinder:
             common_competences=common,
             unique_competences=unique,
             competence_gap=gap,
-            reason=reason
+            reason=reason,
         )
 
     def _get_similarities(self, target_member_code: str) -> Dict[str, float]:
@@ -490,7 +488,10 @@ class ReferencePersonFinder:
         Returns:
             {メンバーコード: 類似度} の辞書
         """
-        if self._similarity_matrix is None or target_member_code not in self._similarity_matrix.index:
+        if (
+            self._similarity_matrix is None
+            or target_member_code not in self._similarity_matrix.index
+        ):
             return {}
 
         # 類似度行列から該当行を取得して辞書に変換
@@ -514,9 +515,7 @@ class ReferencePersonFinder:
         return holders
 
     def _analyze_competence_gap(
-        self,
-        target_member_code: str,
-        reference_member_code: str
+        self, target_member_code: str, reference_member_code: str
     ) -> Tuple[List[str], List[str], Dict[str, float]]:
         """
         力量の差分を分析
@@ -600,7 +599,7 @@ class ReferencePersonFinder:
         common_count: int,
         unique_count: int,
         target_total_level: float,
-        reference_total_level: float
+        reference_total_level: float,
     ) -> str:
         """
         参考人物の理由を生成
@@ -622,7 +621,9 @@ class ReferencePersonFinder:
         similarity_pct = int(similarity * 100)
 
         if reference_type == "close_senior":
-            skill_ratio = reference_total_level / target_total_level if target_total_level > 0 else 0
+            skill_ratio = (
+                reference_total_level / target_total_level if target_total_level > 0 else 0
+            )
             skill_ratio_pct = int(skill_ratio * 100)
             level_str = f"レベル{competence_level:.1f}" if competence_level else ""
 

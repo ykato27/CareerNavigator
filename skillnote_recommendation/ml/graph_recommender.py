@@ -36,7 +36,7 @@ class SkillTransitionGraphRecommender(BaseRecommender):
         num_walks: int = 80,
         p: float = 1.0,
         q: float = 2.0,
-        workers: int = 4
+        workers: int = 4,
     ):
         """
         初期化
@@ -51,10 +51,7 @@ class SkillTransitionGraphRecommender(BaseRecommender):
             q: In-out parameter（local vs global）
             workers: 並列処理数
         """
-        super().__init__(
-            name="SkillTransitionGraph",
-            interpretability_score=4  # 高解釈性
-        )
+        super().__init__(name="SkillTransitionGraph", interpretability_score=4)  # 高解釈性
 
         self.time_window_days = time_window_days
         self.min_transition_count = min_transition_count
@@ -85,7 +82,7 @@ class SkillTransitionGraphRecommender(BaseRecommender):
         self.competence_master = competence_master.copy()
 
         # 取得日カラムの確認
-        if '取得日' not in member_competence.columns:
+        if "取得日" not in member_competence.columns:
             raise ValueError("スキル遷移グラフには「取得日」カラムが必要です")
 
         # グラフ構築
@@ -106,11 +103,11 @@ class SkillTransitionGraphRecommender(BaseRecommender):
 
         self.is_fitted = True
         self.metadata = {
-            'num_nodes': self.graph.number_of_nodes(),
-            'num_edges': self.graph.number_of_edges(),
-            'time_window_days': self.time_window_days,
-            'min_transition_count': self.min_transition_count,
-            'has_embeddings': self.node2vec_model is not None
+            "num_nodes": self.graph.number_of_nodes(),
+            "num_edges": self.graph.number_of_edges(),
+            "time_window_days": self.time_window_days,
+            "min_transition_count": self.min_transition_count,
+            "has_embeddings": self.node2vec_model is not None,
         }
 
         logger.info("\n" + "=" * 80)
@@ -128,18 +125,16 @@ class SkillTransitionGraphRecommender(BaseRecommender):
 
         # 取得日を日付型に変換
         df = self.member_competence.copy()
-        df['取得日_dt'] = pd.to_datetime(df['取得日'], errors='coerce')
-        df = df[df['取得日_dt'].notna()]
+        df["取得日_dt"] = pd.to_datetime(df["取得日"], errors="coerce")
+        df = df[df["取得日_dt"].notna()]
 
         # メンバーごとに学習順序を抽出
         transition_counts = {}
 
-        for member in df['メンバーコード'].unique():
-            member_skills = df[
-                df['メンバーコード'] == member
-            ].sort_values('取得日_dt')
+        for member in df["メンバーコード"].unique():
+            member_skills = df[df["メンバーコード"] == member].sort_values("取得日_dt")
 
-            skills = member_skills[['力量コード', '取得日_dt']].values
+            skills = member_skills[["力量コード", "取得日_dt"]].values
 
             # 連続するスキルペアを抽出
             for i in range(len(skills)):
@@ -152,32 +147,29 @@ class SkillTransitionGraphRecommender(BaseRecommender):
                     if time_diff <= self.time_window_days:
                         edge = (source_skill, target_skill)
                         if edge not in transition_counts:
-                            transition_counts[edge] = {
-                                'count': 0,
-                                'time_diffs': []
-                            }
-                        transition_counts[edge]['count'] += 1
-                        transition_counts[edge]['time_diffs'].append(time_diff)
+                            transition_counts[edge] = {"count": 0, "time_diffs": []}
+                        transition_counts[edge]["count"] += 1
+                        transition_counts[edge]["time_diffs"].append(time_diff)
 
         # 最小遷移回数以上のエッジのみグラフに追加
         for (source, target), stats in transition_counts.items():
-            if stats['count'] >= self.min_transition_count:
-                avg_time_diff = np.mean(stats['time_diffs'])
-                median_time_diff = np.median(stats['time_diffs'])
+            if stats["count"] >= self.min_transition_count:
+                avg_time_diff = np.mean(stats["time_diffs"])
+                median_time_diff = np.median(stats["time_diffs"])
 
                 G.add_edge(
                     source,
                     target,
-                    weight=stats['count'],
+                    weight=stats["count"],
                     avg_time_diff=avg_time_diff,
-                    median_time_diff=median_time_diff
+                    median_time_diff=median_time_diff,
                 )
 
                 # 統計情報を保存
                 self.transition_stats[(source, target)] = {
-                    'count': stats['count'],
-                    'avg_days': avg_time_diff,
-                    'median_days': median_time_diff
+                    "count": stats["count"],
+                    "avg_days": avg_time_diff,
+                    "median_days": median_time_diff,
                 }
 
         return G
@@ -193,16 +185,11 @@ class SkillTransitionGraphRecommender(BaseRecommender):
                 p=self.p,
                 q=self.q,
                 workers=self.workers,
-                quiet=True
+                quiet=True,
             )
 
             # モデル学習
-            self.node2vec_model = node2vec.fit(
-                window=5,
-                min_count=1,
-                batch_words=4,
-                epochs=5
-            )
+            self.node2vec_model = node2vec.fit(window=5, min_count=1, batch_words=4, epochs=5)
 
         except Exception as e:
             logger.error(f"Node2Vec学習中にエラー: {e}")
@@ -213,7 +200,7 @@ class SkillTransitionGraphRecommender(BaseRecommender):
         member_code: str,
         n: int = 10,
         exclude_acquired: bool = True,
-        competence_type: Optional[List[str]] = None
+        competence_type: Optional[List[str]] = None,
     ) -> List[Recommendation]:
         """
         推薦リストの生成
@@ -248,14 +235,14 @@ class SkillTransitionGraphRecommender(BaseRecommender):
                         continue
 
                     edge_data = self.graph[skill][neighbor]
-                    score = edge_data['weight']  # 遷移人数
+                    score = edge_data["weight"]  # 遷移人数
 
-                    if neighbor not in candidates or candidates[neighbor]['score'] < score:
+                    if neighbor not in candidates or candidates[neighbor]["score"] < score:
                         candidates[neighbor] = {
-                            'score': score,
-                            'source_skill': skill,
-                            'reason_type': 'direct_transition',
-                            'metadata': edge_data
+                            "score": score,
+                            "source_skill": skill,
+                            "reason_type": "direct_transition",
+                            "metadata": edge_data,
                         }
 
         # 方法2: 埋め込み空間での類似度
@@ -265,22 +252,22 @@ class SkillTransitionGraphRecommender(BaseRecommender):
                     continue
 
                 try:
-                    similar_skills = self.node2vec_model.wv.most_similar(skill, topn=n*2)
+                    similar_skills = self.node2vec_model.wv.most_similar(skill, topn=n * 2)
                     for sim_skill, similarity in similar_skills:
                         if exclude_acquired and sim_skill in user_skills:
                             continue
 
                         # 既に直接遷移で見つかっている場合は、スコアを加算
                         if sim_skill in candidates:
-                            candidates[sim_skill]['score'] += similarity * 10
-                            candidates[sim_skill]['similarity'] = similarity
+                            candidates[sim_skill]["score"] += similarity * 10
+                            candidates[sim_skill]["similarity"] = similarity
                         else:
                             candidates[sim_skill] = {
-                                'score': similarity * 10,
-                                'source_skill': skill,
-                                'reason_type': 'embedding_similarity',
-                                'similarity': similarity,
-                                'metadata': {}
+                                "score": similarity * 10,
+                                "source_skill": skill,
+                                "reason_type": "embedding_similarity",
+                                "similarity": similarity,
+                                "metadata": {},
                             }
                 except Exception as e:
                     logger.warning(f"類似スキル取得エラー ({skill}): {e}")
@@ -307,11 +294,9 @@ class SkillTransitionGraphRecommender(BaseRecommender):
             logger.info(f"フィルタ後の候補数: {len(candidates)} (除外: {rejected_count}件)")
 
         # スコアでソート
-        sorted_candidates = sorted(
-            candidates.items(),
-            key=lambda x: x[1]['score'],
-            reverse=True
-        )[:n]
+        sorted_candidates = sorted(candidates.items(), key=lambda x: x[1]["score"], reverse=True)[
+            :n
+        ]
 
         # Recommendationオブジェクトに変換
         recommendations = []
@@ -320,22 +305,24 @@ class SkillTransitionGraphRecommender(BaseRecommender):
             explanation = self.explain(member_code, skill_code)
 
             # 信頼度の計算
-            if data['reason_type'] == 'direct_transition':
+            if data["reason_type"] == "direct_transition":
                 # 遷移人数ベース
-                confidence = min(data['score'] / 10, 1.0)
+                confidence = min(data["score"] / 10, 1.0)
             else:
                 # 類似度ベース
-                confidence = data.get('similarity', 0.5)
+                confidence = data.get("similarity", 0.5)
 
-            recommendations.append(Recommendation(
-                skill_code=skill_code,
-                skill_name=skill_name,
-                score=data['score'],
-                rank=rank,
-                explanation=explanation,
-                confidence=confidence,
-                metadata=data
-            ))
+            recommendations.append(
+                Recommendation(
+                    skill_code=skill_code,
+                    skill_name=skill_name,
+                    score=data["score"],
+                    rank=rank,
+                    explanation=explanation,
+                    confidence=confidence,
+                    metadata=data,
+                )
+            )
 
         return recommendations
 
@@ -363,8 +350,8 @@ class SkillTransitionGraphRecommender(BaseRecommender):
                 source_name = self.get_skill_name(user_skill)
 
                 stats = self.transition_stats.get((user_skill, skill_code), {})
-                count = stats.get('count', 0)
-                median_days = stats.get('median_days', 0)
+                count = stats.get("count", 0)
+                median_days = stats.get("median_days", 0)
 
                 explanations.append(
                     f"🎯 {source_name}を習得した人の多くが次に{skill_name}を学習しています "
@@ -388,7 +375,10 @@ class SkillTransitionGraphRecommender(BaseRecommender):
         if self.node2vec_model is not None:
             for user_skill in user_skills:
                 try:
-                    if user_skill in self.node2vec_model.wv and skill_code in self.node2vec_model.wv:
+                    if (
+                        user_skill in self.node2vec_model.wv
+                        and skill_code in self.node2vec_model.wv
+                    ):
                         similarity = self.node2vec_model.wv.similarity(user_skill, skill_code)
                         if similarity > 0.5:
                             source_name = self.get_skill_name(user_skill)
@@ -405,10 +395,7 @@ class SkillTransitionGraphRecommender(BaseRecommender):
         return "\n".join(explanations)
 
     def get_learning_path(
-        self,
-        source_skill: str,
-        target_skill: str,
-        max_length: int = 5
+        self, source_skill: str, target_skill: str, max_length: int = 5
     ) -> Optional[List[str]]:
         """
         2つのスキル間の学習パスを取得
@@ -442,37 +429,31 @@ class SkillTransitionGraphRecommender(BaseRecommender):
         self._check_fitted()
 
         stats = {
-            'num_nodes': self.graph.number_of_nodes(),
-            'num_edges': self.graph.number_of_edges(),
-            'density': nx.density(self.graph),
-            'is_connected': nx.is_weakly_connected(self.graph),
+            "num_nodes": self.graph.number_of_nodes(),
+            "num_edges": self.graph.number_of_edges(),
+            "density": nx.density(self.graph),
+            "is_connected": nx.is_weakly_connected(self.graph),
         }
 
         # 次数の統計
         in_degrees = [d for n, d in self.graph.in_degree()]
         out_degrees = [d for n, d in self.graph.out_degree()]
 
-        stats['avg_in_degree'] = np.mean(in_degrees) if in_degrees else 0
-        stats['avg_out_degree'] = np.mean(out_degrees) if out_degrees else 0
+        stats["avg_in_degree"] = np.mean(in_degrees) if in_degrees else 0
+        stats["avg_out_degree"] = np.mean(out_degrees) if out_degrees else 0
 
         # トップスキル
         if in_degrees:
-            top_target_skills = sorted(
-                self.graph.in_degree(),
-                key=lambda x: x[1],
-                reverse=True
-            )[:5]
-            stats['top_target_skills'] = [
+            top_target_skills = sorted(self.graph.in_degree(), key=lambda x: x[1], reverse=True)[:5]
+            stats["top_target_skills"] = [
                 (self.get_skill_name(s), degree) for s, degree in top_target_skills
             ]
 
         if out_degrees:
-            top_source_skills = sorted(
-                self.graph.out_degree(),
-                key=lambda x: x[1],
-                reverse=True
-            )[:5]
-            stats['top_source_skills'] = [
+            top_source_skills = sorted(self.graph.out_degree(), key=lambda x: x[1], reverse=True)[
+                :5
+            ]
+            stats["top_source_skills"] = [
                 (self.get_skill_name(s), degree) for s, degree in top_source_skills
             ]
 
@@ -489,21 +470,21 @@ class SkillTransitionGraphRecommender(BaseRecommender):
             力量タイプ（'SKILL', 'EDUCATION', 'LICENSE', 'UNKNOWN'）
         """
         if self.competence_master is None:
-            return 'UNKNOWN'
+            return "UNKNOWN"
 
         # 力量コードの検索（日本語・英語両対応）
-        code_col = '力量コード' if '力量コード' in self.competence_master.columns else 'competence_code'
-        skill_row = self.competence_master[
-            self.competence_master[code_col] == skill_code
-        ]
+        code_col = (
+            "力量コード" if "力量コード" in self.competence_master.columns else "competence_code"
+        )
+        skill_row = self.competence_master[self.competence_master[code_col] == skill_code]
 
         if skill_row.empty:
-            return 'UNKNOWN'
+            return "UNKNOWN"
 
         # 力量タイプカラムの検索（日本語・英語両対応）
-        if '力量タイプ' in skill_row.columns:
-            return skill_row.iloc[0]['力量タイプ']
-        elif 'competence_type' in skill_row.columns:
-            return skill_row.iloc[0]['competence_type']
+        if "力量タイプ" in skill_row.columns:
+            return skill_row.iloc[0]["力量タイプ"]
+        elif "competence_type" in skill_row.columns:
+            return skill_row.iloc[0]["competence_type"]
         else:
-            return 'UNKNOWN'
+            return "UNKNOWN"

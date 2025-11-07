@@ -15,7 +15,8 @@ def apply_rich_ui_styles():
     This function should be called at the beginning of each page
     to ensure consistent styling across the application.
     """
-    st.markdown("""
+    st.markdown(
+        """
 <style>
     /* グローバルスタイル */
     .main {
@@ -281,7 +282,9 @@ def apply_rich_ui_styles():
         margin: 2rem 0;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
 
 def render_gradient_header(title: str, icon: str, description: str = ""):
@@ -293,12 +296,15 @@ def render_gradient_header(title: str, icon: str, description: str = ""):
         icon: Icon emoji (e.g., "🎯")
         description: Optional description text
     """
-    st.markdown(f"""
+    st.markdown(
+        f"""
 <div class="gradient-header fade-in">
     <h1><span class="title-icon">{icon}</span>{title}</h1>
     {f'<p style="font-size: 1.1rem; margin: 0;">{description}</p>' if description else ''}
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
 
 def render_section_divider():
@@ -315,15 +321,20 @@ def render_card_header(title: str, description: str = "", icon: str = ""):
         description: Optional description
         icon: Optional icon emoji
     """
-    icon_html = f'<span style="font-size: 1.5rem; margin-right: 0.5rem;">{icon}</span>' if icon else ''
-    desc_html = f'<p>{description}</p>' if description else ''
+    icon_html = (
+        f'<span style="font-size: 1.5rem; margin-right: 0.5rem;">{icon}</span>' if icon else ""
+    )
+    desc_html = f"<p>{description}</p>" if description else ""
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
 <div class="card fade-in">
     <h2>{icon_html}{title}</h2>
     {desc_html}
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
 
 def render_metric_card(value: str, label: str, color: str = "blue"):
@@ -354,12 +365,19 @@ def render_success_message(title: str, message: str, additional_info: str = ""):
         message: Main message
         additional_info: Optional additional information
     """
-    additional_html = f'<p style="font-size: 0.9rem; margin: 0; opacity: 0.9;">{additional_info}</p>' if additional_info else ''
+    additional_html = (
+        f'<p style="font-size: 0.9rem; margin: 0; opacity: 0.9;">{additional_info}</p>'
+        if additional_info
+        else ""
+    )
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
 <div class="card metric-card-green fade-in" style="text-align: left;">
     <h2 style="margin: 0;">🎉 {title}</h2>
     <p style="font-size: 1.2rem; margin: 0.5rem 0;">{message}</p>
     {additional_html}
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )

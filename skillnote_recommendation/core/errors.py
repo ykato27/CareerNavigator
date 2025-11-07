@@ -49,13 +49,7 @@ class RecommendationError(Exception):
     全てのカスタム例外はこのクラスを継承する
     """
 
-    def __init__(
-        self,
-        code: ErrorCode,
-        message: str,
-        retryable: bool = False,
-        **context: Any
-    ):
+    def __init__(self, code: ErrorCode, message: str, retryable: bool = False, **context: Any):
         """
         Args:
             code: エラーコード
@@ -72,16 +66,17 @@ class RecommendationError(Exception):
     def to_dict(self) -> dict[str, Any]:
         """エラー情報を辞書形式で返す"""
         return {
-            'error_code': self.code.value,
-            'message': self.message,
-            'retryable': self.retryable,
-            'context': self.context
+            "error_code": self.code.value,
+            "message": self.message,
+            "retryable": self.retryable,
+            "context": self.context,
         }
 
 
 # =============================================================================
 # データ関連エラー
 # =============================================================================
+
 
 class DataNotFoundError(RecommendationError):
     """データが見つからない"""
@@ -93,7 +88,7 @@ class DataNotFoundError(RecommendationError):
             retryable=False,
             resource=resource,
             identifier=identifier,
-            **context
+            **context,
         )
 
 
@@ -101,12 +96,7 @@ class DataInvalidError(RecommendationError):
     """データが不正"""
 
     def __init__(self, message: str, **context: Any):
-        super().__init__(
-            ErrorCode.DATA_INVALID,
-            message,
-            retryable=False,
-            **context
-        )
+        super().__init__(ErrorCode.DATA_INVALID, message, retryable=False, **context)
 
 
 class DataQualityError(RecommendationError):
@@ -118,13 +108,14 @@ class DataQualityError(RecommendationError):
             message,
             retryable=False,
             quality_issues=quality_issues,
-            **context
+            **context,
         )
 
 
 # =============================================================================
 # モデル関連エラー
 # =============================================================================
+
 
 class ModelNotTrainedError(RecommendationError):
     """モデルが未学習"""
@@ -135,7 +126,7 @@ class ModelNotTrainedError(RecommendationError):
             "Model is not trained. Please train the model first.",
             retryable=False,
             model_type=model_type,
-            suggestion="Call fit() or load() before making predictions"
+            suggestion="Call fit() or load() before making predictions",
         )
 
 
@@ -148,7 +139,7 @@ class ModelLoadError(RecommendationError):
             f"Failed to load model from {filepath}: {reason}",
             retryable=True,
             filepath=filepath,
-            reason=reason
+            reason=reason,
         )
 
 
@@ -156,17 +147,13 @@ class ModelPredictionError(RecommendationError):
     """予測実行エラー"""
 
     def __init__(self, message: str, **context: Any):
-        super().__init__(
-            ErrorCode.MODEL_PREDICTION_ERROR,
-            message,
-            retryable=False,
-            **context
-        )
+        super().__init__(ErrorCode.MODEL_PREDICTION_ERROR, message, retryable=False, **context)
 
 
 # =============================================================================
 # 推薦関連エラー
 # =============================================================================
+
 
 class ColdStartError(RecommendationError):
     """
@@ -182,7 +169,7 @@ class ColdStartError(RecommendationError):
             retryable=False,
             member_code=member_code,
             suggestion="Add member competence data or use content-based fallback",
-            **context
+            **context,
         )
 
 
@@ -196,7 +183,7 @@ class InvalidParameterError(RecommendationError):
             retryable=False,
             parameter=parameter,
             value=str(value),
-            reason=reason
+            reason=reason,
         )
 
 
@@ -204,17 +191,13 @@ class RecommendationFailedError(RecommendationError):
     """推薦の生成に失敗"""
 
     def __init__(self, message: str, **context: Any):
-        super().__init__(
-            ErrorCode.RECOMMENDATION_FAILED,
-            message,
-            retryable=True,
-            **context
-        )
+        super().__init__(ErrorCode.RECOMMENDATION_FAILED, message, retryable=True, **context)
 
 
 # =============================================================================
 # 外部サービス関連エラー
 # =============================================================================
+
 
 class ExternalServiceError(RecommendationError):
     """外部サービスエラー"""
@@ -225,7 +208,7 @@ class ExternalServiceError(RecommendationError):
             f"External service error ({service}): {message}",
             retryable=True,
             service=service,
-            **context
+            **context,
         )
 
 
@@ -233,33 +216,25 @@ class NetworkError(RecommendationError):
     """ネットワークエラー"""
 
     def __init__(self, message: str, **context: Any):
-        super().__init__(
-            ErrorCode.NETWORK_ERROR,
-            message,
-            retryable=True,
-            **context
-        )
+        super().__init__(ErrorCode.NETWORK_ERROR, message, retryable=True, **context)
 
 
 # =============================================================================
 # システム関連エラー
 # =============================================================================
 
+
 class ConfigurationError(RecommendationError):
     """設定エラー"""
 
     def __init__(self, message: str, **context: Any):
-        super().__init__(
-            ErrorCode.CONFIGURATION_ERROR,
-            message,
-            retryable=False,
-            **context
-        )
+        super().__init__(ErrorCode.CONFIGURATION_ERROR, message, retryable=False, **context)
 
 
 # =============================================================================
 # 後方互換性のための旧例外クラス（非推奨）
 # =============================================================================
+
 
 class MLModelNotTrainedError(ModelNotTrainedError):
     """
@@ -267,4 +242,5 @@ class MLModelNotTrainedError(ModelNotTrainedError):
 
     後方互換性のために残していますが、将来的に削除される可能性があります。
     """
+
     pass

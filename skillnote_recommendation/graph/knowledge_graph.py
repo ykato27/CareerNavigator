@@ -81,7 +81,7 @@ class CompetenceKnowledgeGraph:
         competence_master: pd.DataFrame,
         use_category_hierarchy: bool = True,
         member_similarity_threshold: Optional[float] = None,
-        member_similarity_top_k: Optional[int] = None
+        member_similarity_top_k: Optional[int] = None,
     ):
         """ナレッジグラフを初期化して構築
 
@@ -154,8 +154,7 @@ class CompetenceKnowledgeGraph:
         # 7. メンバー間類似度エッジ
         logger.info("[%d/%d] メンバー間類似度エッジを追加中...", total_steps, total_steps)
         self._add_member_similarity_edges(
-            threshold=self.member_similarity_threshold,
-            top_k=self.member_similarity_top_k
+            threshold=self.member_similarity_threshold, top_k=self.member_similarity_top_k
         )
 
     def _add_member_nodes(self):
@@ -165,10 +164,10 @@ class CompetenceKnowledgeGraph:
             self.G.add_node(
                 node_id,
                 node_type="member",
-                code=row['メンバーコード'],
-                name=row['メンバー名'],
-                grade=row.get('職能等級', None),
-                position=row.get('役職', None),
+                code=row["メンバーコード"],
+                name=row["メンバー名"],
+                grade=row.get("職能等級", None),
+                position=row.get("役職", None),
             )
         logger.info("  追加: %d個のメンバーノード", len(self.member_master_df))
 
@@ -179,27 +178,23 @@ class CompetenceKnowledgeGraph:
             self.G.add_node(
                 node_id,
                 node_type="competence",
-                code=row['力量コード'],
-                name=row['力量名'],
-                type=row['力量タイプ'],
-                category=row.get('力量カテゴリー名', None),
-                description=row.get('概要', None),
+                code=row["力量コード"],
+                name=row["力量名"],
+                type=row["力量タイプ"],
+                category=row.get("力量カテゴリー名", None),
+                description=row.get("概要", None),
             )
         logger.info("  追加: %d個の力量ノード", len(self.competence_master_df))
 
     def _add_category_nodes(self):
         """カテゴリーノードを追加"""
         # 力量マスタからユニークなカテゴリーを抽出
-        categories = self.competence_master_df['力量カテゴリー名'].dropna().unique()
+        categories = self.competence_master_df["力量カテゴリー名"].dropna().unique()
 
         for category in categories:
             if category and str(category).strip():
                 node_id = f"category_{category}"
-                self.G.add_node(
-                    node_id,
-                    node_type="category",
-                    name=category
-                )
+                self.G.add_node(node_id, node_type="category", name=category)
         logger.info("  追加: %d個のカテゴリーノード", len(categories))
 
     def _add_member_competence_edges(self):
@@ -215,8 +210,8 @@ class CompetenceKnowledgeGraph:
                     member_node,
                     competence_node,
                     edge_type="acquired",
-                    weight=float(row['正規化レベル']),
-                    level=float(row['正規化レベル'])
+                    weight=float(row["正規化レベル"]),
+                    level=float(row["正規化レベル"]),
                 )
                 edge_count += 1
         logger.info("  追加: %d本のメンバー-力量エッジ", edge_count)
@@ -225,7 +220,7 @@ class CompetenceKnowledgeGraph:
         """力量-カテゴリーエッジ（所属関係）を追加"""
         edge_count = 0
         for _, row in self.competence_master_df.iterrows():
-            category = row.get('力量カテゴリー名')
+            category = row.get("力量カテゴリー名")
             if pd.notna(category) and str(category).strip():
                 competence_node = f"competence_{row['力量コード']}"
                 category_node = f"category_{category}"
@@ -233,10 +228,7 @@ class CompetenceKnowledgeGraph:
                 # 両方のノードが存在する場合のみエッジを追加
                 if self.G.has_node(competence_node) and self.G.has_node(category_node):
                     self.G.add_edge(
-                        competence_node,
-                        category_node,
-                        edge_type="belongs_to",
-                        weight=1.0
+                        competence_node, category_node, edge_type="belongs_to", weight=1.0
                     )
                     edge_count += 1
         logger.info("  追加: %d本の力量-カテゴリーエッジ", edge_count)
@@ -263,16 +255,14 @@ class CompetenceKnowledgeGraph:
                         category_node,
                         edge_type="parent_of",
                         weight=1.0,
-                        relation="parent-child"
+                        relation="parent-child",
                     )
                     edge_count += 1
 
         logger.info("  追加: %d本のカテゴリー階層エッジ", edge_count)
 
     def _add_member_similarity_edges(
-        self,
-        threshold: Optional[float] = None,
-        top_k: Optional[int] = None
+        self, threshold: Optional[float] = None, top_k: Optional[int] = None
     ):
         """メンバー間の類似度エッジを追加
 
@@ -284,39 +274,42 @@ class CompetenceKnowledgeGraph:
         """
         # デフォルト値を設定から取得
         if threshold is None:
-            threshold = Config.GRAPH_PARAMS['member_similarity_threshold']
+            threshold = Config.GRAPH_PARAMS["member_similarity_threshold"]
         if top_k is None:
-            top_k = Config.GRAPH_PARAMS['member_similarity_top_k']
+            top_k = Config.GRAPH_PARAMS["member_similarity_top_k"]
         # メンバー習得力量データの存在確認
         if self.member_competence_df.empty:
             logger.warning("  ⚠ メンバー習得力量データが空のため、類似度エッジをスキップします")
             return
 
         # 必要なカラムの存在確認
-        required_columns = ['メンバーコード', '力量コード', '正規化レベル']
-        missing_columns = [col for col in required_columns if col not in self.member_competence_df.columns]
+        required_columns = ["メンバーコード", "力量コード", "正規化レベル"]
+        missing_columns = [
+            col for col in required_columns if col not in self.member_competence_df.columns
+        ]
         if missing_columns:
             logger.warning(
                 "  ⚠ 必要なカラムが不足しているため、類似度エッジをスキップします: %s",
-                missing_columns
+                missing_columns,
             )
             return
 
         # メンバー×力量マトリクスを作成
         member_comp_matrix = self.member_competence_df.pivot_table(
-            index='メンバーコード',
-            columns='力量コード',
-            values='正規化レベル',
-            fill_value=0
+            index="メンバーコード", columns="力量コード", values="正規化レベル", fill_value=0
         )
 
         # マトリクスが空でないか確認
-        if member_comp_matrix.empty or member_comp_matrix.shape[0] == 0 or member_comp_matrix.shape[1] == 0:
+        if (
+            member_comp_matrix.empty
+            or member_comp_matrix.shape[0] == 0
+            or member_comp_matrix.shape[1] == 0
+        ):
             logger.warning(
                 "  ⚠ メンバー×力量マトリクスが空のため、類似度エッジをスキップします "
                 "(メンバー数: %d, 力量数: %d)",
                 member_comp_matrix.shape[0] if len(member_comp_matrix.shape) > 0 else 0,
-                member_comp_matrix.shape[1] if len(member_comp_matrix.shape) > 1 else 0
+                member_comp_matrix.shape[1] if len(member_comp_matrix.shape) > 1 else 0,
             )
             return
 
@@ -355,7 +348,7 @@ class CompetenceKnowledgeGraph:
                             member_node_j,
                             edge_type="similar",
                             weight=float(sim_score),
-                            similarity=float(sim_score)
+                            similarity=float(sim_score),
                         )
                         edge_count += 1
 
@@ -370,11 +363,7 @@ class CompetenceKnowledgeGraph:
     # Public Methods
     # ===============================================================
 
-    def get_neighbors(
-        self,
-        node_id: str,
-        edge_type: Optional[str] = None
-    ) -> List[str]:
+    def get_neighbors(self, node_id: str, edge_type: Optional[str] = None) -> List[str]:
         """指定ノードの隣接ノードを取得
 
         Args:
@@ -394,7 +383,7 @@ class CompetenceKnowledgeGraph:
         neighbors = []
         for neighbor in self.G.neighbors(node_id):
             edge_data = self.G[node_id][neighbor]
-            if edge_type is None or edge_data.get('edge_type') == edge_type:
+            if edge_type is None or edge_data.get("edge_type") == edge_type:
                 neighbors.append(neighbor)
         return neighbors
 
@@ -481,7 +470,7 @@ class CompetenceKnowledgeGraph:
         # ノードタイプ別の数
         node_types = {}
         for node in self.G.nodes():
-            node_type = self.G.nodes[node].get('node_type', 'unknown')
+            node_type = self.G.nodes[node].get("node_type", "unknown")
             node_types[node_type] = node_types.get(node_type, 0) + 1
 
         logger.info("\n  ノードタイプ別:")
@@ -491,7 +480,7 @@ class CompetenceKnowledgeGraph:
         # エッジタイプ別の数
         edge_types = {}
         for u, v in self.G.edges():
-            edge_type = self.G[u][v].get('edge_type', 'unknown')
+            edge_type = self.G[u][v].get("edge_type", "unknown")
             edge_types[edge_type] = edge_types.get(edge_type, 0) + 1
 
         logger.info("\n  エッジタイプ別:")

@@ -13,16 +13,19 @@ from dataclasses import dataclass
 from skillnote_recommendation.core.models import Recommendation
 from skillnote_recommendation.ml.career_pattern_classifier import (
     CareerPatternClassifier,
-    CareerPatternGroup
+    CareerPatternGroup,
 )
 
 
 @dataclass
 class PatternRecommendation:
     """キャリアパターン別推薦結果"""
+
     pattern_name: str  # 'similar', 'different1', 'different2'
     pattern_label: str  # 表示用ラベル
-    reference_persons: List[Dict[str, str]]  # 参考人物情報 [{'code': ..., 'name': ..., 'similarity': ...}]
+    reference_persons: List[
+        Dict[str, str]
+    ]  # 参考人物情報 [{'code': ..., 'name': ..., 'similarity': ...}]
     recommendations: List[Recommendation]  # 推薦力量リスト
     avg_profile_used: bool  # 平均プロファイルを使用したか
     message: str  # メッセージ（参考人物が少ない場合など）
@@ -38,7 +41,7 @@ class MultiPatternRecommender:
         classifier: CareerPatternClassifier,
         competence_master: pd.DataFrame,
         member_competence: pd.DataFrame,
-        mf_model
+        mf_model,
     ):
         """
         初期化
@@ -58,7 +61,7 @@ class MultiPatternRecommender:
         self,
         target_member_code: str,
         top_k_per_pattern: Dict[str, int] = None,
-        competence_type: List[str] = None
+        competence_type: List[str] = None,
     ) -> Dict[str, PatternRecommendation]:
         """
         キャリアパターンごとに推薦を生成
@@ -74,7 +77,7 @@ class MultiPatternRecommender:
             {'similar': PatternRecommendation, 'different1': ..., 'different2': ...}
         """
         if top_k_per_pattern is None:
-            top_k_per_pattern = {'similar': 5, 'different1': 5, 'different2': 5}
+            top_k_per_pattern = {"similar": 5, "different1": 5, "different2": 5}
 
         # キャリアパターンに分類
         groups = self.classifier.classify_career_patterns(target_member_code)
@@ -92,7 +95,7 @@ class MultiPatternRecommender:
                 group=group,
                 acquired_competences=acquired_competences,
                 top_k=top_k,
-                competence_type=competence_type
+                competence_type=competence_type,
             )
 
             results[pattern_name] = recommendation
@@ -105,7 +108,7 @@ class MultiPatternRecommender:
         group: CareerPatternGroup,
         acquired_competences: List[str],
         top_k: int,
-        competence_type: List[str] = None
+        competence_type: List[str] = None,
     ) -> PatternRecommendation:
         """
         特定のキャリアパターングループに対して推薦を生成
@@ -131,7 +134,7 @@ class MultiPatternRecommender:
                 avg_profile_used=False,
                 message=f"参考人物が{self.classifier.min_persons_per_group}名未満のため、推薦をスキップしました。",
                 filtered_count=0,
-                total_count=len(group.member_codes)
+                total_count=len(group.member_codes),
             )
 
         # 対象メンバーの総合スキルレベルを取得
@@ -162,21 +165,13 @@ class MultiPatternRecommender:
                 avg_profile_used=False,
                 message=f"あなたより総合スキルレベルが高い参考人物が{self.classifier.min_persons_per_group}名未満のため、推薦をスキップしました。",
                 filtered_count=len(filtered_codes),
-                total_count=total_count
+                total_count=total_count,
             )
 
         # フィルタリング後の参考人物情報を整形
         reference_persons = [
-            {
-                'code': code,
-                'name': name,
-                'similarity': f"{sim:.2f}"
-            }
-            for code, name, sim in zip(
-                filtered_codes,
-                filtered_names,
-                filtered_sims
-            )
+            {"code": code, "name": name, "similarity": f"{sim:.2f}"}
+            for code, name, sim in zip(filtered_codes, filtered_names, filtered_sims)
         ]
 
         # フィルタリング後のグループの平均プロファイルを計算
@@ -184,8 +179,7 @@ class MultiPatternRecommender:
 
         # 平均プロファイルを使って力量スコアを予測
         competence_scores = self._predict_competences_from_profile(
-            avg_profile,
-            exclude_competences=acquired_competences
+            avg_profile, exclude_competences=acquired_competences
         )
 
         # Recommendationオブジェクトに変換
@@ -226,9 +220,9 @@ class MultiPatternRecommender:
                         group,
                         score,
                         filtered_count=len(filtered_codes),
-                        total_count=total_count
+                        total_count=total_count,
                     ),
-                    reference_persons=[]  # 個別の参考人物は使用しない
+                    reference_persons=[],  # 個別の参考人物は使用しない
                 )
                 recommendations.append(rec)
 
@@ -240,13 +234,10 @@ class MultiPatternRecommender:
             avg_profile_used=True,
             message="",
             filtered_count=len(filtered_codes),
-            total_count=total_count
+            total_count=total_count,
         )
 
-    def _calculate_average_profile(
-        self,
-        member_codes: List[str]
-    ) -> np.ndarray:
+    def _calculate_average_profile(self, member_codes: List[str]) -> np.ndarray:
         """
         複数メンバーの潜在因子の平均を計算
 
@@ -272,9 +263,7 @@ class MultiPatternRecommender:
         return avg_profile
 
     def _predict_competences_from_profile(
-        self,
-        profile: np.ndarray,
-        exclude_competences: List[str]
+        self, profile: np.ndarray, exclude_competences: List[str]
     ) -> List[Tuple[str, float]]:
         """
         プロファイル（潜在因子ベクトル）から力量スコアを予測
@@ -297,8 +286,7 @@ class MultiPatternRecommender:
 
         # 除外する力量をフィルタ
         competence_scores = [
-            (code, score) for code, score in competence_scores
-            if code not in exclude_competences
+            (code, score) for code, score in competence_scores if code not in exclude_competences
         ]
 
         # スコアでソート（降順）
@@ -308,9 +296,13 @@ class MultiPatternRecommender:
 
     def _get_acquired_competences(self, member_code: str) -> List[str]:
         """対象メンバーの既習得力量を取得"""
-        acquired = self.member_competence[
-            self.member_competence["メンバーコード"] == member_code
-        ]["力量コード"].unique().tolist()
+        acquired = (
+            self.member_competence[self.member_competence["メンバーコード"] == member_code][
+                "力量コード"
+            ]
+            .unique()
+            .tolist()
+        )
         return acquired
 
     def _get_member_total_skill_level(self, member_code: str) -> float:
@@ -339,7 +331,7 @@ class MultiPatternRecommender:
         group: CareerPatternGroup,
         score: float,
         filtered_count: int = None,
-        total_count: int = None
+        total_count: int = None,
     ) -> str:
         """推薦理由を生成"""
         comp_name = competence_info["力量名"]
@@ -349,12 +341,12 @@ class MultiPatternRecommender:
         # フィルタリング後のメンバー数を使用（指定がない場合は全体）
         member_count = filtered_count if filtered_count is not None else len(group.member_codes)
 
-        if group.pattern_name == 'similar':
+        if group.pattern_name == "similar":
             reason = (
                 f"**{comp_name}** は、あなたと類似したキャリアパスを持ち、かつあなたより総合スキルレベルが高い"
                 f"{member_count}名のメンバーが習得している力量です。あなたのキャリアにも適合する可能性が高いです。"
             )
-        elif group.pattern_name == 'different1':
+        elif group.pattern_name == "different1":
             reason = (
                 f"**{comp_name}** は、あなたとやや異なるキャリアパスを持ち、かつあなたより総合スキルレベルが高い"
                 f"{member_count}名のメンバーが習得している力量です。キャリアの幅を広げるのに適しています。"
@@ -372,7 +364,7 @@ def create_multi_pattern_recommender(
     classifier: CareerPatternClassifier,
     competence_master: pd.DataFrame,
     member_competence: pd.DataFrame,
-    mf_model
+    mf_model,
 ) -> MultiPatternRecommender:
     """
     マルチパターン推薦器を作成
@@ -390,5 +382,5 @@ def create_multi_pattern_recommender(
         classifier=classifier,
         competence_master=competence_master,
         member_competence=member_competence,
-        mf_model=mf_model
+        mf_model=mf_model,
     )

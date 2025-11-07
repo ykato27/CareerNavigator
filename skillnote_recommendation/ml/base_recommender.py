@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Recommendation:
     """推薦結果の単位"""
+
     skill_code: str
     skill_name: str
     score: float
@@ -62,10 +63,7 @@ class BaseRecommender(ABC):
 
     @abstractmethod
     def recommend(
-        self,
-        member_code: str,
-        n: int = 10,
-        exclude_acquired: bool = True
+        self, member_code: str, n: int = 10, exclude_acquired: bool = True
     ) -> List[Recommendation]:
         """
         推薦リストの生成
@@ -104,22 +102,20 @@ class BaseRecommender(ABC):
         Returns:
             習得済みスキルコードのリスト
         """
-        if not hasattr(self, 'member_competence'):
+        if not hasattr(self, "member_competence"):
             return []
 
-        user_data = self.member_competence[
-            self.member_competence['メンバーコード'] == member_code
-        ]
+        user_data = self.member_competence[self.member_competence["メンバーコード"] == member_code]
 
         # レベル > 0 のスキルを習得済みとみなす
-        if '正規化レベル' in user_data.columns:
-            acquired = user_data[user_data['正規化レベル'] > 0]
-        elif 'レベル' in user_data.columns:
-            acquired = user_data[user_data['レベル'] > 0]
+        if "正規化レベル" in user_data.columns:
+            acquired = user_data[user_data["正規化レベル"] > 0]
+        elif "レベル" in user_data.columns:
+            acquired = user_data[user_data["レベル"] > 0]
         else:
             acquired = user_data
 
-        return acquired['力量コード'].tolist()
+        return acquired["力量コード"].tolist()
 
     def get_skill_name(self, skill_code: str) -> str:
         """
@@ -131,15 +127,13 @@ class BaseRecommender(ABC):
         Returns:
             スキル名（見つからない場合はスキルコード）
         """
-        if not hasattr(self, 'competence_master'):
+        if not hasattr(self, "competence_master"):
             return skill_code
 
-        skill = self.competence_master[
-            self.competence_master['力量コード'] == skill_code
-        ]
+        skill = self.competence_master[self.competence_master["力量コード"] == skill_code]
 
-        if len(skill) > 0 and '力量名' in skill.columns:
-            return skill.iloc[0]['力量名']
+        if len(skill) > 0 and "力量名" in skill.columns:
+            return skill.iloc[0]["力量名"]
 
         return skill_code
 
@@ -155,13 +149,13 @@ class BaseRecommender(ABC):
             4: "高い - 推薦理由を明確に説明できる",
             3: "中程度 - 一部の推薦理由を説明できる",
             2: "低い - 推薦理由の説明が難しい",
-            1: "非常に低い - ブラックボックス"
+            1: "非常に低い - ブラックボックス",
         }
 
         return {
-            'score': self.interpretability_score,
-            'level': interpretability_levels.get(self.interpretability_score, "不明"),
-            'model_name': self.name
+            "score": self.interpretability_score,
+            "level": interpretability_levels.get(self.interpretability_score, "不明"),
+            "model_name": self.name,
         }
 
     def get_model_info(self) -> Dict[str, Any]:
@@ -172,10 +166,10 @@ class BaseRecommender(ABC):
             モデル情報の辞書
         """
         return {
-            'name': self.name,
-            'is_fitted': self.is_fitted,
-            'interpretability_score': self.interpretability_score,
-            'metadata': self.metadata
+            "name": self.name,
+            "is_fitted": self.is_fitted,
+            "interpretability_score": self.interpretability_score,
+            "metadata": self.metadata,
         }
 
     def _check_fitted(self) -> None:

@@ -49,7 +49,7 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
         time_decay_factor: float = 0.01,  # 時間減衰係数（1日あたり）
         use_time_decay: bool = True,
         path_quality_weight: float = 0.3,  # パス品質の重み
-        use_robust_scaling: bool = True
+        use_robust_scaling: bool = True,
     ):
         """
         初期化
@@ -69,8 +69,7 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
             use_robust_scaling: Robust Scalingを使用（外れ値に強い）
         """
         super().__init__(
-            name="EnhancedSkillTransitionGraph",
-            interpretability_score=5  # 改善により解釈性が向上
+            name="EnhancedSkillTransitionGraph", interpretability_score=5  # 改善により解釈性が向上
         )
 
         self.time_window_days = time_window_days
@@ -107,7 +106,7 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
         self.competence_master = competence_master.copy()
 
         # 取得日カラムの確認
-        if '取得日' not in member_competence.columns:
+        if "取得日" not in member_competence.columns:
             raise ValueError("スキル遷移グラフには「取得日」カラムが必要です")
 
         # グラフ構築
@@ -125,11 +124,11 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
 
         self.is_fitted = True
         self.metadata = {
-            'num_nodes': self.graph.number_of_nodes(),
-            'num_edges': self.graph.number_of_edges(),
-            'time_window_days': self.time_window_days,
-            'time_decay_enabled': self.use_time_decay,
-            'has_embeddings': self.node2vec_model is not None
+            "num_nodes": self.graph.number_of_nodes(),
+            "num_edges": self.graph.number_of_edges(),
+            "time_window_days": self.time_window_days,
+            "time_decay_enabled": self.use_time_decay,
+            "has_embeddings": self.node2vec_model is not None,
         }
 
         logger.info("\n" + "=" * 80)
@@ -152,8 +151,8 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
 
         # 取得日を日付型に変換
         df = self.member_competence.copy()
-        df['取得日_dt'] = pd.to_datetime(df['取得日'], errors='coerce')
-        df = df[df['取得日_dt'].notna()]
+        df["取得日_dt"] = pd.to_datetime(df["取得日"], errors="coerce")
+        df = df[df["取得日_dt"].notna()]
 
         # 現在日時（時間減衰の基準点）
         now = pd.Timestamp.now()
@@ -161,12 +160,10 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
         # メンバーごとに学習順序を抽出
         transition_data = {}
 
-        for member in df['メンバーコード'].unique():
-            member_skills = df[
-                df['メンバーコード'] == member
-            ].sort_values('取得日_dt')
+        for member in df["メンバーコード"].unique():
+            member_skills = df[df["メンバーコード"] == member].sort_values("取得日_dt")
 
-            skills = member_skills[['力量コード', '取得日_dt']].values
+            skills = member_skills[["力量コード", "取得日_dt"]].values
 
             # 連続するスキルペアのみを抽出（効率化）
             for i in range(len(skills) - 1):
@@ -179,10 +176,7 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
                     edge = (source_skill, target_skill)
 
                     if edge not in transition_data:
-                        transition_data[edge] = {
-                            'transitions': [],
-                            'acquisition_dates': []
-                        }
+                        transition_data[edge] = {"transitions": [], "acquisition_dates": []}
 
                     # 時間減衰重みを計算
                     days_ago = (now - target_date).days
@@ -191,30 +185,32 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
                     else:
                         decay_weight = 1.0
 
-                    transition_data[edge]['transitions'].append({
-                        'time_diff': time_diff,
-                        'decay_weight': decay_weight,
-                        'acquisition_date': target_date
-                    })
-                    transition_data[edge]['acquisition_dates'].append(target_date)
+                    transition_data[edge]["transitions"].append(
+                        {
+                            "time_diff": time_diff,
+                            "decay_weight": decay_weight,
+                            "acquisition_date": target_date,
+                        }
+                    )
+                    transition_data[edge]["acquisition_dates"].append(target_date)
 
         # エッジを追加
         for (source, target), data in transition_data.items():
-            transitions = data['transitions']
+            transitions = data["transitions"]
             count = len(transitions)
 
             if count >= self.min_transition_count:
                 # 時間減衰重み付きカウント
-                weighted_count = sum(t['decay_weight'] for t in transitions)
+                weighted_count = sum(t["decay_weight"] for t in transitions)
 
                 # 統計情報を計算
-                time_diffs = [t['time_diff'] for t in transitions]
+                time_diffs = [t["time_diff"] for t in transitions]
                 avg_time_diff = np.mean(time_diffs)
                 median_time_diff = np.median(time_diffs)
                 std_time_diff = np.std(time_diffs)
 
                 # 最新の遷移日
-                latest_transition = max(data['acquisition_dates'])
+                latest_transition = max(data["acquisition_dates"])
                 recency_days = (now - latest_transition).days
 
                 # エッジを追加
@@ -231,13 +227,13 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
 
                 # 詳細情報を保存
                 self.edge_details[(source, target)] = {
-                    'count': count,
-                    'weighted_count': weighted_count,
-                    'avg_days': avg_time_diff,
-                    'median_days': median_time_diff,
-                    'std_days': std_time_diff,
-                    'recency_days': recency_days,
-                    'transitions': transitions
+                    "count": count,
+                    "weighted_count": weighted_count,
+                    "avg_days": avg_time_diff,
+                    "median_days": median_time_diff,
+                    "std_days": std_time_diff,
+                    "recency_days": recency_days,
+                    "transitions": transitions,
                 }
 
         return G
@@ -253,15 +249,10 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
                 p=self.p,
                 q=self.q,
                 workers=self.workers,
-                quiet=True
+                quiet=True,
             )
 
-            self.node2vec_model = node2vec.fit(
-                window=5,
-                min_count=1,
-                batch_words=4,
-                epochs=5
-            )
+            self.node2vec_model = node2vec.fit(window=5, min_count=1, batch_words=4, epochs=5)
 
         except Exception as e:
             logger.error(f"Node2Vec学習中にエラー: {e}")
@@ -272,7 +263,7 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
         member_code: str,
         n: int = 10,
         exclude_acquired: bool = True,
-        competence_type: Optional[List[str]] = None
+        competence_type: Optional[List[str]] = None,
     ) -> List[Recommendation]:
         """
         推薦リストの生成（改良版）
@@ -306,25 +297,23 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
                         continue
 
                     edge_data = self.graph[skill][neighbor]
-                    weighted_count = edge_data['weight']
+                    weighted_count = edge_data["weight"]
 
                     # パス品質スコアを計算
                     path_quality = self._calculate_path_quality(
-                        source=skill,
-                        target=neighbor,
-                        path_length=2
+                        source=skill, target=neighbor, path_length=2
                     )
 
                     # 総合スコア
                     score = weighted_count * (1 + self.path_quality_weight * path_quality)
 
-                    if neighbor not in candidates or candidates[neighbor]['score'] < score:
+                    if neighbor not in candidates or candidates[neighbor]["score"] < score:
                         candidates[neighbor] = {
-                            'score': score,
-                            'source_skill': skill,
-                            'reason_type': 'direct_transition',
-                            'metadata': edge_data,
-                            'path_quality': path_quality
+                            "score": score,
+                            "source_skill": skill,
+                            "reason_type": "direct_transition",
+                            "metadata": edge_data,
+                            "path_quality": path_quality,
                         }
 
         # 方法2: 埋め込み空間での類似度（Robust Scaling）
@@ -336,15 +325,15 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
             for skill, score in embedding_scores.items():
                 if skill in candidates:
                     # 既存スコアとブレンド
-                    candidates[skill]['score'] += score
-                    candidates[skill]['has_embedding_similarity'] = True
+                    candidates[skill]["score"] += score
+                    candidates[skill]["has_embedding_similarity"] = True
                 else:
                     candidates[skill] = {
-                        'score': score,
-                        'source_skill': user_skills[0],
-                        'reason_type': 'embedding_similarity',
-                        'metadata': {},
-                        'path_quality': 0.5
+                        "score": score,
+                        "source_skill": user_skills[0],
+                        "reason_type": "embedding_similarity",
+                        "metadata": {},
+                        "path_quality": 0.5,
                     }
 
         # 力量タイプでフィルタリング
@@ -369,11 +358,9 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
             logger.info(f"フィルタ後の候補数: {len(candidates)} (除外: {rejected_count}件)")
 
         # スコアでソート
-        sorted_candidates = sorted(
-            candidates.items(),
-            key=lambda x: x[1]['score'],
-            reverse=True
-        )[:n]
+        sorted_candidates = sorted(candidates.items(), key=lambda x: x[1]["score"], reverse=True)[
+            :n
+        ]
 
         # Recommendationオブジェクトに変換
         recommendations = []
@@ -384,22 +371,21 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
             # 信頼度の計算（パス品質を考慮）
             confidence = self._calculate_confidence(data)
 
-            recommendations.append(Recommendation(
-                skill_code=skill_code,
-                skill_name=skill_name,
-                score=data['score'],
-                rank=rank,
-                explanation=explanation,
-                confidence=confidence,
-                metadata=data
-            ))
+            recommendations.append(
+                Recommendation(
+                    skill_code=skill_code,
+                    skill_name=skill_name,
+                    score=data["score"],
+                    rank=rank,
+                    explanation=explanation,
+                    confidence=confidence,
+                    metadata=data,
+                )
+            )
 
         return recommendations
 
-    def _calculate_path_quality(self,
-                                source: str,
-                                target: str,
-                                path_length: int) -> float:
+    def _calculate_path_quality(self, source: str, target: str, path_length: int) -> float:
         """
         パス品質スコアを計算（0-1）
 
@@ -424,18 +410,18 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
             length_score = max(0.3, 1.0 - (path_length - 2) * 0.15)
 
         # 遷移強度スコア（対数スケール）
-        count = edge_info['count']
+        count = edge_info["count"]
         strength_score = min(1.0, np.log1p(count) / np.log1p(50))
 
         # 安定性スコア（標準偏差が小さいほど良い）
-        std_days = edge_info['std_days']
+        std_days = edge_info["std_days"]
         if std_days <= 30:
             stability_score = 1.0
         else:
             stability_score = max(0.3, 1.0 - (std_days - 30) / 180)
 
         # 新規性スコア（最近の遷移があるほど良い）
-        recency_days = edge_info['recency_days']
+        recency_days = edge_info["recency_days"]
         if recency_days <= 90:
             recency_score = 1.0
         elif recency_days <= 365:
@@ -445,18 +431,17 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
 
         # 重み付き平均
         quality = (
-            0.25 * length_score +
-            0.30 * strength_score +
-            0.25 * stability_score +
-            0.20 * recency_score
+            0.25 * length_score
+            + 0.30 * strength_score
+            + 0.25 * stability_score
+            + 0.20 * recency_score
         )
 
         return quality
 
-    def _get_embedding_recommendations(self,
-                                      user_skills: List[str],
-                                      exclude_acquired: bool,
-                                      n: int) -> Dict[str, float]:
+    def _get_embedding_recommendations(
+        self, user_skills: List[str], exclude_acquired: bool, n: int
+    ) -> Dict[str, float]:
         """
         埋め込み空間での推薦（Robust Scaling適用）
 
@@ -482,9 +467,7 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
                 logger.warning(f"類似スキル取得エラー ({skill}): {e}")
 
         # 平均類似度を計算
-        avg_similarities = {
-            skill: np.mean(sims) for skill, sims in all_similarities.items()
-        }
+        avg_similarities = {skill: np.mean(sims) for skill, sims in all_similarities.items()}
 
         # Robust Scaling（外れ値に強い）
         if self.use_robust_scaling and avg_similarities:
@@ -505,17 +488,17 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
 
     def _calculate_confidence(self, data: Dict) -> float:
         """信頼度を計算"""
-        if data['reason_type'] == 'direct_transition':
+        if data["reason_type"] == "direct_transition":
             # 遷移人数とパス品質から計算
-            raw_count = data['metadata'].get('raw_count', 0)
-            path_quality = data.get('path_quality', 0.5)
+            raw_count = data["metadata"].get("raw_count", 0)
+            path_quality = data.get("path_quality", 0.5)
 
             count_confidence = min(1.0, raw_count / 10)
             confidence = 0.6 * count_confidence + 0.4 * path_quality
         else:
             # 埋め込み類似度から計算
             confidence = 0.6
-            if 'has_embedding_similarity' in data:
+            if "has_embedding_similarity" in data:
                 confidence = 0.7
 
         return confidence
@@ -536,9 +519,9 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
 
                 if (user_skill, skill_code) in self.edge_details:
                     details = self.edge_details[(user_skill, skill_code)]
-                    count = details['count']
-                    median_days = details['median_days']
-                    recency_days = details['recency_days']
+                    count = details["count"]
+                    median_days = details["median_days"]
+                    recency_days = details["recency_days"]
 
                     recency_text = ""
                     if recency_days <= 90:
@@ -559,9 +542,7 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
                         path_str = " → ".join(path_names)
 
                         # パス品質を計算
-                        quality = self._calculate_path_quality(
-                            user_skill, skill_code, len(path)
-                        )
+                        quality = self._calculate_path_quality(user_skill, skill_code, len(path))
                         quality_text = ""
                         if quality >= 0.7:
                             quality_text = "（高品質パス）"
@@ -591,21 +572,21 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
             力量タイプ（'SKILL', 'EDUCATION', 'LICENSE', 'UNKNOWN'）
         """
         if self.competence_master is None:
-            return 'UNKNOWN'
+            return "UNKNOWN"
 
         # 力量コードの検索（日本語・英語両対応）
-        code_col = '力量コード' if '力量コード' in self.competence_master.columns else 'competence_code'
-        skill_row = self.competence_master[
-            self.competence_master[code_col] == skill_code
-        ]
+        code_col = (
+            "力量コード" if "力量コード" in self.competence_master.columns else "competence_code"
+        )
+        skill_row = self.competence_master[self.competence_master[code_col] == skill_code]
 
         if skill_row.empty:
-            return 'UNKNOWN'
+            return "UNKNOWN"
 
         # 力量タイプカラムの検索（日本語・英語両対応）
-        if '力量タイプ' in skill_row.columns:
-            return skill_row.iloc[0]['力量タイプ']
-        elif 'competence_type' in skill_row.columns:
-            return skill_row.iloc[0]['competence_type']
+        if "力量タイプ" in skill_row.columns:
+            return skill_row.iloc[0]["力量タイプ"]
+        elif "competence_type" in skill_row.columns:
+            return skill_row.iloc[0]["competence_type"]
         else:
-            return 'UNKNOWN'
+            return "UNKNOWN"

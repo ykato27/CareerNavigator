@@ -19,30 +19,30 @@ logger = logging.getLogger(__name__)
 
 class DataLoader:
     """データ読み込みクラス"""
-    
+
     def __init__(self, data_dir: str = None):
         """
         初期化
-        
+
         Args:
             data_dir: データディレクトリのパス（Noneの場合はConfig.DATA_DIRを使用）
         """
         self.data_dir = data_dir or Config.DATA_DIR
-    
+
     @staticmethod
     def clean_column_name(col_name: str) -> str:
         """
         カラム名をクリーンにする
-        
+
         Args:
             col_name: 元のカラム名
-            
+
         Returns:
             クリーンなカラム名
         """
-        col_name = re.sub(r'\s*###\[.*?\]###', '', col_name)
+        col_name = re.sub(r"\s*###\[.*?\]###", "", col_name)
         return col_name.strip()
-    
+
     def load_csv(self, filename: str) -> pd.DataFrame:
         """
         CSVファイルを読み込む
@@ -86,7 +86,7 @@ class DataLoader:
             raise NotADirectoryError(f"{dir_path} はディレクトリではありません")
 
         # ディレクトリ内の全CSVファイルを検索
-        csv_files = glob.glob(os.path.join(dir_path, '*.csv'))
+        csv_files = glob.glob(os.path.join(dir_path, "*.csv"))
 
         if not csv_files:
             raise FileNotFoundError(f"ディレクトリ {dir_path} にCSVファイルが見つかりません")
@@ -148,7 +148,7 @@ class DataLoader:
 
                 # ファイル数も表示
                 dir_path = os.path.join(self.data_dir, dir_name)
-                csv_files = glob.glob(os.path.join(dir_path, '*.csv'))
+                csv_files = glob.glob(os.path.join(dir_path, "*.csv"))
                 logger.info(
                     "  ✓ %s/: %dファイル, %d行",
                     dir_name,
@@ -163,37 +163,37 @@ class DataLoader:
         logger.info("\n全%d種類のデータ読み込み完了", len(data))
 
         return data
-    
+
     def validate_data(self, data: Dict[str, pd.DataFrame]) -> bool:
         """
         データの整合性をチェック
-        
+
         Args:
             data: データの辞書
-            
+
         Returns:
             検証結果（True: 正常、False: 異常）
         """
         logger.info("\n" + "=" * 80)
         logger.info("データ検証")
         logger.info("=" * 80)
-        
+
         # 必須カラムのチェック
         required_columns = {
-            'members': ['メンバーコード', 'メンバー名'],
-            'acquired': ['メンバーコード', '力量コード', '力量タイプ', 'レベル'],
-            'skills': ['力量コード', '力量名'],
-            'education': ['力量コード', '力量名'],
-            'license': ['力量コード', '力量名'],
-            'categories': ['力量カテゴリーコード']
+            "members": ["メンバーコード", "メンバー名"],
+            "acquired": ["メンバーコード", "力量コード", "力量タイプ", "レベル"],
+            "skills": ["力量コード", "力量名"],
+            "education": ["力量コード", "力量名"],
+            "license": ["力量コード", "力量名"],
+            "categories": ["力量カテゴリーコード"],
         }
-        
+
         all_valid = True
-        
+
         for key, required_cols in required_columns.items():
             df = data[key]
             missing_cols = [col for col in required_cols if col not in df.columns]
-            
+
             if missing_cols:
                 logger.error("  ✗ %s: 必須カラムが不足 - %s", key, missing_cols)
                 all_valid = False
@@ -204,5 +204,5 @@ class DataLoader:
             logger.info("\n全データの検証完了")
         else:
             logger.error("\n検証エラーがあります")
-        
+
         return all_valid

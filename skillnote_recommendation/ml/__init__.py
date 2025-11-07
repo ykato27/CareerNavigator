@@ -8,13 +8,15 @@ from skillnote_recommendation.ml.matrix_factorization import MatrixFactorization
 from skillnote_recommendation.ml.diversity import DiversityReranker
 from skillnote_recommendation.ml.ml_recommender import MLRecommender
 from skillnote_recommendation.ml.exceptions import ColdStartError, MLModelNotTrainedError
-from skillnote_recommendation.ml.enhanced_graph_recommender import EnhancedSkillTransitionGraphRecommender
+from skillnote_recommendation.ml.enhanced_graph_recommender import (
+    EnhancedSkillTransitionGraphRecommender,
+)
 
 __all__ = [
-    'MatrixFactorizationModel',
-    'DiversityReranker',
-    'MLRecommender',
-    'ColdStartError',
-    'MLModelNotTrainedError',
-    'EnhancedSkillTransitionGraphRecommender',
+    "MatrixFactorizationModel",
+    "DiversityReranker",
+    "MLRecommender",
+    "ColdStartError",
+    "MLModelNotTrainedError",
+    "EnhancedSkillTransitionGraphRecommender",
 ]

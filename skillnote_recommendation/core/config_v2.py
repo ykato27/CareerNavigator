@@ -17,6 +17,7 @@ from typing import Literal, Final
 
 class Environment(Enum):
     """環境種別"""
+
     DEVELOPMENT = "dev"
     STAGING = "staging"
     PRODUCTION = "prod"
@@ -25,6 +26,7 @@ class Environment(Enum):
 @dataclass(frozen=True)
 class DirectoryConfig:
     """ディレクトリ設定"""
+
     project_root: Path
     data_dir: Path
     output_dir: Path
@@ -32,16 +34,13 @@ class DirectoryConfig:
     @classmethod
     def from_project_root(cls, root: Path) -> "DirectoryConfig":
         """プロジェクトルートから設定を作成"""
-        return cls(
-            project_root=root,
-            data_dir=root / "data",
-            output_dir=root / "output"
-        )
+        return cls(project_root=root, data_dir=root / "data", output_dir=root / "output")
 
 
 @dataclass(frozen=True)
 class InputDirectories:
     """入力ディレクトリ名"""
+
     members: str = "members"
     acquired: str = "acquired"
     skills: str = "skills"
@@ -53,6 +52,7 @@ class InputDirectories:
 @dataclass(frozen=True)
 class OutputFiles:
     """出力ファイル名"""
+
     members_clean: str = "members_clean.csv"
     competence_master: str = "competence_master.csv"
     member_competence: str = "member_competence.csv"
@@ -63,6 +63,7 @@ class OutputFiles:
 @dataclass(frozen=True)
 class RecommendationParams:
     """推薦パラメータ"""
+
     category_importance_weight: float = 0.4
     acquisition_ease_weight: float = 0.3
     popularity_weight: float = 0.3
@@ -73,6 +74,7 @@ class RecommendationParams:
 @dataclass(frozen=True)
 class MFParams:
     """Matrix Factorizationパラメータ"""
+
     n_components: int = 20
     max_iter: int = 1000
     random_state: int = 42
@@ -89,6 +91,7 @@ class MFParams:
 @dataclass(frozen=True)
 class DataPreprocessingParams:
     """データ前処理パラメータ"""
+
     min_competences_per_member: int = 3
     min_members_per_competence: int = 3
     normalization_method: Literal["minmax", "standard", "l2"] | None = "minmax"
@@ -98,6 +101,7 @@ class DataPreprocessingParams:
 @dataclass(frozen=True)
 class OptunaParams:
     """Optunaハイパーパラメータチューニングパラメータ"""
+
     n_trials: int = 50
     timeout: int = 600
     n_jobs: int = 1
@@ -115,6 +119,7 @@ class OptunaParams:
 @dataclass(frozen=True)
 class EvaluationParams:
     """評価パラメータ"""
+
     top_k: int = 10
     include_extended_metrics: bool = True
     include_diversity_metrics: bool = True
@@ -133,18 +138,20 @@ class EvaluationParams:
 @dataclass(frozen=True)
 class LoggingParams:
     """ログ設定"""
+
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     enable_json: bool = False  # dev環境ではfalse、prod環境ではtrue
     enable_console: bool = True
-    format: str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    date_format: str = '%Y-%m-%d %H:%M:%S'
+    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    date_format: str = "%Y-%m-%d %H:%M:%S"
 
 
 @dataclass(frozen=True)
 class EncodingConfig:
     """エンコーディング設定"""
-    file_encoding: str = 'utf-8'
-    output_encoding: str = 'utf-8-sig'
+
+    file_encoding: str = "utf-8"
+    output_encoding: str = "utf-8-sig"
 
 
 @dataclass(frozen=True)
@@ -155,6 +162,7 @@ class Config:
     全ての設定は不変（frozen=True）であり、
     環境ごとに異なるインスタンスを作成する
     """
+
     environment: Environment
     directories: DirectoryConfig
     input_dirs: InputDirectories = field(default_factory=InputDirectories)
@@ -191,28 +199,16 @@ class Config:
         # 環境ごとの設定のカスタマイズ
         if environment == Environment.PRODUCTION:
             logging_params = LoggingParams(
-                level="INFO",
-                enable_json=True,  # 本番環境はJSON形式
-                enable_console=True
+                level="INFO", enable_json=True, enable_console=True  # 本番環境はJSON形式
             )
         elif environment == Environment.STAGING:
-            logging_params = LoggingParams(
-                level="INFO",
-                enable_json=True,
-                enable_console=True
-            )
+            logging_params = LoggingParams(level="INFO", enable_json=True, enable_console=True)
         else:  # DEVELOPMENT
             logging_params = LoggingParams(
-                level="DEBUG",
-                enable_json=False,  # 開発環境は人間可読形式
-                enable_console=True
+                level="DEBUG", enable_json=False, enable_console=True  # 開発環境は人間可読形式
             )
 
-        return cls(
-            environment=environment,
-            directories=directories,
-            logging=logging_params
-        )
+        return cls(environment=environment, directories=directories, logging=logging_params)
 
     @classmethod
     def default(cls) -> "Config":

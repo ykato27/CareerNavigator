@@ -20,6 +20,7 @@ from skillnote_recommendation.core.models import Recommendation
 # Matrix Factorization関連インターフェース
 # =============================================================================
 
+
 @runtime_checkable
 class MatrixFactorizationProtocol(Protocol):
     """
@@ -37,11 +38,7 @@ class MatrixFactorizationProtocol(Protocol):
         """モデルを学習"""
         ...
 
-    def predict(
-        self,
-        member_code: str,
-        competence_codes: list[str] | None = None
-    ) -> pd.Series:
+    def predict(self, member_code: str, competence_codes: list[str] | None = None) -> pd.Series:
         """特定メンバーに対する力量のスコアを予測"""
         ...
 
@@ -50,7 +47,7 @@ class MatrixFactorizationProtocol(Protocol):
         member_code: str,
         k: int = 10,
         exclude_acquired: bool = True,
-        acquired_competences: list[str] | None = None
+        acquired_competences: list[str] | None = None,
     ) -> list[tuple[str, float]]:
         """Top-K推薦を生成"""
         ...
@@ -72,6 +69,7 @@ class MatrixFactorizationProtocol(Protocol):
 # Diversity Reranker関連インターフェース
 # =============================================================================
 
+
 @runtime_checkable
 class DiversityRerankerProtocol(Protocol):
     """多様性再ランキングのインターフェース"""
@@ -81,7 +79,7 @@ class DiversityRerankerProtocol(Protocol):
         candidates: list[tuple[str, float]],
         competence_info: pd.DataFrame,
         k: int = 10,
-        use_position_aware: bool = False
+        use_position_aware: bool = False,
     ) -> list[tuple[str, float]]:
         """MMR（Maximal Marginal Relevance）による再ランキング"""
         ...
@@ -91,7 +89,7 @@ class DiversityRerankerProtocol(Protocol):
         candidates: list[tuple[str, float]],
         competence_info: pd.DataFrame,
         k: int = 10,
-        max_per_category: int | None = None
+        max_per_category: int | None = None,
     ) -> list[tuple[str, float]]:
         """カテゴリ多様性を考慮した再ランキング"""
         ...
@@ -101,7 +99,7 @@ class DiversityRerankerProtocol(Protocol):
         candidates: list[tuple[str, float]],
         competence_info: pd.DataFrame,
         k: int = 10,
-        type_ratios: dict[str, float] | None = None
+        type_ratios: dict[str, float] | None = None,
     ) -> list[tuple[str, float]]:
         """タイプ多様性を考慮した再ランキング"""
         ...
@@ -113,15 +111,13 @@ class DiversityRerankerProtocol(Protocol):
         k: int = 10,
         max_per_category: int | None = 3,
         type_ratios: dict[str, float] | None = None,
-        use_position_aware: bool = True
+        use_position_aware: bool = True,
     ) -> list[tuple[str, float]]:
         """ハイブリッド再ランキング"""
         ...
 
     def calculate_diversity_metrics(
-        self,
-        recommendations: list[tuple[str, float]],
-        competence_info: pd.DataFrame
+        self, recommendations: list[tuple[str, float]], competence_info: pd.DataFrame
     ) -> dict[str, float]:
         """推薦結果の多様性指標を計算"""
         ...
@@ -131,15 +127,13 @@ class DiversityRerankerProtocol(Protocol):
 # Reference Person Finder関連インターフェース
 # =============================================================================
 
+
 @runtime_checkable
 class ReferencePersonFinderProtocol(Protocol):
     """参考人物検索のインターフェース"""
 
     def find_reference_persons(
-        self,
-        target_member_code: str,
-        recommended_competence_code: str,
-        top_n: int = 3
+        self, target_member_code: str, recommended_competence_code: str, top_n: int = 3
     ) -> list[Any]:
         """参考人物を検索"""
         ...
@@ -149,6 +143,7 @@ class ReferencePersonFinderProtocol(Protocol):
 # Recommender関連インターフェース
 # =============================================================================
 
+
 class BaseRecommender(ABC):
     """
     推薦エンジンの抽象基底クラス
@@ -157,12 +152,7 @@ class BaseRecommender(ABC):
     """
 
     @abstractmethod
-    def recommend(
-        self,
-        member_code: str,
-        top_n: int = 10,
-        **kwargs: Any
-    ) -> list[Recommendation]:
+    def recommend(self, member_code: str, top_n: int = 10, **kwargs: Any) -> list[Recommendation]:
         """
         推薦を生成
 
@@ -190,14 +180,13 @@ class BaseRecommender(ABC):
 # Data Preprocessor関連インターフェース
 # =============================================================================
 
+
 @runtime_checkable
 class DataPreprocessorProtocol(Protocol):
     """データ前処理のインターフェース"""
 
     def preprocess(
-        self,
-        skill_matrix: pd.DataFrame,
-        verbose: bool = True
+        self, skill_matrix: pd.DataFrame, verbose: bool = True
     ) -> tuple[pd.DataFrame, dict[str, Any]]:
         """
         スキルマトリクスを前処理
@@ -216,6 +205,7 @@ class DataPreprocessorProtocol(Protocol):
 # Evaluator関連インターフェース
 # =============================================================================
 
+
 @runtime_checkable
 class EvaluatorProtocol(Protocol):
     """評価のインターフェース"""
@@ -228,7 +218,7 @@ class EvaluatorProtocol(Protocol):
         top_k: int = 10,
         member_sample: list[str] | None = None,
         similarity_data: pd.DataFrame | None = None,
-        include_extended_metrics: bool = True
+        include_extended_metrics: bool = True,
     ) -> dict[str, float]:
         """推薦結果を評価"""
         ...
@@ -238,7 +228,7 @@ class EvaluatorProtocol(Protocol):
         recommendations_list: list[list[Recommendation]],
         competence_master: pd.DataFrame,
         member_competence: pd.DataFrame | None = None,
-        include_advanced_metrics: bool = True
+        include_advanced_metrics: bool = True,
     ) -> dict[str, float]:
         """多様性指標を計算"""
         ...
@@ -248,14 +238,13 @@ class EvaluatorProtocol(Protocol):
 # Hyperparameter Tuner関連インターフェース
 # =============================================================================
 
+
 class BaseHyperparameterTuner(ABC):
     """ハイパーパラメータチューナーの抽象基底クラス"""
 
     @abstractmethod
     def optimize(
-        self,
-        show_progress_bar: bool = True,
-        callbacks: list[Any] | None = None
+        self, show_progress_bar: bool = True, callbacks: list[Any] | None = None
     ) -> tuple[dict[str, Any], float]:
         """
         ハイパーパラメータ最適化を実行

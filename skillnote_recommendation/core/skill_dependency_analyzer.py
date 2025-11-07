@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SkillTransition:
     """スキル遷移情報"""
+
     prerequisite_code: str
     prerequisite_name: str
     dependent_code: str
@@ -36,6 +37,7 @@ class SkillTransition:
 @dataclass
 class LearningPath:
     """推奨学習パス"""
+
     competence_code: str
     competence_name: str
     competence_type: str
@@ -62,7 +64,7 @@ class SkillDependencyAnalyzer:
         competence_master: pd.DataFrame,
         time_window_days: int = 180,
         min_transition_count: int = 3,
-        confidence_threshold: float = 0.3
+        confidence_threshold: float = 0.3,
     ):
         """
         初期化
@@ -86,16 +88,18 @@ class SkillDependencyAnalyzer:
         # 取得日をdatetime型に変換
         self._prepare_data()
 
-        logger.info("SkillDependencyAnalyzer initialized with %d members, %d competences",
-                   self.member_competence['メンバーコード'].nunique(),
-                   self.competence_master.shape[0])
+        logger.info(
+            "SkillDependencyAnalyzer initialized with %d members, %d competences",
+            self.member_competence["メンバーコード"].nunique(),
+            self.competence_master.shape[0],
+        )
 
     def _validate_data(self):
         """データの妥当性を検証"""
-        if '取得日' not in self.member_competence.columns:
+        if "取得日" not in self.member_competence.columns:
             raise ValueError("member_competenceに'取得日'カラムが必要です")
 
-        required_cols = ['力量コード', '力量名', '力量タイプ']
+        required_cols = ["力量コード", "力量名", "力量タイプ"]
         missing_cols = [col for col in required_cols if col not in self.competence_master.columns]
         if missing_cols:
             raise ValueError(f"competence_masterに必要なカラムがありません: {missing_cols}")
@@ -103,13 +107,12 @@ class SkillDependencyAnalyzer:
     def _prepare_data(self):
         """データを準備"""
         # 取得日を変換
-        self.member_competence['取得日_dt'] = pd.to_datetime(
-            self.member_competence['取得日'],
-            errors='coerce'
+        self.member_competence["取得日_dt"] = pd.to_datetime(
+            self.member_competence["取得日"], errors="coerce"
         )
 
         # 無効な日付を除外
-        valid_dates = self.member_competence['取得日_dt'].notna()
+        valid_dates = self.member_competence["取得日_dt"].notna()
         if not valid_dates.any():
             raise ValueError("有効な取得日が1つもありません")
 
@@ -129,10 +132,10 @@ class SkillDependencyAnalyzer:
         transitions = []
 
         # メンバーごとに取得順序を分析
-        for member_code in self.member_competence['メンバーコード'].unique():
+        for member_code in self.member_competence["メンバーコード"].unique():
             member_data = self.member_competence[
-                self.member_competence['メンバーコード'] == member_code
-            ].sort_values('取得日_dt')
+                self.member_competence["メンバーコード"] == member_code
+            ].sort_values("取得日_dt")
 
             if len(member_data) < 2:
                 continue
@@ -142,33 +145,35 @@ class SkillDependencyAnalyzer:
                 skill_a = member_data.iloc[i]
                 skill_b = member_data.iloc[i + 1]
 
-                time_diff = (skill_b['取得日_dt'] - skill_a['取得日_dt']).days
+                time_diff = (skill_b["取得日_dt"] - skill_a["取得日_dt"]).days
 
                 # 時間窓内の遷移のみ記録
                 if 0 < time_diff <= self.time_window_days:
-                    transitions.append({
-                        'member_code': member_code,
-                        'prerequisite_code': skill_a['力量コード'],
-                        'dependent_code': skill_b['力量コード'],
-                        'time_gap_days': time_diff,
-                        'acquisition_date_a': skill_a['取得日_dt'],
-                        'acquisition_date_b': skill_b['取得日_dt']
-                    })
+                    transitions.append(
+                        {
+                            "member_code": member_code,
+                            "prerequisite_code": skill_a["力量コード"],
+                            "dependent_code": skill_b["力量コード"],
+                            "time_gap_days": time_diff,
+                            "acquisition_date_a": skill_a["取得日_dt"],
+                            "acquisition_date_b": skill_b["取得日_dt"],
+                        }
+                    )
 
         if not transitions:
             logger.warning("No transitions found within time window")
             return pd.DataFrame()
 
         transition_df = pd.DataFrame(transitions)
-        logger.info("Extracted %d skill transitions from %d members",
-                   len(transition_df), transition_df['member_code'].nunique())
+        logger.info(
+            "Extracted %d skill transitions from %d members",
+            len(transition_df),
+            transition_df["member_code"].nunique(),
+        )
 
         return transition_df
 
-    def calculate_transition_confidence(
-        self,
-        transition_df: pd.DataFrame
-    ) -> pd.DataFrame:
+    def calculate_transition_confidence(self, transition_df: pd.DataFrame) -> pd.DataFrame:
         """
         遷移の信頼度を計算
 
@@ -182,50 +187,52 @@ class SkillDependencyAnalyzer:
             return pd.DataFrame()
 
         # スキルペアごとに集計
-        pattern_counts = transition_df.groupby(
-            ['prerequisite_code', 'dependent_code']
-        ).agg({
-            'member_code': 'count',
-            'time_gap_days': 'median'
-        }).reset_index()
+        pattern_counts = (
+            transition_df.groupby(["prerequisite_code", "dependent_code"])
+            .agg({"member_code": "count", "time_gap_days": "median"})
+            .reset_index()
+        )
 
         pattern_counts.columns = [
-            'prerequisite_code', 'dependent_code',
-            'transition_count', 'median_time_gap'
+            "prerequisite_code",
+            "dependent_code",
+            "transition_count",
+            "median_time_gap",
         ]
 
         # 最小遷移数でフィルタ
         pattern_counts = pattern_counts[
-            pattern_counts['transition_count'] >= self.min_transition_count
+            pattern_counts["transition_count"] >= self.min_transition_count
         ].copy()
 
         # 信頼度を計算: prerequisiteを習得した人のうち、dependentも習得した割合
         confidences = []
         for _, row in pattern_counts.iterrows():
-            prerequisite_code = row['prerequisite_code']
-            dependent_code = row['dependent_code']
+            prerequisite_code = row["prerequisite_code"]
+            dependent_code = row["dependent_code"]
 
             # prerequisiteを習得した総人数
             total_with_prerequisite = self.member_competence[
-                self.member_competence['力量コード'] == prerequisite_code
-            ]['メンバーコード'].nunique()
+                self.member_competence["力量コード"] == prerequisite_code
+            ]["メンバーコード"].nunique()
 
             # dependentも習得した人数（遷移数）
-            transition_count = row['transition_count']
+            transition_count = row["transition_count"]
 
             # 信頼度 = 遷移率
-            confidence = transition_count / total_with_prerequisite if total_with_prerequisite > 0 else 0
+            confidence = (
+                transition_count / total_with_prerequisite if total_with_prerequisite > 0 else 0
+            )
             confidences.append(confidence)
 
-        pattern_counts['confidence'] = confidences
+        pattern_counts["confidence"] = confidences
 
         logger.info("Calculated confidence for %d transition patterns", len(pattern_counts))
 
         return pattern_counts
 
     def infer_dependency_direction(
-        self,
-        transition_confidences: pd.DataFrame
+        self, transition_confidences: pd.DataFrame
     ) -> List[SkillTransition]:
         """
         双方向遷移を比較して因果の方向を推定
@@ -245,27 +252,27 @@ class SkillDependencyAnalyzer:
         processed_pairs = set()
 
         for _, row in transition_confidences.iterrows():
-            skill_a = row['prerequisite_code']
-            skill_b = row['dependent_code']
+            skill_a = row["prerequisite_code"]
+            skill_b = row["dependent_code"]
 
             # すでに処理済みのペアはスキップ
             if (skill_a, skill_b) in processed_pairs or (skill_b, skill_a) in processed_pairs:
                 continue
 
             # A→Bの遷移
-            a_to_b_count = row['transition_count']
-            a_to_b_confidence = row['confidence']
-            a_to_b_time_gap = row['median_time_gap']
+            a_to_b_count = row["transition_count"]
+            a_to_b_confidence = row["confidence"]
+            a_to_b_time_gap = row["median_time_gap"]
 
             # B→Aの遷移を探す
             reverse_row = transition_confidences[
-                (transition_confidences['prerequisite_code'] == skill_b) &
-                (transition_confidences['dependent_code'] == skill_a)
+                (transition_confidences["prerequisite_code"] == skill_b)
+                & (transition_confidences["dependent_code"] == skill_a)
             ]
 
             if not reverse_row.empty:
-                b_to_a_count = reverse_row.iloc[0]['transition_count']
-                b_to_a_confidence = reverse_row.iloc[0]['confidence']
+                b_to_a_count = reverse_row.iloc[0]["transition_count"]
+                b_to_a_confidence = reverse_row.iloc[0]["confidence"]
             else:
                 b_to_a_count = 0
                 b_to_a_confidence = 0
@@ -288,7 +295,7 @@ class SkillDependencyAnalyzer:
                 confidence = b_to_a_confidence
                 transition_count = b_to_a_count
                 reverse_count = a_to_b_count
-                time_gap = reverse_row.iloc[0]['median_time_gap']
+                time_gap = reverse_row.iloc[0]["median_time_gap"]
                 strength = self._get_dependency_strength(confidence)
 
             else:
@@ -298,17 +305,17 @@ class SkillDependencyAnalyzer:
 
             # 力量情報を取得
             prerequisite_info = self.competence_master[
-                self.competence_master['力量コード'] == prerequisite
+                self.competence_master["力量コード"] == prerequisite
             ]
             dependent_info = self.competence_master[
-                self.competence_master['力量コード'] == dependent
+                self.competence_master["力量コード"] == dependent
             ]
 
             if prerequisite_info.empty or dependent_info.empty:
                 continue
 
-            prerequisite_name = prerequisite_info.iloc[0]['力量名']
-            dependent_name = dependent_info.iloc[0]['力量名']
+            prerequisite_name = prerequisite_info.iloc[0]["力量名"]
+            dependent_name = dependent_info.iloc[0]["力量名"]
 
             evidence = f"{transition_count}人が{prerequisite_name}→{dependent_name}の順序で学習、逆方向は{reverse_count}人"
 
@@ -322,7 +329,7 @@ class SkillDependencyAnalyzer:
                 confidence=confidence,
                 dependency_strength=strength,
                 reverse_transition_count=reverse_count,
-                evidence=evidence
+                evidence=evidence,
             )
 
             skill_transitions.append(skill_transition)
@@ -335,17 +342,16 @@ class SkillDependencyAnalyzer:
     def _get_dependency_strength(self, confidence: float) -> str:
         """信頼度から依存関係の強度を判定"""
         if confidence >= 0.7:
-            return '強'
+            return "強"
         elif confidence >= 0.5:
-            return '中'
+            return "中"
         elif confidence >= self.confidence_threshold:
-            return '弱'
+            return "弱"
         else:
-            return 'なし'
+            return "なし"
 
     def find_parallel_learnable_skills(
-        self,
-        transition_confidences: pd.DataFrame
+        self, transition_confidences: pd.DataFrame
     ) -> List[Tuple[str, str, str]]:
         """
         並列学習可能なスキルペアを特定
@@ -363,23 +369,23 @@ class SkillDependencyAnalyzer:
         processed_pairs = set()
 
         for _, row in transition_confidences.iterrows():
-            skill_a = row['prerequisite_code']
-            skill_b = row['dependent_code']
+            skill_a = row["prerequisite_code"]
+            skill_b = row["dependent_code"]
 
             if (skill_a, skill_b) in processed_pairs or (skill_b, skill_a) in processed_pairs:
                 continue
 
             # A→Bの遷移
-            a_to_b_count = row['transition_count']
+            a_to_b_count = row["transition_count"]
 
             # B→Aの遷移を探す
             reverse_row = transition_confidences[
-                (transition_confidences['prerequisite_code'] == skill_b) &
-                (transition_confidences['dependent_code'] == skill_a)
+                (transition_confidences["prerequisite_code"] == skill_b)
+                & (transition_confidences["dependent_code"] == skill_a)
             ]
 
             if not reverse_row.empty:
-                b_to_a_count = reverse_row.iloc[0]['transition_count']
+                b_to_a_count = reverse_row.iloc[0]["transition_count"]
 
                 # 双方向がほぼ同数（比率が1.5倍未満）→ 並列学習可能
                 ratio = max(a_to_b_count, b_to_a_count) / min(a_to_b_count, b_to_a_count)
@@ -391,8 +397,7 @@ class SkillDependencyAnalyzer:
         return parallel_skills
 
     def generate_learning_paths(
-        self,
-        target_competence_codes: Optional[List[str]] = None
+        self, target_competence_codes: Optional[List[str]] = None
     ) -> Dict[str, LearningPath]:
         """
         推奨学習パスを生成
@@ -422,67 +427,65 @@ class SkillDependencyAnalyzer:
 
         # 対象力量を決定
         if target_competence_codes is None:
-            target_competence_codes = self.competence_master['力量コード'].tolist()
+            target_competence_codes = self.competence_master["力量コード"].tolist()
 
         # 各力量の学習パスを生成
         learning_paths = {}
 
         for comp_code in target_competence_codes:
-            comp_info = self.competence_master[
-                self.competence_master['力量コード'] == comp_code
-            ]
+            comp_info = self.competence_master[self.competence_master["力量コード"] == comp_code]
 
             if comp_info.empty:
                 continue
 
-            comp_name = comp_info.iloc[0]['力量名']
-            comp_type = comp_info.iloc[0]['力量タイプ']
-            comp_category = comp_info.iloc[0].get('力量カテゴリー名', '')
+            comp_name = comp_info.iloc[0]["力量名"]
+            comp_type = comp_info.iloc[0]["力量タイプ"]
+            comp_category = comp_info.iloc[0].get("力量カテゴリー名", "")
 
             # 前提スキルを探す
             prerequisites = [
                 {
-                    'skill_code': t.prerequisite_code,
-                    'skill_name': t.prerequisite_name,
-                    'reason': f"この力量を学んだ人の{int(t.confidence * 100)}%が、事前に習得しています",
-                    'evidence': t.evidence,
-                    'average_time_gap_days': int(t.median_time_gap_days),
-                    'confidence': t.confidence,
-                    'dependency_strength': t.dependency_strength
+                    "skill_code": t.prerequisite_code,
+                    "skill_name": t.prerequisite_name,
+                    "reason": f"この力量を学んだ人の{int(t.confidence * 100)}%が、事前に習得しています",
+                    "evidence": t.evidence,
+                    "average_time_gap_days": int(t.median_time_gap_days),
+                    "confidence": t.confidence,
+                    "dependency_strength": t.dependency_strength,
                 }
-                for t in skill_transitions if t.dependent_code == comp_code
+                for t in skill_transitions
+                if t.dependent_code == comp_code
             ]
 
             # このスキルを習得後に学べるスキル（unlock）
             unlocks = [
                 {
-                    'skill_code': t.dependent_code,
-                    'skill_name': t.dependent_name,
-                    'reason': f"{t.dependent_name}を学んだ人の{int(t.confidence * 100)}%が、この力量を事前に習得しています"
+                    "skill_code": t.dependent_code,
+                    "skill_name": t.dependent_name,
+                    "reason": f"{t.dependent_name}を学んだ人の{int(t.confidence * 100)}%が、この力量を事前に習得しています",
                 }
-                for t in skill_transitions if t.prerequisite_code == comp_code
+                for t in skill_transitions
+                if t.prerequisite_code == comp_code
             ]
 
             # 並列学習可能なスキル
             parallel = [
-                {
-                    'skill_code': p[1] if p[0] == comp_code else p[0],
-                    'reason': p[2]
-                }
-                for p in parallel_skills if comp_code in (p[0], p[1])
+                {"skill_code": p[1] if p[0] == comp_code else p[0], "reason": p[2]}
+                for p in parallel_skills
+                if comp_code in (p[0], p[1])
             ]
 
             # 難易度を推定（前提スキル数に基づく）
             if len(prerequisites) == 0:
-                difficulty = '初級'
+                difficulty = "初級"
             elif len(prerequisites) <= 2:
-                difficulty = '中級'
+                difficulty = "中級"
             else:
-                difficulty = '上級'
+                difficulty = "上級"
 
             # 成功率を推定（前提スキルの信頼度平均）
             if prerequisites:
-                avg_confidence = np.mean([p['confidence'] for p in prerequisites])
+                avg_confidence = np.mean([p["confidence"] for p in prerequisites])
                 success_rate = avg_confidence
             else:
                 success_rate = 0.8  # デフォルト
@@ -497,7 +500,7 @@ class SkillDependencyAnalyzer:
                 unlocks=unlocks,
                 estimated_difficulty=difficulty,
                 estimated_learning_hours=None,  # TODO: 将来的に実装
-                success_rate=success_rate
+                success_rate=success_rate,
             )
 
             learning_paths[comp_code] = learning_path
@@ -515,7 +518,7 @@ class SkillDependencyAnalyzer:
         """
         transitions_df = self.extract_temporal_transitions()
         if transitions_df.empty:
-            return {'nodes': [], 'edges': []}
+            return {"nodes": [], "edges": []}
 
         confidences_df = self.calculate_transition_confidence(transitions_df)
         skill_transitions = self.infer_dependency_direction(confidences_df)
@@ -528,29 +531,28 @@ class SkillDependencyAnalyzer:
             skill_codes.add(t.dependent_code)
 
         for code in skill_codes:
-            comp_info = self.competence_master[
-                self.competence_master['力量コード'] == code
-            ]
+            comp_info = self.competence_master[self.competence_master["力量コード"] == code]
             if not comp_info.empty:
-                nodes.append({
-                    'id': code,
-                    'label': comp_info.iloc[0]['力量名'],
-                    'type': comp_info.iloc[0]['力量タイプ']
-                })
+                nodes.append(
+                    {
+                        "id": code,
+                        "label": comp_info.iloc[0]["力量名"],
+                        "type": comp_info.iloc[0]["力量タイプ"],
+                    }
+                )
 
         # エッジ（依存関係）
         edges = []
         for t in skill_transitions:
-            edges.append({
-                'source': t.prerequisite_code,
-                'target': t.dependent_code,
-                'weight': t.confidence,
-                'strength': t.dependency_strength,
-                'evidence': t.evidence,
-                'time_gap_days': int(t.median_time_gap_days)
-            })
+            edges.append(
+                {
+                    "source": t.prerequisite_code,
+                    "target": t.dependent_code,
+                    "weight": t.confidence,
+                    "strength": t.dependency_strength,
+                    "evidence": t.evidence,
+                    "time_gap_days": int(t.median_time_gap_days),
+                }
+            )
 
-        return {
-            'nodes': nodes,
-            'edges': edges
-        }
+        return {"nodes": nodes, "edges": edges}

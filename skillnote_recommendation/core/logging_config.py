@@ -15,9 +15,7 @@ from pythonjsonlogger import jsonlogger
 
 
 def setup_structured_logging(
-    log_level: str = "INFO",
-    enable_json: bool = True,
-    enable_console: bool = True
+    log_level: str = "INFO", enable_json: bool = True, enable_console: bool = True
 ) -> None:
     """
     構造化ロギングをセットアップ
@@ -64,14 +62,12 @@ def setup_structured_logging(
         if enable_json:
             # JSON形式のフォーマッタ
             formatter = jsonlogger.JsonFormatter(
-                '%(asctime)s %(name)s %(levelname)s %(message)s',
-                timestamp=True
+                "%(asctime)s %(name)s %(levelname)s %(message)s", timestamp=True
             )
         else:
             # 人間可読形式
             formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
             )
 
         handler.setFormatter(formatter)
@@ -113,6 +109,6 @@ class LoggerMixin:
     @property
     def logger(self) -> Any:
         """構造化ロガーを取得"""
-        if not hasattr(self, '_logger'):
-            self._logger = get_logger(self.__class__.__module__ + '.' + self.__class__.__name__)
+        if not hasattr(self, "_logger"):
+            self._logger = get_logger(self.__class__.__module__ + "." + self.__class__.__name__)
         return self._logger

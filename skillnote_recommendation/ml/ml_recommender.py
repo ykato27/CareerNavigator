@@ -24,7 +24,7 @@ class MLRecommender:
         member_master: pd.DataFrame,
         diversity_reranker: Optional[DiversityReranker] = None,
         reference_person_finder: Optional[ReferencePersonFinder] = None,
-        tuning_results: Optional[dict] = None
+        tuning_results: Optional[dict] = None,
     ):
         self.mf_model = mf_model
         self.competence_master = competence_master
@@ -46,11 +46,12 @@ class MLRecommender:
         member_master: pd.DataFrame,
         use_preprocessing: bool = True,
         use_tuning: bool = False,
+        n_components: Optional[int] = None,
         tuning_n_trials: Optional[int] = None,
         tuning_timeout: Optional[int] = None,
         tuning_search_space: Optional[Dict] = None,
         tuning_sampler: Optional[str] = None,
-        tuning_progress_callback: Optional[object] = None
+        tuning_progress_callback: Optional[object] = None,
     ):
         """
         member_competence（会員習得力量データ）から会員×力量マトリクスを生成し、
@@ -62,6 +63,7 @@ class MLRecommender:
             member_master: メンバーマスタ
             use_preprocessing: データ前処理を使用するか（デフォルト: True）
             use_tuning: ハイパーパラメータチューニングを使用するか（デフォルト: False）
+            n_components: 潜在因子数（Noneの場合はConfigから取得）
             tuning_n_trials: チューニング試行回数（Noneの場合はデフォルト）
             tuning_timeout: チューニングタイムアウト（Noneの場合はデフォルト）
             tuning_search_space: チューニング探索空間（Noneの場合はデフォルト）
@@ -77,10 +79,7 @@ class MLRecommender:
 
         # 会員×力量マトリクスを作成
         skill_matrix = member_competence.pivot_table(
-            index="メンバーコード",
-            columns="力量コード",
-            values="正規化レベル",
-            fill_value=0
+            index="メンバーコード", columns="力量コード", values="正規化レベル", fill_value=0
         )
 
         print(f"元の会員数: {skill_matrix.shape[0]}")
@@ -88,7 +87,7 @@ class MLRecommender:
 
         # データ前処理
         preprocessing_stats = None
-        if use_preprocessing and Config.DATA_PREPROCESSING_PARAMS['enable_preprocessing']:
+        if use_preprocessing and Config.DATA_PREPROCESSING_PARAMS["enable_preprocessing"]:
             print("\n--- データ前処理実行 ---")
             preprocessor = create_preprocessor_from_config(Config)
             skill_matrix, preprocessing_stats = preprocessor.preprocess(skill_matrix, verbose=True)
@@ -103,7 +102,9 @@ class MLRecommender:
             print(f"[DEBUG] tuning_sampler: {tuning_sampler}")
             print(f"[DEBUG] progress_callback設定: {tuning_progress_callback is not None}")
 
-            from skillnote_recommendation.ml.hyperparameter_tuning import tune_nmf_hyperparameters_from_config
+            from skillnote_recommendation.ml.hyperparameter_tuning import (
+                tune_nmf_hyperparameters_from_config,
+            )
 
             try:
                 print("[DEBUG] Calling tune_nmf_hyperparameters_from_config...")
@@ -116,7 +117,7 @@ class MLRecommender:
                     custom_timeout=tuning_timeout,
                     custom_search_space=tuning_search_space,
                     custom_sampler=tuning_sampler,
-                    progress_callback=tuning_progress_callback
+                    progress_callback=tuning_progress_callback,
                 )
                 print(f"\n✅ チューニング完了")
                 print(f"最適パラメータ: {best_params}")
@@ -125,10 +126,10 @@ class MLRecommender:
 
                 # チューニング結果を保存
                 tuning_results = {
-                    'best_params': best_params,
-                    'best_value': best_value,
-                    'tuner': tuner,
-                    'default_params': Config.MF_PARAMS.copy()
+                    "best_params": best_params,
+                    "best_value": best_value,
+                    "tuner": tuner,
+                    "default_params": Config.MF_PARAMS.copy(),
                 }
             except ImportError as e:
                 print(f"⚠️ Optunaがインストールされていません: {e}")
@@ -136,6 +137,7 @@ class MLRecommender:
                 use_tuning = False
             except Exception as e:
                 import traceback
+
                 print(f"❌ チューニング中にエラーが発生: {type(e).__name__}: {e}")
                 print(f"[ERROR] Traceback:\n{traceback.format_exc()}")
                 raise
@@ -144,18 +146,20 @@ class MLRecommender:
             print("\n--- 通常学習実行 ---")
             # Configからパラメータを読み込み
             mf_params = Config.MF_PARAMS.copy()
-            n_components = mf_params.pop('n_components')
-            random_state = mf_params.pop('random_state')
-            use_confidence_weighting = mf_params.pop('use_confidence_weighting', False)
-            confidence_alpha = mf_params.pop('confidence_alpha', 1.0)
+            config_n_components = mf_params.pop("n_components")
+            # n_componentsが指定されていればそれを使用、なければConfigから取得
+            final_n_components = n_components if n_components is not None else config_n_components
+            random_state = mf_params.pop("random_state")
+            use_confidence_weighting = mf_params.pop("use_confidence_weighting", False)
+            confidence_alpha = mf_params.pop("confidence_alpha", 1.0)
 
             # NMFモデルを学習
             mf_model = MatrixFactorizationModel(
-                n_components=n_components,
+                n_components=final_n_components,
                 random_state=random_state,
                 use_confidence_weighting=use_confidence_weighting,
                 confidence_alpha=confidence_alpha,
-                **mf_params
+                **mf_params,
             )
             mf_model.fit(skill_matrix)
 
@@ -181,7 +185,7 @@ class MLRecommender:
         reference_finder = ReferencePersonFinder(
             member_competence=member_competence,
             member_master=member_master,
-            competence_master=competence_master
+            competence_master=competence_master,
         )
 
         return cls(
@@ -191,7 +195,7 @@ class MLRecommender:
             member_master=member_master,
             diversity_reranker=DiversityReranker(),
             reference_person_finder=reference_finder,
-            tuning_results=tuning_results  # チューニング結果を渡す
+            tuning_results=tuning_results,  # チューニング結果を渡す
         )
 
     # =========================================================
@@ -204,7 +208,7 @@ class MLRecommender:
         competence_type: Optional[List[str]] = None,
         category_filter: Optional[str] = None,
         use_diversity: bool = True,
-        diversity_strategy: str = "hybrid"
+        diversity_strategy: str = "hybrid",
     ) -> List[Recommendation]:
         """特定会員に対する推薦を生成"""
         if not self.mf_model.is_fitted:
@@ -223,7 +227,7 @@ class MLRecommender:
                 member_code=member_code,
                 k=top_n * 3 if use_diversity else top_n,
                 exclude_acquired=True,
-                acquired_competences=acquired
+                acquired_competences=acquired,
             )
         except ValueError as e:
             # predict_top_kからのValueErrorもColdStartErrorに変換
@@ -262,13 +266,21 @@ class MLRecommender:
         # 多様性再ランキング
         if use_diversity and len(filtered) > 0:
             if diversity_strategy == "mmr":
-                final = self.diversity_reranker.rerank_mmr(filtered, self.competence_master, k=top_n)
+                final = self.diversity_reranker.rerank_mmr(
+                    filtered, self.competence_master, k=top_n
+                )
             elif diversity_strategy == "category":
-                final = self.diversity_reranker.rerank_category_diversity(filtered, self.competence_master, k=top_n)
+                final = self.diversity_reranker.rerank_category_diversity(
+                    filtered, self.competence_master, k=top_n
+                )
             elif diversity_strategy == "type":
-                final = self.diversity_reranker.rerank_type_diversity(filtered, self.competence_master, k=top_n)
+                final = self.diversity_reranker.rerank_type_diversity(
+                    filtered, self.competence_master, k=top_n
+                )
             elif diversity_strategy == "hybrid":
-                final = self.diversity_reranker.rerank_hybrid(filtered, self.competence_master, k=top_n)
+                final = self.diversity_reranker.rerank_hybrid(
+                    filtered, self.competence_master, k=top_n
+                )
             else:
                 final = filtered[:top_n]
         else:
@@ -284,9 +296,7 @@ class MLRecommender:
             reference_persons = []
             if self.reference_person_finder:
                 reference_persons = self.reference_person_finder.find_reference_persons(
-                    target_member_code=member_code,
-                    recommended_competence_code=code,
-                    top_n=3
+                    target_member_code=member_code, recommended_competence_code=code, top_n=3
                 )
 
             # リッチな推薦理由を生成（参考人物情報を含む）
@@ -296,7 +306,7 @@ class MLRecommender:
                 score=score,
                 use_diversity=use_diversity,
                 diversity_strategy=diversity_strategy,
-                reference_persons=reference_persons
+                reference_persons=reference_persons,
             )
 
             rec = Recommendation(
@@ -309,7 +319,7 @@ class MLRecommender:
                 acquisition_ease=0.0,
                 popularity=0.0,
                 reason=reason,
-                reference_persons=reference_persons
+                reference_persons=reference_persons,
             )
             results.append(rec)
 
@@ -320,9 +330,13 @@ class MLRecommender:
     # =========================================================
     def _get_acquired_competences(self, member_code: str) -> List[str]:
         if member_code not in self._member_acquired_cache:
-            acquired = self.member_competence[
-                self.member_competence["メンバーコード"] == member_code
-            ]["力量コード"].unique().tolist()
+            acquired = (
+                self.member_competence[self.member_competence["メンバーコード"] == member_code][
+                    "力量コード"
+                ]
+                .unique()
+                .tolist()
+            )
             self._member_acquired_cache[member_code] = acquired
         return self._member_acquired_cache[member_code]
 
@@ -335,9 +349,15 @@ class MLRecommender:
             return 5.0
         return round(((score - min_s) / (max_s - min_s)) * 10, 2)
 
-    def _generate_rich_reason(self, member_code: str, competence_info: pd.Series,
-                               score: float, use_diversity: bool, diversity_strategy: str,
-                               reference_persons: list) -> str:
+    def _generate_rich_reason(
+        self,
+        member_code: str,
+        competence_info: pd.Series,
+        score: float,
+        use_diversity: bool,
+        diversity_strategy: str,
+        reference_persons: list,
+    ) -> str:
         """
         個人の力量プロファイルに基づいたリッチな推薦理由を生成
 
@@ -390,9 +410,15 @@ class MLRecommender:
 
         return "\n\n".join(reason_parts)
 
-    def _generate_reason_intro(self, name: str, typ: str, cat: str,
-                                score: float, acquired_count: int,
-                                category_profile: Dict) -> str:
+    def _generate_reason_intro(
+        self,
+        name: str,
+        typ: str,
+        cat: str,
+        score: float,
+        acquired_count: int,
+        category_profile: Dict,
+    ) -> str:
         """推薦理由の導入部を生成"""
         score_pct = int(score * 100) if score <= 1 else int(score * 10)
 
@@ -417,9 +443,15 @@ class MLRecommender:
 
         return intro
 
-    def _generate_profile_relevance(self, member_code: str, name: str, typ: str,
-                                     cat: str, acquired: List[str],
-                                     category_profile: Dict) -> str:
+    def _generate_profile_relevance(
+        self,
+        member_code: str,
+        name: str,
+        typ: str,
+        cat: str,
+        acquired: List[str],
+        category_profile: Dict,
+    ) -> str:
         """個人プロファイルとの関連性を説明"""
         if not category_profile:
             return ""
@@ -430,9 +462,9 @@ class MLRecommender:
 
             # 力量カテゴリー名カラムが存在する場合のみカテゴリ分析
             if "力量カテゴリー名" in self.competence_master.columns:
-                total_cat = len(self.competence_master[
-                    self.competence_master["力量カテゴリー名"] == cat
-                ])
+                total_cat = len(
+                    self.competence_master[self.competence_master["力量カテゴリー名"] == cat]
+                )
                 cat_ratio = int((cat_count / total_cat * 100)) if total_cat > 0 else 0
 
                 relevance = (
@@ -527,10 +559,14 @@ class MLRecommender:
                 self.competence_master[["力量コード", "力量カテゴリー名"]],
                 on="力量コード",
                 how="left",
-                suffixes=("", "_master")
+                suffixes=("", "_master"),
             )
             # マージ後のカラム名を確認（_y サフィックスがつく可能性）
-            cat_col = "力量カテゴリー名_master" if "力量カテゴリー名_master" in merged.columns else "力量カテゴリー名"
+            cat_col = (
+                "力量カテゴリー名_master"
+                if "力量カテゴリー名_master" in merged.columns
+                else "力量カテゴリー名"
+            )
             category_counts = merged[cat_col].dropna().value_counts().to_dict()
         else:
             # どちらにも存在しない場合は空の辞書
@@ -541,6 +577,8 @@ class MLRecommender:
 
         return category_counts
 
-    def calculate_diversity_metrics(self, recommendations: List[Recommendation]) -> Dict[str, float]:
+    def calculate_diversity_metrics(
+        self, recommendations: List[Recommendation]
+    ) -> Dict[str, float]:
         pairs = [(rec.competence_code, rec.priority_score) for rec in recommendations]
         return self.diversity_reranker.calculate_diversity_metrics(pairs, self.competence_master)

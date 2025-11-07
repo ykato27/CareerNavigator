@@ -10,6 +10,7 @@ from enum import Enum
 
 class RecommendationMethod(Enum):
     """Recommendation method types."""
+
     NMF = "nmf"
     GRAPH = "graph"
     HYBRID = "hybrid"

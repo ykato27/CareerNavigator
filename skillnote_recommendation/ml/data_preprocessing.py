@@ -21,7 +21,7 @@ class SkillMatrixPreprocessor:
         self,
         min_competences_per_member: int = 3,
         min_members_per_competence: int = 3,
-        normalization_method: Optional[str] = 'minmax'
+        normalization_method: Optional[str] = "minmax",
     ):
         """
         初期化
@@ -39,9 +39,7 @@ class SkillMatrixPreprocessor:
         self.preprocessing_stats = {}
 
     def preprocess(
-        self,
-        skill_matrix: pd.DataFrame,
-        verbose: bool = True
+        self, skill_matrix: pd.DataFrame, verbose: bool = True
     ) -> Tuple[pd.DataFrame, dict]:
         """
         スキルマトリクスを前処理
@@ -60,23 +58,23 @@ class SkillMatrixPreprocessor:
 
         original_shape = skill_matrix.shape
         stats = {
-            'original_shape': original_shape,
-            'original_members': original_shape[0],
-            'original_competences': original_shape[1],
-            'original_sparsity': self._calculate_sparsity(skill_matrix),
+            "original_shape": original_shape,
+            "original_members": original_shape[0],
+            "original_competences": original_shape[1],
+            "original_sparsity": self._calculate_sparsity(skill_matrix),
         }
 
         # ステップ1: 外れ値の除去
         filtered_matrix = self._remove_outliers(skill_matrix, verbose)
-        stats['filtered_shape'] = filtered_matrix.shape
-        stats['removed_members'] = original_shape[0] - filtered_matrix.shape[0]
-        stats['removed_competences'] = original_shape[1] - filtered_matrix.shape[1]
+        stats["filtered_shape"] = filtered_matrix.shape
+        stats["removed_members"] = original_shape[0] - filtered_matrix.shape[0]
+        stats["removed_competences"] = original_shape[1] - filtered_matrix.shape[1]
 
         # ステップ2: 正規化
         normalized_matrix = self._normalize(filtered_matrix, verbose)
-        stats['final_shape'] = normalized_matrix.shape
-        stats['final_sparsity'] = self._calculate_sparsity(normalized_matrix)
-        stats['normalization_method'] = self.normalization_method
+        stats["final_shape"] = normalized_matrix.shape
+        stats["final_sparsity"] = self._calculate_sparsity(normalized_matrix)
+        stats["normalization_method"] = self.normalization_method
 
         if verbose:
             logger.info("\n" + "=" * 60)
@@ -94,11 +92,7 @@ class SkillMatrixPreprocessor:
         self.preprocessing_stats = stats
         return normalized_matrix, stats
 
-    def _remove_outliers(
-        self,
-        skill_matrix: pd.DataFrame,
-        verbose: bool = True
-    ) -> pd.DataFrame:
+    def _remove_outliers(self, skill_matrix: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
         """
         外れ値（極端に力量が少ないメンバー・保有者が少ない力量）を除去
 
@@ -117,27 +111,27 @@ class SkillMatrixPreprocessor:
         valid_members = member_competence_counts >= self.min_competences_per_member
 
         if verbose:
-            logger.info(f"力量数が{self.min_competences_per_member}未満のメンバー: "
-                       f"{(~valid_members).sum()}名を除外")
+            logger.info(
+                f"力量数が{self.min_competences_per_member}未満のメンバー: "
+                f"{(~valid_members).sum()}名を除外"
+            )
 
         # 力量ごとの保有者数をカウント
         competence_member_counts = (skill_matrix > 0).sum(axis=0)
         valid_competences = competence_member_counts >= self.min_members_per_competence
 
         if verbose:
-            logger.info(f"保有者が{self.min_members_per_competence}名未満の力量: "
-                       f"{(~valid_competences).sum()}個を除外")
+            logger.info(
+                f"保有者が{self.min_members_per_competence}名未満の力量: "
+                f"{(~valid_competences).sum()}個を除外"
+            )
 
         # フィルタリング
         filtered_matrix = skill_matrix.loc[valid_members, valid_competences]
 
         return filtered_matrix
 
-    def _normalize(
-        self,
-        skill_matrix: pd.DataFrame,
-        verbose: bool = True
-    ) -> pd.DataFrame:
+    def _normalize(self, skill_matrix: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
         """
         スキルマトリクスを正規化
 
@@ -156,46 +150,41 @@ class SkillMatrixPreprocessor:
         if verbose:
             logger.info(f"\n--- 正規化 ({self.normalization_method}) ---")
 
-        if self.normalization_method == 'minmax':
+        if self.normalization_method == "minmax":
             # Min-Max正規化（0-1範囲）
             scaler = MinMaxScaler()
             normalized_values = scaler.fit_transform(skill_matrix.values)
             normalized_matrix = pd.DataFrame(
-                normalized_values,
-                index=skill_matrix.index,
-                columns=skill_matrix.columns
+                normalized_values, index=skill_matrix.index, columns=skill_matrix.columns
             )
             if verbose:
                 logger.info("Min-Max正規化を適用（範囲: 0-1）")
 
-        elif self.normalization_method == 'standard':
+        elif self.normalization_method == "standard":
             # 標準化（平均0、分散1）
             scaler = StandardScaler()
             normalized_values = scaler.fit_transform(skill_matrix.values)
             # NMFは非負値が必要なので、負の値を0にクリップ
             normalized_values = np.clip(normalized_values, 0, None)
             normalized_matrix = pd.DataFrame(
-                normalized_values,
-                index=skill_matrix.index,
-                columns=skill_matrix.columns
+                normalized_values, index=skill_matrix.index, columns=skill_matrix.columns
             )
             if verbose:
                 logger.info("標準化を適用（負の値は0にクリップ）")
 
-        elif self.normalization_method == 'l2':
+        elif self.normalization_method == "l2":
             # L2ノルム正規化（各行の二乗和=1）
-            normalized_values = normalize(skill_matrix.values, norm='l2', axis=1)
+            normalized_values = normalize(skill_matrix.values, norm="l2", axis=1)
             normalized_matrix = pd.DataFrame(
-                normalized_values,
-                index=skill_matrix.index,
-                columns=skill_matrix.columns
+                normalized_values, index=skill_matrix.index, columns=skill_matrix.columns
             )
             if verbose:
                 logger.info("L2ノルム正規化を適用（行ごと）")
 
         else:
-            logger.warning(f"不明な正規化方法: {self.normalization_method}. "
-                          "正規化をスキップします。")
+            logger.warning(
+                f"不明な正規化方法: {self.normalization_method}. " "正規化をスキップします。"
+            )
             normalized_matrix = skill_matrix
 
         return normalized_matrix
@@ -238,7 +227,7 @@ def create_preprocessor_from_config(config) -> SkillMatrixPreprocessor:
     params = config.DATA_PREPROCESSING_PARAMS
 
     return SkillMatrixPreprocessor(
-        min_competences_per_member=params['min_competences_per_member'],
-        min_members_per_competence=params['min_members_per_competence'],
-        normalization_method=params['normalization_method']
+        min_competences_per_member=params["min_competences_per_member"],
+        min_members_per_competence=params["min_members_per_competence"],
+        normalization_method=params["normalization_method"],
     )

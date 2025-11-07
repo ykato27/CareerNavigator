@@ -30,7 +30,7 @@ class MatrixFactorizationModel:
         early_stopping_patience: int = 5,
         early_stopping_min_delta: float = 1e-5,
         early_stopping_batch_size: int = 50,
-        **nmf_params
+        **nmf_params,
     ):
         """
         初期化
@@ -60,14 +60,10 @@ class MatrixFactorizationModel:
 
         # NMFモデル
         # max_iterがnmf_paramsに含まれていない場合はデフォルト値500を使用
-        default_params = {'init': 'nndsvda', 'max_iter': 500}
+        default_params = {"init": "nndsvda", "max_iter": 500}
         final_params = {**default_params, **nmf_params}
 
-        self.model = NMF(
-            n_components=n_components,
-            random_state=random_state,
-            **final_params
-        )
+        self.model = NMF(n_components=n_components, random_state=random_state, **final_params)
 
         # 学習後のデータ
         self.X = None  # 元のデータマトリクス（再構成誤差計算用）
@@ -80,7 +76,7 @@ class MatrixFactorizationModel:
         self.is_fitted = False
         self.actual_n_iter_ = None  # 実際のイテレーション数（Early stopping時）
 
-    def fit(self, skill_matrix: pd.DataFrame) -> 'MatrixFactorizationModel':
+    def fit(self, skill_matrix: pd.DataFrame) -> "MatrixFactorizationModel":
         """
         モデルを学習
 
@@ -108,7 +104,9 @@ class MatrixFactorizationModel:
             # 正規化レベルにconfidence weightを適用
             weighted_matrix = skill_matrix.copy()
             non_zero_mask = weighted_matrix > 0
-            weighted_matrix[non_zero_mask] = 1 + self.confidence_alpha * weighted_matrix[non_zero_mask]
+            weighted_matrix[non_zero_mask] = (
+                1 + self.confidence_alpha * weighted_matrix[non_zero_mask]
+            )
             training_matrix = weighted_matrix.values
         else:
             training_matrix = skill_matrix.values
@@ -139,7 +137,7 @@ class MatrixFactorizationModel:
         max_iter_total = self.model.max_iter
         batch_size = self.early_stopping_batch_size
 
-        best_error = float('inf')
+        best_error = float("inf")
         patience_counter = 0
         best_W = None
         best_H = None
@@ -148,14 +146,12 @@ class MatrixFactorizationModel:
         for current_max_iter in range(batch_size, max_iter_total + 1, batch_size):
             # NMFモデルを再作成（max_iterを更新）
             nmf_params = self.nmf_params.copy()
-            nmf_params['max_iter'] = current_max_iter
+            nmf_params["max_iter"] = current_max_iter
             # 常にnndsvdaを使用（customは初期値W,Hが必要で複雑になるため）
-            nmf_params['init'] = 'nndsvda'
+            nmf_params["init"] = "nndsvda"
 
             temp_model = NMF(
-                n_components=self.n_components,
-                random_state=self.random_state,
-                **nmf_params
+                n_components=self.n_components, random_state=self.random_state, **nmf_params
             )
 
             # 学習
@@ -164,7 +160,7 @@ class MatrixFactorizationModel:
 
             # 再構成誤差を計算
             reconstructed = W @ H
-            error = np.linalg.norm(X - reconstructed, 'fro')
+            error = np.linalg.norm(X - reconstructed, "fro")
 
             # Early stopping判定
             improvement = best_error - error
@@ -174,13 +170,19 @@ class MatrixFactorizationModel:
                 best_H = H.copy()
                 best_iter = current_max_iter
                 patience_counter = 0
-                print(f"[Early Stopping] Iter {current_max_iter}: error={error:.6f} (improved by {improvement:.6f})")
+                print(
+                    f"[Early Stopping] Iter {current_max_iter}: error={error:.6f} (improved by {improvement:.6f})"
+                )
             else:
                 patience_counter += 1
-                print(f"[Early Stopping] Iter {current_max_iter}: error={error:.6f} (no improvement, patience={patience_counter}/{self.early_stopping_patience})")
+                print(
+                    f"[Early Stopping] Iter {current_max_iter}: error={error:.6f} (no improvement, patience={patience_counter}/{self.early_stopping_patience})"
+                )
 
                 if patience_counter >= self.early_stopping_patience:
-                    print(f"[Early Stopping] Stopped at iteration {best_iter} (best error: {best_error:.6f})")
+                    print(
+                        f"[Early Stopping] Stopped at iteration {best_iter} (best error: {best_error:.6f})"
+                    )
                     break
 
         # ベストモデルを設定
@@ -229,9 +231,13 @@ class MatrixFactorizationModel:
 
         return scores_series
 
-    def predict_top_k(self, member_code: str, k: int = 10,
-                      exclude_acquired: bool = True,
-                      acquired_competences: Optional[List[str]] = None) -> List[Tuple[str, float]]:
+    def predict_top_k(
+        self,
+        member_code: str,
+        k: int = 10,
+        exclude_acquired: bool = True,
+        acquired_competences: Optional[List[str]] = None,
+    ) -> List[Tuple[str, float]]:
         """
         特定メンバーに対するTop-K推薦を生成
 
@@ -250,8 +256,10 @@ class MatrixFactorizationModel:
         # 既習得力量を除外
         if exclude_acquired:
             if acquired_competences is None:
-                raise ValueError("exclude_acquired=Trueの場合、acquired_competencesを指定してください。")
-            scores = scores.drop(labels=acquired_competences, errors='ignore')
+                raise ValueError(
+                    "exclude_acquired=Trueの場合、acquired_competencesを指定してください。"
+                )
+            scores = scores.drop(labels=acquired_competences, errors="ignore")
 
         # Top-Kを取得
         top_k_scores = scores.nlargest(k)
@@ -307,12 +315,12 @@ class MatrixFactorizationModel:
             raise ValueError("モデルが学習されていません。")
 
         # scikit-learn 1.0以降ではreconstruction_err_属性が削除されたため、手動で計算
-        if hasattr(self.model, 'reconstruction_err_'):
+        if hasattr(self.model, "reconstruction_err_"):
             return self.model.reconstruction_err_
         else:
             # 手動で再構成誤差を計算: ||X - WH||_F
             X_reconstructed = self.W @ self.H
-            reconstruction_error = np.linalg.norm(self.X - X_reconstructed, 'fro')
+            reconstruction_error = np.linalg.norm(self.X - X_reconstructed, "fro")
             return reconstruction_error
 
     def save(self, filepath: str):
@@ -326,26 +334,26 @@ class MatrixFactorizationModel:
             raise ValueError("モデルが学習されていません。")
 
         model_data = {
-            'n_components': self.n_components,
-            'random_state': self.random_state,
-            'use_confidence_weighting': self.use_confidence_weighting,
-            'confidence_alpha': self.confidence_alpha,
-            'nmf_params': self.nmf_params,
-            'W': self.W,
-            'H': self.H,
-            'member_codes': self.member_codes,
-            'competence_codes': self.competence_codes,
-            'member_index': self.member_index,
-            'competence_index': self.competence_index,
-            'reconstruction_err': self.model.reconstruction_err_,
-            'n_iter': self.model.n_iter_
+            "n_components": self.n_components,
+            "random_state": self.random_state,
+            "use_confidence_weighting": self.use_confidence_weighting,
+            "confidence_alpha": self.confidence_alpha,
+            "nmf_params": self.nmf_params,
+            "W": self.W,
+            "H": self.H,
+            "member_codes": self.member_codes,
+            "competence_codes": self.competence_codes,
+            "member_index": self.member_index,
+            "competence_index": self.competence_index,
+            "reconstruction_err": self.model.reconstruction_err_,
+            "n_iter": self.model.n_iter_,
         }
 
-        with open(filepath, 'wb') as f:
+        with open(filepath, "wb") as f:
             pickle.dump(model_data, f)
 
     @classmethod
-    def load(cls, filepath: str) -> 'MatrixFactorizationModel':
+    def load(cls, filepath: str) -> "MatrixFactorizationModel":
         """
         モデルを読み込み
 
@@ -355,34 +363,33 @@ class MatrixFactorizationModel:
         Returns:
             読み込まれたモデル
         """
-        with open(filepath, 'rb') as f:
+        with open(filepath, "rb") as f:
             model_data = pickle.load(f)
 
         # モデルインスタンスを作成（新しいパラメータに対応、後方互換性も維持）
         model = cls(
-            n_components=model_data['n_components'],
-            random_state=model_data['random_state'],
-            use_confidence_weighting=model_data.get('use_confidence_weighting', False),
-            confidence_alpha=model_data.get('confidence_alpha', 1.0),
-            **model_data['nmf_params']
+            n_components=model_data["n_components"],
+            random_state=model_data["random_state"],
+            use_confidence_weighting=model_data.get("use_confidence_weighting", False),
+            confidence_alpha=model_data.get("confidence_alpha", 1.0),
+            **model_data["nmf_params"],
         )
 
         # 学習済みデータを復元
-        model.W = model_data['W']
-        model.H = model_data['H']
-        model.member_codes = model_data['member_codes']
-        model.competence_codes = model_data['competence_codes']
-        model.member_index = model_data['member_index']
-        model.competence_index = model_data['competence_index']
+        model.W = model_data["W"]
+        model.H = model_data["H"]
+        model.member_codes = model_data["member_codes"]
+        model.competence_codes = model_data["competence_codes"]
+        model.member_index = model_data["member_index"]
+        model.competence_index = model_data["competence_index"]
         model.is_fitted = True
 
         # NMFモデルの属性を復元（参考情報）
-        model.model.reconstruction_err_ = model_data['reconstruction_err']
-        model.model.n_iter_ = model_data['n_iter']
+        model.model.reconstruction_err_ = model_data["reconstruction_err"]
+        model.model.n_iter_ = model_data["n_iter"]
 
         return model
 
     def __repr__(self):
         status = "fitted" if self.is_fitted else "not fitted"
-        return (f"MatrixFactorizationModel(n_components={self.n_components}, "
-                f"status={status})")
+        return f"MatrixFactorizationModel(n_components={self.n_components}, " f"status={status})"

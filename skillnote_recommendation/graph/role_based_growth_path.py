@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SkillAcquisitionPattern:
     """スキル取得パターン"""
+
     competence_code: str
     competence_name: str
     average_order: float  # 平均取得順序（小さいほど早期に取得）
@@ -32,6 +33,7 @@ class SkillAcquisitionPattern:
 @dataclass
 class RoleGrowthPath:
     """役職ごとの成長パス"""
+
     role_name: str
     total_members: int
     skills_in_order: List[SkillAcquisitionPattern]  # 取得順序でソートされたスキルリスト
@@ -53,8 +55,9 @@ class RoleGrowthPath:
         cutoff_index = int(total_skills * threshold)
         return self.skills_in_order[:cutoff_index]
 
-    def get_mid_stage_skills(self, early_threshold: float = 0.3,
-                            late_threshold: float = 0.7) -> List[SkillAcquisitionPattern]:
+    def get_mid_stage_skills(
+        self, early_threshold: float = 0.3, late_threshold: float = 0.7
+    ) -> List[SkillAcquisitionPattern]:
         """
         中期段階のスキルを取得
 
@@ -99,10 +102,12 @@ class RoleBasedGrowthPathAnalyzer:
     典型的な成長ルートを抽出する。
     """
 
-    def __init__(self,
-                 members_df: pd.DataFrame,
-                 member_competence_df: pd.DataFrame,
-                 competence_master_df: pd.DataFrame):
+    def __init__(
+        self,
+        members_df: pd.DataFrame,
+        member_competence_df: pd.DataFrame,
+        competence_master_df: pd.DataFrame,
+    ):
         """
         初期化
 
@@ -116,10 +121,10 @@ class RoleBasedGrowthPathAnalyzer:
         self.competence_master_df = competence_master_df
 
         # カラム名のマッピング（###[...]### を除去した形式）
-        self.role_column = '役職'
-        self.member_code_column = 'メンバーコード'
-        self.competence_code_column = '力量コード'
-        self.acquired_date_column = '取得日'
+        self.role_column = "役職"
+        self.member_code_column = "メンバーコード"
+        self.competence_code_column = "力量コード"
+        self.acquired_date_column = "取得日"
 
         # 役職ごとの成長パスキャッシュ
         self._growth_paths_cache: Dict[str, RoleGrowthPath] = {}
@@ -145,16 +150,18 @@ class RoleBasedGrowthPathAnalyzer:
         logger.info(f"\n分析対象の役職数: {len(roles)}")
 
         for role in roles:
-            if pd.isna(role) or str(role).strip() == '':
+            if pd.isna(role) or str(role).strip() == "":
                 continue
 
             # この役職のメンバーを取得
-            role_members = self.members_df[
-                self.members_df[self.role_column] == role
-            ][self.member_code_column].unique()
+            role_members = self.members_df[self.members_df[self.role_column] == role][
+                self.member_code_column
+            ].unique()
 
             if len(role_members) < min_members:
-                logger.debug(f"役職 '{role}': メンバー数が少ない（{len(role_members)}名）ためスキップ")
+                logger.debug(
+                    f"役職 '{role}': メンバー数が少ない（{len(role_members)}名）ためスキップ"
+                )
                 continue
 
             # 成長パスを分析
@@ -171,9 +178,9 @@ class RoleBasedGrowthPathAnalyzer:
 
         return growth_paths
 
-    def _analyze_role_growth_path(self,
-                                   role: str,
-                                   role_members: np.ndarray) -> Optional[RoleGrowthPath]:
+    def _analyze_role_growth_path(
+        self, role: str, role_members: np.ndarray
+    ) -> Optional[RoleGrowthPath]:
         """
         特定の役職について成長パスを分析
 
@@ -205,14 +212,12 @@ class RoleBasedGrowthPathAnalyzer:
         skill_patterns_sorted = sorted(skill_patterns, key=lambda x: x.average_order)
 
         return RoleGrowthPath(
-            role_name=role,
-            total_members=len(role_members),
-            skills_in_order=skill_patterns_sorted
+            role_name=role, total_members=len(role_members), skills_in_order=skill_patterns_sorted
         )
 
-    def _calculate_skill_acquisition_orders(self,
-                                             role_competence_df: pd.DataFrame,
-                                             role_members: np.ndarray) -> Dict[str, List[int]]:
+    def _calculate_skill_acquisition_orders(
+        self, role_competence_df: pd.DataFrame, role_members: np.ndarray
+    ) -> Dict[str, List[int]]:
         """
         各スキルの取得順序を計算
 
@@ -235,17 +240,14 @@ class RoleBasedGrowthPathAnalyzer:
                 continue
 
             # 取得日が存在するデータのみを使用
-            member_skills = member_skills[
-                member_skills[self.acquired_date_column].notna()
-            ].copy()
+            member_skills = member_skills[member_skills[self.acquired_date_column].notna()].copy()
 
             if member_skills.empty:
                 continue
 
             # 取得日を日付型に変換
             member_skills[self.acquired_date_column] = pd.to_datetime(
-                member_skills[self.acquired_date_column],
-                errors='coerce'
+                member_skills[self.acquired_date_column], errors="coerce"
             )
 
             # 取得日でソート
@@ -262,9 +264,9 @@ class RoleBasedGrowthPathAnalyzer:
 
         return skill_orders
 
-    def _generate_skill_patterns(self,
-                                  skill_orders: Dict[str, List[int]],
-                                  total_members: int) -> List[SkillAcquisitionPattern]:
+    def _generate_skill_patterns(
+        self, skill_orders: Dict[str, List[int]], total_members: int
+    ) -> List[SkillAcquisitionPattern]:
         """
         スキル取得パターンを生成
 
@@ -280,7 +282,7 @@ class RoleBasedGrowthPathAnalyzer:
         for competence_code, orders in skill_orders.items():
             # スキル情報を取得
             skill_info = self.competence_master_df[
-                self.competence_master_df['力量コード'] == competence_code
+                self.competence_master_df["力量コード"] == competence_code
             ]
 
             if skill_info.empty:
@@ -296,14 +298,14 @@ class RoleBasedGrowthPathAnalyzer:
 
             pattern = SkillAcquisitionPattern(
                 competence_code=competence_code,
-                competence_name=skill_info.get('力量名', competence_code),
+                competence_name=skill_info.get("力量名", competence_code),
                 average_order=average_order,
                 std_order=std_order,
                 acquisition_count=acquisition_count,
                 total_members=total_members,
                 acquisition_rate=acquisition_rate,
-                competence_type=skill_info.get('力量タイプ', 'UNKNOWN'),
-                category=skill_info.get('力量カテゴリー名', '')
+                competence_type=skill_info.get("力量タイプ", "UNKNOWN"),
+                category=skill_info.get("力量カテゴリー名", ""),
             )
 
             patterns.append(pattern)
@@ -321,9 +323,7 @@ class RoleBasedGrowthPathAnalyzer:
             成長パスオブジェクト（該当なしの場合はNone）
         """
         # メンバーの役職を取得
-        member_info = self.members_df[
-            self.members_df[self.member_code_column] == member_code
-        ]
+        member_info = self.members_df[self.members_df[self.member_code_column] == member_code]
 
         if member_info.empty:
             logger.warning(f"メンバーコード '{member_code}' が見つかりません")
@@ -331,7 +331,7 @@ class RoleBasedGrowthPathAnalyzer:
 
         role = member_info.iloc[0][self.role_column]
 
-        if pd.isna(role) or str(role).strip() == '':
+        if pd.isna(role) or str(role).strip() == "":
             logger.warning(f"メンバーコード '{member_code}' の役職情報がありません")
             return None
 
@@ -341,10 +341,9 @@ class RoleBasedGrowthPathAnalyzer:
 
         return self._growth_paths_cache.get(role)
 
-    def recommend_next_skills(self,
-                              member_code: str,
-                              top_n: int = 10,
-                              min_acquisition_rate: float = 0.3) -> List[Dict]:
+    def recommend_next_skills(
+        self, member_code: str, top_n: int = 10, min_acquisition_rate: float = 0.3
+    ) -> List[Dict]:
         """
         メンバーに対して次に習得すべきスキルを推薦
 
@@ -360,7 +359,9 @@ class RoleBasedGrowthPathAnalyzer:
         growth_path = self.get_growth_path_for_member(member_code)
 
         if not growth_path:
-            logger.warning(f"メンバー {member_code} の成長パスが見つかりません。全スキルから推薦します。")
+            logger.warning(
+                f"メンバー {member_code} の成長パスが見つかりません。全スキルから推薦します。"
+            )
             # フォールバック：全スキルから推薦
             return self._fallback_recommend_from_all_skills(
                 member_code, top_n, min_acquisition_rate
@@ -388,19 +389,21 @@ class RoleBasedGrowthPathAnalyzer:
             # 推薦理由を生成
             reason = self._generate_recommendation_reason(skill_pattern, growth_path)
 
-            recommendations.append({
-                'competence_code': skill_pattern.competence_code,
-                'competence_name': skill_pattern.competence_name,
-                'competence_type': skill_pattern.competence_type,
-                'category': skill_pattern.category,
-                'priority_score': 1.0 / (skill_pattern.average_order + 1),  # 早いほど高スコア
-                'average_order': skill_pattern.average_order,
-                'acquisition_rate': skill_pattern.acquisition_rate,
-                'reason': reason
-            })
+            recommendations.append(
+                {
+                    "competence_code": skill_pattern.competence_code,
+                    "competence_name": skill_pattern.competence_name,
+                    "competence_type": skill_pattern.competence_type,
+                    "category": skill_pattern.category,
+                    "priority_score": 1.0 / (skill_pattern.average_order + 1),  # 早いほど高スコア
+                    "average_order": skill_pattern.average_order,
+                    "acquisition_rate": skill_pattern.acquisition_rate,
+                    "reason": reason,
+                }
+            )
 
         # 優先度スコアでソート
-        recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+        recommendations.sort(key=lambda x: x["priority_score"], reverse=True)
 
         # フォールバック：推薦が0件の場合、フィルタを緩める
         if len(recommendations) == 0 and min_acquisition_rate > 0:
@@ -415,18 +418,20 @@ class RoleBasedGrowthPathAnalyzer:
                 reason = self._generate_recommendation_reason(skill_pattern, growth_path)
                 reason += "\n\n※ 取得率は低いですが、この役職での成長パス上にあるスキルです。"
 
-                recommendations.append({
-                    'competence_code': skill_pattern.competence_code,
-                    'competence_name': skill_pattern.competence_name,
-                    'competence_type': skill_pattern.competence_type,
-                    'category': skill_pattern.category,
-                    'priority_score': 1.0 / (skill_pattern.average_order + 1),
-                    'average_order': skill_pattern.average_order,
-                    'acquisition_rate': skill_pattern.acquisition_rate,
-                    'reason': reason
-                })
+                recommendations.append(
+                    {
+                        "competence_code": skill_pattern.competence_code,
+                        "competence_name": skill_pattern.competence_name,
+                        "competence_type": skill_pattern.competence_type,
+                        "category": skill_pattern.category,
+                        "priority_score": 1.0 / (skill_pattern.average_order + 1),
+                        "average_order": skill_pattern.average_order,
+                        "acquisition_rate": skill_pattern.acquisition_rate,
+                        "reason": reason,
+                    }
+                )
 
-            recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+            recommendations.sort(key=lambda x: x["priority_score"], reverse=True)
 
         # 最終フォールバック：それでも0件の場合、全スキルから推薦
         if len(recommendations) == 0:
@@ -440,9 +445,9 @@ class RoleBasedGrowthPathAnalyzer:
 
         return recommendations[:top_n]
 
-    def _generate_recommendation_reason(self,
-                                        skill_pattern: SkillAcquisitionPattern,
-                                        growth_path: RoleGrowthPath) -> str:
+    def _generate_recommendation_reason(
+        self, skill_pattern: SkillAcquisitionPattern, growth_path: RoleGrowthPath
+    ) -> str:
         """
         推薦理由を生成
 
@@ -515,20 +520,22 @@ class RoleBasedGrowthPathAnalyzer:
         progress_rate = acquired_count / total_path_skills if total_path_skills > 0 else 0.0
 
         return {
-            'role_name': growth_path.role_name,
-            'total_path_skills': total_path_skills,
-            'acquired_count': acquired_count,
-            'not_acquired_count': len(not_acquired_skills),
-            'progress_rate': progress_rate,
-            'acquired_skills': acquired_skills,
-            'not_acquired_skills': not_acquired_skills
+            "role_name": growth_path.role_name,
+            "total_path_skills": total_path_skills,
+            "acquired_count": acquired_count,
+            "not_acquired_count": len(not_acquired_skills),
+            "progress_rate": progress_rate,
+            "acquired_skills": acquired_skills,
+            "not_acquired_skills": not_acquired_skills,
         }
 
-    def recommend_next_skills_with_paths(self,
-                                          member_code: str,
-                                          top_n: int = 10,
-                                          min_acquisition_rate: float = 0.3,
-                                          max_paths: int = 5) -> List[Dict]:
+    def recommend_next_skills_with_paths(
+        self,
+        member_code: str,
+        top_n: int = 10,
+        min_acquisition_rate: float = 0.3,
+        max_paths: int = 5,
+    ) -> List[Dict]:
         """
         メンバーに対して次に習得すべきスキルをパス情報付きで推薦
 
@@ -548,21 +555,18 @@ class RoleBasedGrowthPathAnalyzer:
         recommendations_with_paths = []
         for rec in recommendations:
             paths = self._generate_paths_for_skill(
-                member_code=member_code,
-                competence_code=rec['competence_code'],
-                max_paths=max_paths
+                member_code=member_code, competence_code=rec["competence_code"], max_paths=max_paths
             )
 
             rec_with_paths = rec.copy()
-            rec_with_paths['paths'] = paths
+            rec_with_paths["paths"] = paths
             recommendations_with_paths.append(rec_with_paths)
 
         return recommendations_with_paths
 
-    def _generate_paths_for_skill(self,
-                                   member_code: str,
-                                   competence_code: str,
-                                   max_paths: int = 5) -> List[List[Dict]]:
+    def _generate_paths_for_skill(
+        self, member_code: str, competence_code: str, max_paths: int = 5
+    ) -> List[List[Dict]]:
         """
         特定のスキルに対するパス（メンバー → 類似メンバー → スキル）を生成
 
@@ -575,54 +579,49 @@ class RoleBasedGrowthPathAnalyzer:
             パスのリスト
         """
         # メンバー情報を取得
-        member_info = self.members_df[
-            self.members_df[self.member_code_column] == member_code
-        ]
+        member_info = self.members_df[self.members_df[self.member_code_column] == member_code]
 
         if member_info.empty:
             return []
 
-        member_name = member_info.iloc[0].get('メンバー名', member_code)
+        member_name = member_info.iloc[0].get("メンバー名", member_code)
         role = member_info.iloc[0][self.role_column]
 
         # 同じ役職のメンバーでこのスキルを習得している人を取得
-        role_members = self.members_df[
-            self.members_df[self.role_column] == role
-        ][self.member_code_column].unique()
+        role_members = self.members_df[self.members_df[self.role_column] == role][
+            self.member_code_column
+        ].unique()
 
         # このスキルを習得しているメンバーを取得
         skill_holders = self.member_competence_df[
-            (self.member_competence_df[self.competence_code_column] == competence_code) &
-            (self.member_competence_df[self.member_code_column].isin(role_members))
+            (self.member_competence_df[self.competence_code_column] == competence_code)
+            & (self.member_competence_df[self.member_code_column].isin(role_members))
         ].copy()
 
         if skill_holders.empty:
             return []
 
         # 取得日でソート（早期に習得した人を優先）
-        skill_holders = skill_holders[
-            skill_holders[self.acquired_date_column].notna()
-        ].copy()
+        skill_holders = skill_holders[skill_holders[self.acquired_date_column].notna()].copy()
 
         if skill_holders.empty:
             # 取得日がない場合は、そのまま使用
             skill_holders = self.member_competence_df[
-                (self.member_competence_df[self.competence_code_column] == competence_code) &
-                (self.member_competence_df[self.member_code_column].isin(role_members))
+                (self.member_competence_df[self.competence_code_column] == competence_code)
+                & (self.member_competence_df[self.member_code_column].isin(role_members))
             ].copy()
 
         skill_holders[self.acquired_date_column] = pd.to_datetime(
-            skill_holders[self.acquired_date_column],
-            errors='coerce'
+            skill_holders[self.acquired_date_column], errors="coerce"
         )
         skill_holders = skill_holders.sort_values(self.acquired_date_column)
 
         # スキル情報を取得
         skill_info = self.competence_master_df[
-            self.competence_master_df['力量コード'] == competence_code
+            self.competence_master_df["力量コード"] == competence_code
         ]
 
-        skill_name = skill_info.iloc[0]['力量名'] if not skill_info.empty else competence_code
+        skill_name = skill_info.iloc[0]["力量名"] if not skill_info.empty else competence_code
 
         # パスを生成
         paths = []
@@ -638,38 +637,37 @@ class RoleBasedGrowthPathAnalyzer:
                 self.members_df[self.member_code_column] == similar_member_code
             ]
 
-            similar_member_name = similar_member_info.iloc[0].get('メンバー名', similar_member_code) if not similar_member_info.empty else similar_member_code
+            similar_member_name = (
+                similar_member_info.iloc[0].get("メンバー名", similar_member_code)
+                if not similar_member_info.empty
+                else similar_member_code
+            )
 
             # パスを構築
             path = [
                 {
-                    'id': f'member_{member_code}',
-                    'type': 'member',
-                    'name': member_name,
-                    'code': member_code
+                    "id": f"member_{member_code}",
+                    "type": "member",
+                    "name": member_name,
+                    "code": member_code,
                 },
                 {
-                    'id': f'similar_member_{similar_member_code}',
-                    'type': 'similar_member',
-                    'name': similar_member_name,
-                    'code': similar_member_code,
-                    'role': role
+                    "id": f"similar_member_{similar_member_code}",
+                    "type": "similar_member",
+                    "name": similar_member_name,
+                    "code": similar_member_code,
+                    "role": role,
                 },
-                {
-                    'id': f'competence_{competence_code}',
-                    'type': 'competence',
-                    'name': skill_name
-                }
+                {"id": f"competence_{competence_code}", "type": "competence", "name": skill_name},
             ]
 
             paths.append(path)
 
         return paths
 
-    def recommend_all_roles(self,
-                            top_n_per_role: int = 10,
-                            min_acquisition_rate: float = 0.3,
-                            max_paths: int = 5) -> Dict[str, List[Dict]]:
+    def recommend_all_roles(
+        self, top_n_per_role: int = 10, min_acquisition_rate: float = 0.3, max_paths: int = 5
+    ) -> Dict[str, List[Dict]]:
         """
         全役職について推薦を生成
 
@@ -688,9 +686,9 @@ class RoleBasedGrowthPathAnalyzer:
 
         for role_name, growth_path in self._growth_paths_cache.items():
             # この役職のメンバーを取得（代表として最初のメンバーを使用）
-            role_members = self.members_df[
-                self.members_df[self.role_column] == role_name
-            ][self.member_code_column].unique()
+            role_members = self.members_df[self.members_df[self.role_column] == role_name][
+                self.member_code_column
+            ].unique()
 
             if len(role_members) == 0:
                 continue
@@ -704,27 +702,26 @@ class RoleBasedGrowthPathAnalyzer:
                     member_code=member_code,
                     top_n=top_n_per_role * 2,  # 多めに取得
                     min_acquisition_rate=min_acquisition_rate,
-                    max_paths=max_paths
+                    max_paths=max_paths,
                 )
 
                 for rec in member_recs:
-                    if rec['competence_code'] not in processed_skills:
+                    if rec["competence_code"] not in processed_skills:
                         role_recommendations.append(rec)
-                        processed_skills.add(rec['competence_code'])
+                        processed_skills.add(rec["competence_code"])
 
                 if len(role_recommendations) >= top_n_per_role:
                     break
 
             # 優先度スコアでソート
-            role_recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+            role_recommendations.sort(key=lambda x: x["priority_score"], reverse=True)
             all_recommendations[role_name] = role_recommendations[:top_n_per_role]
 
         return all_recommendations
 
-    def _fallback_recommend_from_all_skills(self,
-                                           member_code: str,
-                                           top_n: int,
-                                           min_acquisition_rate: float) -> List[Dict]:
+    def _fallback_recommend_from_all_skills(
+        self, member_code: str, top_n: int, min_acquisition_rate: float
+    ) -> List[Dict]:
         """
         フォールバック：全スキルから推薦
 
@@ -751,32 +748,30 @@ class RoleBasedGrowthPathAnalyzer:
         # 全スキルについて保有メンバー数をカウント
         skill_popularity = {}
 
-        for competence_code in self.competence_master_df['力量コード'].unique():
+        for competence_code in self.competence_master_df["力量コード"].unique():
             # 既に保有しているスキルはスキップ
             if competence_code in member_skills_set:
                 continue
 
             # このスキルを保有しているメンバー数
-            holder_count = len(self.member_competence_df[
-                self.member_competence_df[self.competence_code_column] == competence_code
-            ][self.member_code_column].unique())
+            holder_count = len(
+                self.member_competence_df[
+                    self.member_competence_df[self.competence_code_column] == competence_code
+                ][self.member_code_column].unique()
+            )
 
             if holder_count > 0:
                 skill_popularity[competence_code] = holder_count
 
         # 人気順にソート
-        sorted_skills = sorted(
-            skill_popularity.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )
+        sorted_skills = sorted(skill_popularity.items(), key=lambda x: x[1], reverse=True)
 
         # 推薦リストを生成
         recommendations = []
         for competence_code, holder_count in sorted_skills[:top_n]:
             # スキル情報を取得
             skill_info = self.competence_master_df[
-                self.competence_master_df['力量コード'] == competence_code
+                self.competence_master_df["力量コード"] == competence_code
             ]
 
             if skill_info.empty:
@@ -794,25 +789,26 @@ class RoleBasedGrowthPathAnalyzer:
                 f"役職ベースの成長パスが見つからなかったため、人気のあるスキルから推薦しています。"
             )
 
-            recommendations.append({
-                'competence_code': competence_code,
-                'competence_name': skill_info.get('力量名', competence_code),
-                'competence_type': skill_info.get('力量タイプ', 'UNKNOWN'),
-                'category': skill_info.get('力量カテゴリー名', ''),
-                'priority_score': acquisition_rate,  # 取得率をスコアとして使用
-                'average_order': 0,  # 順序情報なし
-                'acquisition_rate': acquisition_rate,
-                'reason': reason
-            })
+            recommendations.append(
+                {
+                    "competence_code": competence_code,
+                    "competence_name": skill_info.get("力量名", competence_code),
+                    "competence_type": skill_info.get("力量タイプ", "UNKNOWN"),
+                    "category": skill_info.get("力量カテゴリー名", ""),
+                    "priority_score": acquisition_rate,  # 取得率をスコアとして使用
+                    "average_order": 0,  # 順序情報なし
+                    "acquisition_rate": acquisition_rate,
+                    "reason": reason,
+                }
+            )
 
         logger.info(f"フォールバック推薦: {len(recommendations)}件")
 
         return recommendations
 
-    def recommend_for_role(self,
-                          role_name: str,
-                          top_n: int = 10,
-                          min_acquisition_rate: float = 0.15) -> List[Dict]:
+    def recommend_for_role(
+        self, role_name: str, top_n: int = 10, min_acquisition_rate: float = 0.15
+    ) -> List[Dict]:
         """
         役職全体に対して推薦を生成（個人ではなく役職の視点）
 
@@ -839,9 +835,9 @@ class RoleBasedGrowthPathAnalyzer:
             return self._fallback_recommend_for_role(role_name, top_n)
 
         # この役職のメンバーを取得
-        role_members = self.members_df[
-            self.members_df[self.role_column] == role_name
-        ][self.member_code_column].unique()
+        role_members = self.members_df[self.members_df[self.role_column] == role_name][
+            self.member_code_column
+        ].unique()
 
         # この役職の全メンバーの保有スキルを取得
         all_member_skills = set()
@@ -867,7 +863,7 @@ class RoleBasedGrowthPathAnalyzer:
             reason = self._generate_recommendation_reason(skill_pattern, growth_path)
 
             # 次のステップとしての位置づけを明確に
-            not_yet_pct = (1-skill_pattern.acquisition_rate)*100
+            not_yet_pct = (1 - skill_pattern.acquisition_rate) * 100
             if skill_pattern.acquisition_rate < 0.3:
                 step_label = "これから多くの人が習得する、次のステップのスキルです"
             elif skill_pattern.acquisition_rate < 0.7:
@@ -879,21 +875,25 @@ class RoleBasedGrowthPathAnalyzer:
 
             # 優先度スコア：早い段階 × 未習得者の割合
             # → まだ習得していない人が多く、成長パス上で基礎的なスキルが高スコア
-            priority_score = (1 - skill_pattern.acquisition_rate) * (1.0 / (skill_pattern.average_order + 1))
+            priority_score = (1 - skill_pattern.acquisition_rate) * (
+                1.0 / (skill_pattern.average_order + 1)
+            )
 
-            recommendations.append({
-                'competence_code': skill_pattern.competence_code,
-                'competence_name': skill_pattern.competence_name,
-                'competence_type': skill_pattern.competence_type,
-                'category': skill_pattern.category,
-                'priority_score': priority_score,
-                'average_order': skill_pattern.average_order,
-                'acquisition_rate': skill_pattern.acquisition_rate,
-                'reason': reason
-            })
+            recommendations.append(
+                {
+                    "competence_code": skill_pattern.competence_code,
+                    "competence_name": skill_pattern.competence_name,
+                    "competence_type": skill_pattern.competence_type,
+                    "category": skill_pattern.category,
+                    "priority_score": priority_score,
+                    "average_order": skill_pattern.average_order,
+                    "acquisition_rate": skill_pattern.acquisition_rate,
+                    "reason": reason,
+                }
+            )
 
         # 優先度スコアでソート
-        recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+        recommendations.sort(key=lambda x: x["priority_score"], reverse=True)
 
         # フォールバック1：取得率フィルタを緩和
         if len(recommendations) == 0 and min_acquisition_rate > 0:
@@ -906,31 +906,35 @@ class RoleBasedGrowthPathAnalyzer:
                 reason += f"\n\n※ 取得率は低いですが、成長パス上の重要なスキルです。"
 
                 # 優先度スコア：早い段階 × 未習得者の割合
-                priority_score = (1 - skill_pattern.acquisition_rate) * (1.0 / (skill_pattern.average_order + 1))
+                priority_score = (1 - skill_pattern.acquisition_rate) * (
+                    1.0 / (skill_pattern.average_order + 1)
+                )
 
-                recommendations.append({
-                    'competence_code': skill_pattern.competence_code,
-                    'competence_name': skill_pattern.competence_name,
-                    'competence_type': skill_pattern.competence_type,
-                    'category': skill_pattern.category,
-                    'priority_score': priority_score,
-                    'average_order': skill_pattern.average_order,
-                    'acquisition_rate': skill_pattern.acquisition_rate,
-                    'reason': reason
-                })
+                recommendations.append(
+                    {
+                        "competence_code": skill_pattern.competence_code,
+                        "competence_name": skill_pattern.competence_name,
+                        "competence_type": skill_pattern.competence_type,
+                        "category": skill_pattern.category,
+                        "priority_score": priority_score,
+                        "average_order": skill_pattern.average_order,
+                        "acquisition_rate": skill_pattern.acquisition_rate,
+                        "reason": reason,
+                    }
+                )
 
-            recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+            recommendations.sort(key=lambda x: x["priority_score"], reverse=True)
 
         # フォールバック2：全員習得済みの場合、全スキルから推薦
         if len(recommendations) == 0:
-            logger.warning(f"役職 '{role_name}': 成長パス上の全スキルが習得済み。全スキルから推薦します。")
+            logger.warning(
+                f"役職 '{role_name}': 成長パス上の全スキルが習得済み。全スキルから推薦します。"
+            )
             return self._fallback_recommend_for_role(role_name, top_n)
 
         return recommendations[:top_n]
 
-    def _fallback_recommend_for_role(self,
-                                     role_name: str,
-                                     top_n: int) -> List[Dict]:
+    def _fallback_recommend_for_role(self, role_name: str, top_n: int) -> List[Dict]:
         """
         役職に対するフォールバック推薦
 
@@ -946,9 +950,9 @@ class RoleBasedGrowthPathAnalyzer:
         logger.info(f"役職 '{role_name}': フォールバック - 全スキルから推薦")
 
         # この役職のメンバーを取得
-        role_members = self.members_df[
-            self.members_df[self.role_column] == role_name
-        ][self.member_code_column].unique()
+        role_members = self.members_df[self.members_df[self.role_column] == role_name][
+            self.member_code_column
+        ].unique()
 
         if len(role_members) == 0:
             logger.warning(f"役職 '{role_name}' にメンバーがいません")
@@ -964,45 +968,47 @@ class RoleBasedGrowthPathAnalyzer:
         # 全スキルについて、この役職での保有率を計算
         skill_stats = {}
 
-        for competence_code in self.competence_master_df['力量コード'].unique():
+        for competence_code in self.competence_master_df["力量コード"].unique():
             # この役職で保有している人数
-            holders_in_role = len(self.member_competence_df[
-                (self.member_competence_df[self.competence_code_column] == competence_code) &
-                (self.member_competence_df[self.member_code_column].isin(role_members))
-            ][self.member_code_column].unique())
+            holders_in_role = len(
+                self.member_competence_df[
+                    (self.member_competence_df[self.competence_code_column] == competence_code)
+                    & (self.member_competence_df[self.member_code_column].isin(role_members))
+                ][self.member_code_column].unique()
+            )
 
             # 役職内での保有率
-            role_acquisition_rate = holders_in_role / len(role_members) if len(role_members) > 0 else 0
+            role_acquisition_rate = (
+                holders_in_role / len(role_members) if len(role_members) > 0 else 0
+            )
 
             # 100%保有済みのスキルはスキップ
             if role_acquisition_rate >= 1.0:
                 continue
 
             # 全体での保有者数（人気度）
-            total_holders = len(self.member_competence_df[
-                self.member_competence_df[self.competence_code_column] == competence_code
-            ][self.member_code_column].unique())
+            total_holders = len(
+                self.member_competence_df[
+                    self.member_competence_df[self.competence_code_column] == competence_code
+                ][self.member_code_column].unique()
+            )
 
             if total_holders > 0:
                 skill_stats[competence_code] = {
-                    'role_acquisition_rate': role_acquisition_rate,
-                    'total_holders': total_holders,
-                    'score': (1 - role_acquisition_rate) * total_holders  # 未習得率 × 人気度
+                    "role_acquisition_rate": role_acquisition_rate,
+                    "total_holders": total_holders,
+                    "score": (1 - role_acquisition_rate) * total_holders,  # 未習得率 × 人気度
                 }
 
         # スコアでソート
-        sorted_skills = sorted(
-            skill_stats.items(),
-            key=lambda x: x[1]['score'],
-            reverse=True
-        )
+        sorted_skills = sorted(skill_stats.items(), key=lambda x: x[1]["score"], reverse=True)
 
         # 推薦リストを生成
         recommendations = []
         for competence_code, stats in sorted_skills[:top_n]:
             # スキル情報を取得
             skill_info = self.competence_master_df[
-                self.competence_master_df['力量コード'] == competence_code
+                self.competence_master_df["力量コード"] == competence_code
             ]
 
             if skill_info.empty:
@@ -1011,7 +1017,7 @@ class RoleBasedGrowthPathAnalyzer:
             skill_info = skill_info.iloc[0]
 
             total_members = len(self.members_df)
-            overall_rate = stats['total_holders'] / total_members if total_members > 0 else 0
+            overall_rate = stats["total_holders"] / total_members if total_members > 0 else 0
 
             reason = (
                 f"【人気スキル推薦（役職向け）】\n"
@@ -1021,16 +1027,18 @@ class RoleBasedGrowthPathAnalyzer:
                 f"成長パスが完了したため、さらなるスキルアップにお勧めします。"
             )
 
-            recommendations.append({
-                'competence_code': competence_code,
-                'competence_name': skill_info.get('力量名', competence_code),
-                'competence_type': skill_info.get('力量タイプ', 'UNKNOWN'),
-                'category': skill_info.get('力量カテゴリー名', ''),
-                'priority_score': stats['score'] / 100,  # 正規化
-                'average_order': 0,
-                'acquisition_rate': stats['role_acquisition_rate'],
-                'reason': reason
-            })
+            recommendations.append(
+                {
+                    "competence_code": competence_code,
+                    "competence_name": skill_info.get("力量名", competence_code),
+                    "competence_type": skill_info.get("力量タイプ", "UNKNOWN"),
+                    "category": skill_info.get("力量カテゴリー名", ""),
+                    "priority_score": stats["score"] / 100,  # 正規化
+                    "average_order": 0,
+                    "acquisition_rate": stats["role_acquisition_rate"],
+                    "reason": reason,
+                }
+            )
 
         logger.info(f"役職 '{role_name}': フォールバック推薦 {len(recommendations)}件")
 

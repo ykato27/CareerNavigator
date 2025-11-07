@@ -19,8 +19,8 @@ from ..core.models import Recommendation
 
 
 # デフォルト設定値
-DEFAULT_GRAPH_WEIGHT = 0.4    # グラフベース（RWR）の重み
-DEFAULT_CF_WEIGHT = 0.3       # 協調フィルタリング（NMF）の重み
+DEFAULT_GRAPH_WEIGHT = 0.4  # グラフベース（RWR）の重み
+DEFAULT_CF_WEIGHT = 0.3  # 協調フィルタリング（NMF）の重み
 DEFAULT_CONTENT_WEIGHT = 0.3  # コンテンツベースの重み
 DEFAULT_RESTART_PROB = 0.15
 CANDIDATE_MULTIPLIER = 3  # 候補を多めに取得する倍率
@@ -47,6 +47,7 @@ class HybridRecommendation:
         reasons: 推薦理由
         competence_info: 力量情報
     """
+
     competence_code: str
     score: float
     graph_score: float
@@ -72,18 +73,20 @@ class HybridGraphRecommender:
         5. 推薦パスと理由を付与
     """
 
-    def __init__(self,
-                 knowledge_graph: CompetenceKnowledgeGraph,
-                 ml_recommender: MLRecommender,
-                 content_recommender: ContentBasedRecommender,
-                 feature_engineer: FeatureEngineer,
-                 graph_weight: float = DEFAULT_GRAPH_WEIGHT,
-                 cf_weight: float = DEFAULT_CF_WEIGHT,
-                 content_weight: float = DEFAULT_CONTENT_WEIGHT,
-                 restart_prob: float = DEFAULT_RESTART_PROB,
-                 max_path_length: int = 10,
-                 max_paths: int = 10,
-                 enable_cache: bool = True):
+    def __init__(
+        self,
+        knowledge_graph: CompetenceKnowledgeGraph,
+        ml_recommender: MLRecommender,
+        content_recommender: ContentBasedRecommender,
+        feature_engineer: FeatureEngineer,
+        graph_weight: float = DEFAULT_GRAPH_WEIGHT,
+        cf_weight: float = DEFAULT_CF_WEIGHT,
+        content_weight: float = DEFAULT_CONTENT_WEIGHT,
+        restart_prob: float = DEFAULT_RESTART_PROB,
+        max_path_length: int = 10,
+        max_paths: int = 10,
+        enable_cache: bool = True,
+    ):
         """
         Args:
             knowledge_graph: ナレッジグラフ
@@ -108,7 +111,7 @@ class HybridGraphRecommender:
             restart_prob=restart_prob,
             max_path_length=max_path_length,
             max_paths=max_paths,
-            enable_cache=enable_cache
+            enable_cache=enable_cache,
         )
 
         # 重みの正規化
@@ -123,12 +126,14 @@ class HybridGraphRecommender:
         print(f"  コンテンツベース重み: {self.content_weight:.2f}")
         print(f"  キャッシュ: {'有効' if enable_cache else '無効'}")
 
-    def recommend(self,
-                  member_code: str,
-                  top_n: int = 10,
-                  competence_type: Optional[List[str]] = None,
-                  category_filter: Optional[str] = None,
-                  use_diversity: bool = True) -> List[HybridRecommendation]:
+    def recommend(
+        self,
+        member_code: str,
+        top_n: int = 10,
+        competence_type: Optional[List[str]] = None,
+        category_filter: Optional[str] = None,
+        use_diversity: bool = True,
+    ) -> List[HybridRecommendation]:
         """
         ハイブリッド推薦を実行
 
@@ -152,7 +157,7 @@ class HybridGraphRecommender:
             member_code=member_code,
             top_n=top_n * CANDIDATE_MULTIPLIER,  # 多めに取得してフィルタ
             return_paths=True,
-            competence_type=competence_type
+            competence_type=competence_type,
         )
         rwr_dict = {comp: (score, paths) for comp, score, paths in rwr_results}
 
@@ -163,7 +168,7 @@ class HybridGraphRecommender:
             top_n=top_n * CANDIDATE_MULTIPLIER,
             competence_type=competence_type,
             category_filter=category_filter,
-            use_diversity=use_diversity
+            use_diversity=use_diversity,
         )
         nmf_dict = {rec.competence_code: rec.priority_score for rec in nmf_results}
 
@@ -173,7 +178,7 @@ class HybridGraphRecommender:
             member_code=member_code,
             top_n=top_n * CANDIDATE_MULTIPLIER,
             competence_type=competence_type,
-            category_filter=category_filter
+            category_filter=category_filter,
         )
         content_dict = {rec.competence_code: rec.priority_score for rec in content_results}
 
@@ -189,16 +194,18 @@ class HybridGraphRecommender:
             content_results=content_results,
             top_n=top_n,
             competence_type=competence_type,
-            category_filter=category_filter
+            category_filter=category_filter,
         )
 
         print(f"\n完了: {len(recommendations)}件の推薦を生成")
         return recommendations
 
-    def _fuse_scores(self,
-                     rwr_dict: Dict[str, Tuple[float, List]],
-                     nmf_dict: Dict[str, float],
-                     content_dict: Dict[str, float]) -> Dict[str, Dict]:
+    def _fuse_scores(
+        self,
+        rwr_dict: Dict[str, Tuple[float, List]],
+        nmf_dict: Dict[str, float],
+        content_dict: Dict[str, float],
+    ) -> Dict[str, Dict]:
         """
         RWR、NMF、コンテンツベースのスコアを融合
 
@@ -229,28 +236,26 @@ class HybridGraphRecommender:
 
             # 重み付き平均
             hybrid_score = (
-                self.graph_weight * graph_score +
-                self.cf_weight * cf_score +
-                self.content_weight * content_score
+                self.graph_weight * graph_score
+                + self.cf_weight * cf_score
+                + self.content_weight * content_score
             )
 
             # 複数手法で推薦された場合はブーストを与える
-            recommendation_count = sum([
-                comp_code in rwr_dict,
-                comp_code in nmf_dict,
-                comp_code in content_dict
-            ])
+            recommendation_count = sum(
+                [comp_code in rwr_dict, comp_code in nmf_dict, comp_code in content_dict]
+            )
 
             if recommendation_count >= 2:
                 boost = 1.0 + (recommendation_count - 1) * (HYBRID_BOOST_FACTOR - 1.0)
                 hybrid_score *= boost
 
             hybrid_scores[comp_code] = {
-                'score': hybrid_score,
-                'graph_score': graph_score,
-                'cf_score': cf_score,
-                'content_score': content_score,
-                'paths': rwr_dict.get(comp_code, (0, []))[1]
+                "score": hybrid_score,
+                "graph_score": graph_score,
+                "cf_score": cf_score,
+                "content_score": content_score,
+                "paths": rwr_dict.get(comp_code, (0, []))[1],
             }
 
         return hybrid_scores
@@ -267,18 +272,17 @@ class HybridGraphRecommender:
         if max_val == min_val:
             return {k: 1.0 for k in scores.keys()}
 
-        return {
-            k: float((v - min_val) / (max_val - min_val))
-            for k, v in scores.items()
-        }
+        return {k: float((v - min_val) / (max_val - min_val)) for k, v in scores.items()}
 
-    def _select_top_n(self,
-                      hybrid_scores: Dict[str, Dict],
-                      nmf_results: List[Recommendation],
-                      content_results: List[Recommendation],
-                      top_n: int,
-                      competence_type: Optional[List[str]],
-                      category_filter: Optional[str]) -> List[HybridRecommendation]:
+    def _select_top_n(
+        self,
+        hybrid_scores: Dict[str, Dict],
+        nmf_results: List[Recommendation],
+        content_results: List[Recommendation],
+        top_n: int,
+        competence_type: Optional[List[str]],
+        category_filter: Optional[str],
+    ) -> List[HybridRecommendation]:
         """
         Top-N推薦を選択し、HybridRecommendationオブジェクトを生成
 
@@ -298,27 +302,23 @@ class HybridGraphRecommender:
 
         for rec in nmf_results:
             competence_info_map[rec.competence_code] = {
-                '力量名': rec.competence_name,
-                '力量タイプ': rec.competence_type,
-                'カテゴリー': rec.category,
-                '概要': None,
+                "力量名": rec.competence_name,
+                "力量タイプ": rec.competence_type,
+                "カテゴリー": rec.category,
+                "概要": None,
             }
 
         for rec in content_results:
             if rec.competence_code not in competence_info_map:
                 competence_info_map[rec.competence_code] = {
-                    '力量名': rec.competence_name,
-                    '力量タイプ': rec.competence_type,
-                    'カテゴリー': rec.category,
-                    '概要': None,
+                    "力量名": rec.competence_name,
+                    "力量タイプ": rec.competence_type,
+                    "カテゴリー": rec.category,
+                    "概要": None,
                 }
 
         # スコア順にソート
-        sorted_scores = sorted(
-            hybrid_scores.items(),
-            key=lambda x: x[1]['score'],
-            reverse=True
-        )
+        sorted_scores = sorted(hybrid_scores.items(), key=lambda x: x[1]["score"], reverse=True)
 
         # Top-Nを選択
         recommendations = []
@@ -329,9 +329,9 @@ class HybridGraphRecommender:
                 comp_info = self._get_competence_info_from_master(comp_code)
 
             # フィルタリング
-            if competence_type and comp_info.get('力量タイプ') not in competence_type:
+            if competence_type and comp_info.get("力量タイプ") not in competence_type:
                 continue
-            if category_filter and comp_info.get('カテゴリー') != category_filter:
+            if category_filter and comp_info.get("カテゴリー") != category_filter:
                 continue
 
             # 推薦理由を生成
@@ -340,13 +340,13 @@ class HybridGraphRecommender:
             # HybridRecommendationを作成
             hybrid_rec = HybridRecommendation(
                 competence_code=comp_code,
-                score=data['score'],
-                graph_score=data['graph_score'],
-                cf_score=data['cf_score'],
-                content_score=data['content_score'],
-                paths=self._convert_paths_to_readable(data['paths']),
+                score=data["score"],
+                graph_score=data["graph_score"],
+                cf_score=data["cf_score"],
+                content_score=data["content_score"],
+                paths=self._convert_paths_to_readable(data["paths"]),
                 reasons=reasons,
-                competence_info=comp_info
+                competence_info=comp_info,
             )
 
             recommendations.append(hybrid_rec)
@@ -362,16 +362,16 @@ class HybridGraphRecommender:
         if self.kg.G.has_node(comp_node):
             node_data = self.kg.get_node_info(comp_node)
             return {
-                '力量名': node_data.get('name', comp_code),
-                '力量タイプ': node_data.get('type', 'UNKNOWN'),
-                'カテゴリー': node_data.get('category', None),
-                '概要': node_data.get('description', None),
+                "力量名": node_data.get("name", comp_code),
+                "力量タイプ": node_data.get("type", "UNKNOWN"),
+                "カテゴリー": node_data.get("category", None),
+                "概要": node_data.get("description", None),
             }
         return {
-            '力量名': comp_code,
-            '力量タイプ': 'UNKNOWN',
-            'カテゴリー': None,
-            '概要': None,
+            "力量名": comp_code,
+            "力量タイプ": "UNKNOWN",
+            "カテゴリー": None,
+            "概要": None,
         }
 
     def _convert_paths_to_readable(self, paths: List[List[str]]) -> List[List[Dict]]:
@@ -381,11 +381,13 @@ class HybridGraphRecommender:
             readable_path = []
             for node in path:
                 node_info = self.kg.get_node_info(node)
-                readable_path.append({
-                    'id': node,
-                    'type': node_info.get('node_type', 'unknown'),
-                    'name': node_info.get('name', node),
-                })
+                readable_path.append(
+                    {
+                        "id": node,
+                        "type": node_info.get("node_type", "unknown"),
+                        "name": node_info.get("name", node),
+                    }
+                )
             readable_paths.append(readable_path)
         return readable_paths
 
@@ -394,44 +396,44 @@ class HybridGraphRecommender:
         reasons = []
 
         # グラフベーススコアが高い場合
-        if data['graph_score'] > RWR_SCORE_THRESHOLD_HIGH:
+        if data["graph_score"] > RWR_SCORE_THRESHOLD_HIGH:
             # パスから理由を生成
-            paths = data['paths']
+            paths = data["paths"]
             if paths:
                 path_reasons = self.rwr._generate_reasons(paths)
                 reasons.extend(path_reasons)
 
         # 協調フィルタリングスコアが高い場合
-        if data['cf_score'] > NMF_SCORE_THRESHOLD_HIGH:
+        if data["cf_score"] > NMF_SCORE_THRESHOLD_HIGH:
             reasons.append("類似メンバーの習得パターンから推薦")
 
         # コンテンツベーススコアが高い場合
-        if data['content_score'] > CONTENT_SCORE_THRESHOLD_HIGH:
+        if data["content_score"] > CONTENT_SCORE_THRESHOLD_HIGH:
             reasons.append("あなたの職種・等級・習得履歴と親和性が高い")
 
         # 複数手法で高評価の場合
-        high_scores = sum([
-            data['graph_score'] > RWR_SCORE_THRESHOLD_LOW,
-            data['cf_score'] > NMF_SCORE_THRESHOLD_LOW,
-            data['content_score'] > CONTENT_SCORE_THRESHOLD_LOW
-        ])
+        high_scores = sum(
+            [
+                data["graph_score"] > RWR_SCORE_THRESHOLD_LOW,
+                data["cf_score"] > NMF_SCORE_THRESHOLD_LOW,
+                data["content_score"] > CONTENT_SCORE_THRESHOLD_LOW,
+            ]
+        )
 
         if high_scores >= 2:
             methods = []
-            if data['graph_score'] > RWR_SCORE_THRESHOLD_LOW:
+            if data["graph_score"] > RWR_SCORE_THRESHOLD_LOW:
                 methods.append("グラフ構造")
-            if data['cf_score'] > NMF_SCORE_THRESHOLD_LOW:
+            if data["cf_score"] > NMF_SCORE_THRESHOLD_LOW:
                 methods.append("協調フィルタリング")
-            if data['content_score'] > CONTENT_SCORE_THRESHOLD_LOW:
+            if data["content_score"] > CONTENT_SCORE_THRESHOLD_LOW:
                 methods.append("コンテンツベース")
 
             reasons.append(f"複数の推薦手法（{', '.join(methods)}）で高評価")
 
         return reasons if reasons else ["推薦システムによる提案"]
 
-    def explain_recommendation(self,
-                               member_code: str,
-                               competence_code: str) -> Dict:
+    def explain_recommendation(self, member_code: str, competence_code: str) -> Dict:
         """
         推薦の詳細な説明を生成
 
@@ -444,16 +446,15 @@ class HybridGraphRecommender:
         """
         # RWRの説明を取得
         rwr_explanation = self.rwr.explain_recommendation(
-            member_code=member_code,
-            competence_code=competence_code
+            member_code=member_code, competence_code=competence_code
         )
 
         # スコアを再計算
         # （実装は省略、実際の推薦時のスコアをキャッシュする方が効率的）
 
         return {
-            'member_code': member_code,
-            'competence_code': competence_code,
-            'rwr_explanation': rwr_explanation,
-            'hybrid_score': None,  # 実装省略
+            "member_code": member_code,
+            "competence_code": competence_code,
+            "rwr_explanation": rwr_explanation,
+            "hybrid_score": None,  # 実装省略
         }

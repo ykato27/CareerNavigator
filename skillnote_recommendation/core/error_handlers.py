@@ -17,16 +17,19 @@ logger = logging.getLogger(__name__)
 
 class DataProcessingError(Exception):
     """Raised when data processing fails."""
+
     pass
 
 
 class ModelTrainingError(Exception):
     """Raised when model training fails."""
+
     pass
 
 
 class RecommendationError(Exception):
     """Raised when recommendation generation fails."""
+
     pass
 
 
@@ -39,11 +42,7 @@ class ErrorHandler:
     """
 
     @staticmethod
-    def log_error(
-        error: Exception,
-        context: str,
-        level: int = logging.ERROR
-    ) -> None:
+    def log_error(error: Exception, context: str, level: int = logging.ERROR) -> None:
         """
         Log an error with context information.
 
@@ -61,17 +60,11 @@ class ErrorHandler:
         error_type = type(error).__name__
         error_msg = str(error)
 
-        logger.log(
-            level,
-            f"Error in {context}: {error_type}: {error_msg}",
-            exc_info=True
-        )
+        logger.log(level, f"Error in {context}: {error_type}: {error_msg}", exc_info=True)
 
     @staticmethod
     def format_user_message(
-        error: Exception,
-        context: str,
-        suggestions: Optional[list] = None
+        error: Exception, context: str, suggestions: Optional[list] = None
     ) -> str:
         """
         Format a user-friendly error message.
@@ -110,7 +103,7 @@ class ErrorHandler:
         error: Exception,
         context: str,
         suggestions: Optional[list] = None,
-        show_traceback: bool = False
+        show_traceback: bool = False,
     ) -> None:
         """
         Display error in Streamlit with consistent formatting.
@@ -143,9 +136,7 @@ class ErrorHandler:
                 st.code(traceback.format_exc())
 
     @staticmethod
-    def handle_data_processing_error(
-        func: Callable
-    ) -> Callable:
+    def handle_data_processing_error(func: Callable) -> Callable:
         """
         Decorator for handling data processing errors.
 
@@ -160,6 +151,7 @@ class ErrorHandler:
             ... def load_csv(path):
             ...     return pd.read_csv(path)
         """
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             try:
@@ -173,11 +165,7 @@ class ErrorHandler:
 
     @staticmethod
     def safe_execute(
-        func: Callable,
-        *args,
-        default: Any = None,
-        context: str = "operation",
-        **kwargs
+        func: Callable, *args, default: Any = None, context: str = "operation", **kwargs
     ) -> Any:
         """
         Safely execute a function with error handling.
@@ -217,10 +205,7 @@ class ErrorRecovery:
 
     @staticmethod
     def retry_on_failure(
-        func: Callable,
-        max_retries: int = 3,
-        delay: float = 1.0,
-        backoff: float = 2.0
+        func: Callable, max_retries: int = 3, delay: float = 1.0, backoff: float = 2.0
     ) -> Callable:
         """
         Decorator to retry a function on failure with exponential backoff.
@@ -260,9 +245,7 @@ class ErrorRecovery:
                         time.sleep(current_delay)
                         current_delay *= backoff
                     else:
-                        logger.error(
-                            f"All {max_retries} attempts failed for {func.__name__}"
-                        )
+                        logger.error(f"All {max_retries} attempts failed for {func.__name__}")
 
             raise last_exception
 
@@ -270,9 +253,7 @@ class ErrorRecovery:
 
     @staticmethod
     def with_fallback(
-        primary_func: Callable,
-        fallback_func: Callable,
-        context: str = "operation"
+        primary_func: Callable, fallback_func: Callable, context: str = "operation"
     ) -> Any:
         """
         Execute primary function with fallback on error.
@@ -295,7 +276,5 @@ class ErrorRecovery:
         try:
             return primary_func()
         except Exception as e:
-            logger.warning(
-                f"Primary {context} failed: {str(e)}. Using fallback."
-            )
+            logger.warning(f"Primary {context} failed: {str(e)}. Using fallback.")
             return fallback_func()
