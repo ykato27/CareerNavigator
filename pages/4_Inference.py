@@ -550,6 +550,20 @@ with st.expander("⚙️ 詳細設定（オプション）"):
         step=1
     )
 
+    st.markdown("---")
+    st.markdown("#### 👔 役職ベース推薦設定")
+
+    min_acquisition_rate = st.slider(
+        "最小取得率",
+        min_value=0.0,
+        max_value=0.5,
+        value=0.15,
+        step=0.05,
+        help="役職内でこの割合以上のメンバーが習得しているスキルのみを推薦します。0に近いほど多くのスキルが推薦されます。"
+    )
+
+    st.info(f"📊 現在の設定: 役職内の{min_acquisition_rate*100:.0f}%以上のメンバーが習得しているスキルを推薦")
+
 # デフォルト値の設定
 diversity_strategy = "hybrid"  # 常にハイブリッド戦略を使用
 rwr_weight = 0.5  # グラフとNMFを同等に評価
@@ -873,7 +887,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     # 全役職について推薦を生成（パス情報付き）
                     all_role_recommendations = analyzer.recommend_all_roles(
                         top_n_per_role=top_n,
-                        min_acquisition_rate=0.3,
+                        min_acquisition_rate=min_acquisition_rate,
                         max_paths=max_paths
                     )
 
