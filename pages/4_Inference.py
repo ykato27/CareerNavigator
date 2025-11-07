@@ -268,7 +268,7 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
     fig = go.Figure()
 
     # ========================================
-    # セクション1: 【職種】フィルター（職種別にグループ化、力量タイプを個別選択可能）
+    # 職種別フィルター（職種ごとにグループ化、力量タイプはマーカー形状で区別）
     # ========================================
     for occupation in sorted(unique_occupations):
         is_first = True
@@ -299,42 +299,6 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
                 legendgroup=f'occupation_{occupation}',
                 legendgrouptitle_text=f'【職種】{occupation}' if is_first else None,
                 showlegend=True
-            ))
-            is_first = False
-
-    # ========================================
-    # セクション2: 【力量タイプ】フィルター（力量タイプ別にグループ化、職種を個別選択可能）
-    # ========================================
-    for competence_type in ['SKILL', 'EDUCATION', 'LICENSE']:
-        is_first = True
-        for occupation in sorted(unique_occupations):
-            group_key = (occupation, competence_type)
-            if group_key not in skills_by_group:
-                continue
-
-            data = skills_by_group[group_key]
-            color = occupation_colors.get(occupation, '#7f7f7f')
-            symbol = competence_type_symbols.get(competence_type, 'circle')
-
-            fig.add_trace(go.Scatter(
-                x=data['difficulty'],
-                y=data['rarity'],
-                mode='markers',
-                name=occupation,
-                marker=dict(
-                    size=12,
-                    color=color,
-                    symbol=symbol,
-                    line=dict(color='white', width=1),
-                    opacity=0.8
-                ),
-                text=data['names'],
-                hovertext=data['hover_texts'],
-                hoverinfo='text',
-                legendgroup=f'competence_type_{competence_type}',
-                legendgrouptitle_text=f'【力量タイプ】{competence_type_names[competence_type]}' if is_first else None,
-                showlegend=True,
-                visible='legendonly'  # デフォルトで非表示
             ))
             is_first = False
 
@@ -375,7 +339,7 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
     fig.update_layout(
         title=dict(
             text=f"<b>役職「{role_name}」のスキルマトリックス（難易度×貴重度）</b><br>"
-                 f"<sup>凡例：【職種】各職種内で力量タイプを個別選択、【力量タイプ】各タイプ内で職種を個別選択。凡例項目をクリックして表示切替（{growth_path.total_members}名のデータから分析）</sup>",
+                 f"<sup>凡例の職種名をクリックして表示/非表示を切替。マーカー形状で力量タイプを区別（●=SKILL、■=EDUCATION、◆=LICENSE）（{growth_path.total_members}名のデータから分析）</sup>",
             x=0.5,
             xanchor='center'
         ),
@@ -1741,12 +1705,22 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                                 # 成長パスの可視化を追加
                                 st.markdown("#### 📈 スキル取得シナリオ")
-                                st.info("この役職のメンバーの実データ（取得率と取得時期）を分析し、推奨取得順序を算出しています。凡例をクリックすることで職種・力量タイプ別にフィルタリング可能です。")
+                                st.info("この役職のメンバーの実データ（取得率と取得時期）を分析し、推奨取得順序を算出しています。職種は凡例クリックで、力量タイプはマルチセレクトで個別にフィルタリング可能です。")
 
                                 # タブで表示
                                 timeline_tab, stages_tab = st.tabs(["🔄 取得順序タイムライン", "📊 段階別分布"])
 
                                 with timeline_tab:
+                                    # 力量タイプのフィルタリング用マルチセレクト
+                                    st.markdown("##### 力量タイプでフィルタリング")
+                                    selected_competence_types = st.multiselect(
+                                        "表示する力量タイプを選択（複数選択可）",
+                                        options=['SKILL', 'EDUCATION', 'LICENSE'],
+                                        default=['SKILL', 'EDUCATION', 'LICENSE'],
+                                        format_func=lambda x: {'SKILL': '●SKILL', 'EDUCATION': '■EDUCATION', 'LICENSE': '◆LICENSE'}[x],
+                                        key=f"competence_type_filter_{role_name}"
+                                    )
+
                                     # タイムライン図を作成
                                     # 選択されたメンバーの役職の場合のみ未習得スキルをフィルタリング
                                     target_member = st.session_state.get('selected_member_code')
@@ -1764,15 +1738,15 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                         role_name,
                                         members_df=td["members_clean"],
                                         member_competence_df=td["member_competence"],
-                                        selected_types=None,  # 全タイプを表示（凡例クリックでフィルタリング）
+                                        selected_types=selected_competence_types if len(selected_competence_types) > 0 else None,
                                         target_member_code=target_for_filtering
                                     )
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
                                         if role_name == selected_member_role:
-                                            st.caption("💡 凡例：【職種】セクション（例：開発/メカ設計 > ●SKILL/■EDUCATION/◆LICENSE）で職種ごとに力量タイプを個別選択、【力量タイプ】セクション（例：●SKILL > 開発/メカ設計/開発/ハード設計...）で力量タイプごとに職種を個別選択。**あなたが未習得のスキルのみ表示されています。**")
+                                            st.caption("💡 【職種フィルター】凡例の職種名をクリックして表示/非表示を切替。【力量タイプフィルター】上部のマルチセレクトで選択。マーカー形状で力量タイプを区別（●=SKILL、■=EDUCATION、◆=LICENSE）。**あなたが未習得のスキルのみ表示されています。**")
                                         else:
-                                            st.caption("💡 凡例：【職種】セクション（例：開発/メカ設計 > ●SKILL/■EDUCATION/◆LICENSE）で職種ごとに力量タイプを個別選択、【力量タイプ】セクション（例：●SKILL > 開発/メカ設計/開発/ハード設計...）で力量タイプごとに職種を個別選択。")
+                                            st.caption("💡 【職種フィルター】凡例の職種名をクリックして表示/非表示を切替。【力量タイプフィルター】上部のマルチセレクトで選択。マーカー形状で力量タイプを区別（●=SKILL、■=EDUCATION、◆=LICENSE）。")
                                     else:
                                         if role_name == selected_member_role:
                                             st.warning("あなたが未習得のスキルがありません。")
