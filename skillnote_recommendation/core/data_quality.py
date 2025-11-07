@@ -25,9 +25,7 @@ class DataQualityChecker(LoggerMixin):
     """
 
     def validate_skill_matrix(
-        self,
-        matrix: pd.DataFrame,
-        strict: bool = False
+        self, matrix: pd.DataFrame, strict: bool = False
     ) -> DataQualityReport:
         """
         スキルマトリクスを検証
@@ -41,11 +39,7 @@ class DataQualityChecker(LoggerMixin):
         """
         report = DataQualityReport(is_valid=True)
 
-        self.logger.info(
-            "data_quality_check_started",
-            matrix_shape=matrix.shape,
-            strict=strict
-        )
+        self.logger.info("data_quality_check_started", matrix_shape=matrix.shape, strict=strict)
 
         # 1. 基本的な形状チェック
         self._check_shape(matrix, report)
@@ -80,7 +74,7 @@ class DataQualityChecker(LoggerMixin):
             "data_quality_check_completed",
             is_valid=report.is_valid,
             errors_count=len(report.errors),
-            warnings_count=len(report.warnings)
+            warnings_count=len(report.warnings),
         )
 
         return report
@@ -94,56 +88,39 @@ class DataQualityChecker(LoggerMixin):
             report.add_error("Matrix has zero columns (no competences)")
 
         if matrix.shape[0] < 10:
-            report.add_warning(
-                f"Matrix has only {matrix.shape[0]} members (very small dataset)"
-            )
+            report.add_warning(f"Matrix has only {matrix.shape[0]} members (very small dataset)")
 
         if matrix.shape[1] < 10:
             report.add_warning(
                 f"Matrix has only {matrix.shape[1]} competences (very small dataset)"
             )
 
-    def _check_missing_values(
-        self,
-        matrix: pd.DataFrame,
-        report: DataQualityReport
-    ) -> None:
+    def _check_missing_values(self, matrix: pd.DataFrame, report: DataQualityReport) -> None:
         """欠損値チェック"""
         nan_count = matrix.isna().sum().sum()
 
         if nan_count > 0:
             nan_ratio = nan_count / matrix.size
-            report.add_error(
-                f"Found {nan_count} NaN values ({nan_ratio:.2%} of matrix)"
-            )
-            report.set_statistic('nan_count', float(nan_count))
-            report.set_statistic('nan_ratio', nan_ratio)
+            report.add_error(f"Found {nan_count} NaN values ({nan_ratio:.2%} of matrix)")
+            report.set_statistic("nan_count", float(nan_count))
+            report.set_statistic("nan_ratio", nan_ratio)
         else:
-            report.set_statistic('nan_count', 0.0)
-            report.set_statistic('nan_ratio', 0.0)
+            report.set_statistic("nan_count", 0.0)
+            report.set_statistic("nan_ratio", 0.0)
 
-    def _check_infinite_values(
-        self,
-        matrix: pd.DataFrame,
-        report: DataQualityReport
-    ) -> None:
+    def _check_infinite_values(self, matrix: pd.DataFrame, report: DataQualityReport) -> None:
         """無限値チェック"""
         inf_count = np.isinf(matrix.values).sum()
 
         if inf_count > 0:
             inf_ratio = inf_count / matrix.size
-            report.add_error(
-                f"Found {inf_count} Inf values ({inf_ratio:.2%} of matrix)"
-            )
-            report.set_statistic('inf_count', float(inf_count))
+            report.add_error(f"Found {inf_count} Inf values ({inf_ratio:.2%} of matrix)")
+            report.set_statistic("inf_count", float(inf_count))
         else:
-            report.set_statistic('inf_count', 0.0)
+            report.set_statistic("inf_count", 0.0)
 
     def _check_negative_values(
-        self,
-        matrix: pd.DataFrame,
-        report: DataQualityReport,
-        strict: bool
+        self, matrix: pd.DataFrame, report: DataQualityReport, strict: bool
     ) -> None:
         """負の値チェック"""
         negative_mask = matrix < 0
@@ -158,22 +135,19 @@ class DataQualityChecker(LoggerMixin):
             else:
                 report.add_warning(message)
 
-            report.set_statistic('negative_count', float(neg_count))
+            report.set_statistic("negative_count", float(neg_count))
         else:
-            report.set_statistic('negative_count', 0.0)
+            report.set_statistic("negative_count", 0.0)
 
     def _check_sparsity(
-        self,
-        matrix: pd.DataFrame,
-        report: DataQualityReport,
-        strict: bool
+        self, matrix: pd.DataFrame, report: DataQualityReport, strict: bool
     ) -> None:
         """スパース性チェック"""
         zero_count = (matrix == 0).sum().sum()
         sparsity = zero_count / matrix.size
 
-        report.set_statistic('sparsity', sparsity)
-        report.set_statistic('density', 1.0 - sparsity)
+        report.set_statistic("sparsity", sparsity)
+        report.set_statistic("density", 1.0 - sparsity)
 
         if sparsity > 0.99:
             message = f"Matrix is {sparsity:.1%} sparse (extremely sparse)"
@@ -184,11 +158,7 @@ class DataQualityChecker(LoggerMixin):
         elif sparsity > 0.95:
             report.add_warning(f"Matrix is {sparsity:.1%} sparse (very sparse)")
 
-    def _check_dtypes(
-        self,
-        matrix: pd.DataFrame,
-        report: DataQualityReport
-    ) -> None:
+    def _check_dtypes(self, matrix: pd.DataFrame, report: DataQualityReport) -> None:
         """データ型チェック"""
         non_numeric_cols = []
 
@@ -203,10 +173,7 @@ class DataQualityChecker(LoggerMixin):
             )
 
     def _check_distribution(
-        self,
-        matrix: pd.DataFrame,
-        report: DataQualityReport,
-        strict: bool
+        self, matrix: pd.DataFrame, report: DataQualityReport, strict: bool
     ) -> None:
         """分布チェック"""
         # 非ゼロ値のみを対象に分布を確認
@@ -233,41 +200,32 @@ class DataQualityChecker(LoggerMixin):
 
         # 値の範囲が広すぎる
         if max_val / min_val > 1000:
-            report.add_warning(
-                f"Value range is very large (min={min_val:.2e}, max={max_val:.2e})"
-            )
+            report.add_warning(f"Value range is very large (min={min_val:.2e}, max={max_val:.2e})")
 
-    def _calculate_statistics(
-        self,
-        matrix: pd.DataFrame,
-        report: DataQualityReport
-    ) -> None:
+    def _calculate_statistics(self, matrix: pd.DataFrame, report: DataQualityReport) -> None:
         """統計情報を計算"""
         values = matrix.values
         non_zero_values = values[values > 0]
 
-        report.set_statistic('total_elements', float(matrix.size))
-        report.set_statistic('n_rows', float(matrix.shape[0]))
-        report.set_statistic('n_cols', float(matrix.shape[1]))
+        report.set_statistic("total_elements", float(matrix.size))
+        report.set_statistic("n_rows", float(matrix.shape[0]))
+        report.set_statistic("n_cols", float(matrix.shape[1]))
 
         if len(non_zero_values) > 0:
-            report.set_statistic('mean', float(np.mean(non_zero_values)))
-            report.set_statistic('std', float(np.std(non_zero_values)))
-            report.set_statistic('min', float(np.min(non_zero_values)))
-            report.set_statistic('max', float(np.max(non_zero_values)))
-            report.set_statistic('median', float(np.median(non_zero_values)))
+            report.set_statistic("mean", float(np.mean(non_zero_values)))
+            report.set_statistic("std", float(np.std(non_zero_values)))
+            report.set_statistic("min", float(np.min(non_zero_values)))
+            report.set_statistic("max", float(np.max(non_zero_values)))
+            report.set_statistic("median", float(np.median(non_zero_values)))
         else:
-            report.set_statistic('mean', 0.0)
-            report.set_statistic('std', 0.0)
-            report.set_statistic('min', 0.0)
-            report.set_statistic('max', 0.0)
-            report.set_statistic('median', 0.0)
+            report.set_statistic("mean", 0.0)
+            report.set_statistic("std", 0.0)
+            report.set_statistic("min", 0.0)
+            report.set_statistic("max", 0.0)
+            report.set_statistic("median", 0.0)
 
     def validate_dataframe(
-        self,
-        df: pd.DataFrame,
-        required_columns: list[str],
-        name: str = "DataFrame"
+        self, df: pd.DataFrame, required_columns: list[str], name: str = "DataFrame"
     ) -> DataQualityReport:
         """
         一般的なDataFrameを検証
@@ -282,11 +240,7 @@ class DataQualityChecker(LoggerMixin):
         """
         report = DataQualityReport(is_valid=True)
 
-        self.logger.info(
-            "dataframe_validation_started",
-            name=name,
-            shape=df.shape
-        )
+        self.logger.info("dataframe_validation_started", name=name, shape=df.shape)
 
         # 空チェック
         if df.empty:
@@ -296,26 +250,18 @@ class DataQualityChecker(LoggerMixin):
         # 必須カラムチェック
         missing_cols = set(required_columns) - set(df.columns)
         if missing_cols:
-            report.add_error(
-                f"{name} is missing required columns: {', '.join(missing_cols)}"
-            )
+            report.add_error(f"{name} is missing required columns: {', '.join(missing_cols)}")
 
         # 重複行チェック
         duplicate_count = df.duplicated().sum()
         if duplicate_count > 0:
-            report.add_warning(
-                f"{name} contains {duplicate_count} duplicate rows"
-            )
+            report.add_warning(f"{name} contains {duplicate_count} duplicate rows")
 
         # 基本統計
-        report.set_statistic('row_count', float(len(df)))
-        report.set_statistic('column_count', float(len(df.columns)))
-        report.set_statistic('duplicate_count', float(duplicate_count))
+        report.set_statistic("row_count", float(len(df)))
+        report.set_statistic("column_count", float(len(df.columns)))
+        report.set_statistic("duplicate_count", float(duplicate_count))
 
-        self.logger.info(
-            "dataframe_validation_completed",
-            name=name,
-            is_valid=report.is_valid
-        )
+        self.logger.info("dataframe_validation_completed", name=name, is_valid=report.is_valid)
 
         return report

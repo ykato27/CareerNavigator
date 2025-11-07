@@ -96,7 +96,7 @@ class StreamlitPersistenceManager:
         recommendations: List[Dict[str, Any]],
         reference_persons: Optional[List[Dict[str, Any]]] = None,
         parameters: Optional[Dict[str, Any]] = None,
-        execution_time: Optional[float] = None
+        execution_time: Optional[float] = None,
     ) -> Optional[RecommendationHistory]:
         """
         Save recommendation history.
@@ -126,15 +126,13 @@ class StreamlitPersistenceManager:
             recommendations=recommendations,
             reference_persons=reference_persons or [],
             parameters=parameters or {},
-            execution_time=execution_time
+            execution_time=execution_time,
         )
 
         return self.history_repo.create_history(history)
 
     def load_user_history(
-        self,
-        limit: Optional[int] = 20,
-        member_code: Optional[str] = None
+        self, limit: Optional[int] = 20, member_code: Optional[str] = None
     ) -> List[RecommendationHistory]:
         """
         Load recommendation history for current user.
@@ -151,16 +149,9 @@ class StreamlitPersistenceManager:
             return []
 
         if member_code:
-            return self.history_repo.get_member_history(
-                user.user_id,
-                member_code,
-                limit
-            )
+            return self.history_repo.get_member_history(user.user_id, member_code, limit)
         else:
-            return self.history_repo.get_user_history(
-                user.user_id,
-                limit=limit
-            )
+            return self.history_repo.get_user_history(user.user_id, limit=limit)
 
     def save_trained_model(
         self,
@@ -169,7 +160,7 @@ class StreamlitPersistenceManager:
         parameters: Dict[str, Any],
         metrics: Dict[str, float],
         training_data: Optional[Any] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
     ) -> Optional[str]:
         """
         Save trained model.
@@ -198,7 +189,7 @@ class StreamlitPersistenceManager:
                 parameters=parameters,
                 metrics=metrics,
                 training_data=training_data,
-                description=description
+                description=description,
             )
 
             # Update session
@@ -206,7 +197,7 @@ class StreamlitPersistenceManager:
                 self.session_manager.update_session_state(
                     st.session_state.current_session.session_id,
                     model_trained=True,
-                    current_model_id=metadata.model_id
+                    current_model_id=metadata.model_id,
                 )
 
             return metadata.model_id
@@ -215,9 +206,7 @@ class StreamlitPersistenceManager:
             return None
 
     def load_saved_model(
-        self,
-        model_type: str,
-        training_data: Optional[Any] = None
+        self, model_type: str, training_data: Optional[Any] = None
     ) -> tuple[Optional[Any], Optional[Dict[str, Any]]]:
         """
         Load saved model for current user.
@@ -234,9 +223,7 @@ class StreamlitPersistenceManager:
             return None, None
 
         model, metadata = self.model_storage.load_latest_model(
-            user_id=user.user_id,
-            model_type=model_type,
-            training_data=training_data
+            user_id=user.user_id, model_type=model_type, training_data=training_data
         )
 
         if model and metadata:
@@ -245,17 +232,14 @@ class StreamlitPersistenceManager:
                 self.session_manager.update_session_state(
                     st.session_state.current_session.session_id,
                     model_trained=True,
-                    current_model_id=metadata.model_id
+                    current_model_id=metadata.model_id,
                 )
 
             return model, metadata.to_dict()
 
         return None, None
 
-    def list_saved_models(
-        self,
-        model_type: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    def list_saved_models(self, model_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         List saved models for current user.
 
@@ -269,10 +253,7 @@ class StreamlitPersistenceManager:
         if not user:
             return []
 
-        models = self.model_storage.list_user_models(
-            user_id=user.user_id,
-            model_type=model_type
-        )
+        models = self.model_storage.list_user_models(user_id=user.user_id, model_type=model_type)
 
         return [m.to_dict() for m in models]
 
@@ -297,10 +278,7 @@ class StreamlitPersistenceManager:
 
                 if submit and username:
                     try:
-                        self.login_or_create_user(
-                            username=username,
-                            email=email if email else None
-                        )
+                        self.login_or_create_user(username=username, email=email if email else None)
                         st.rerun()
                     except Exception as e:
                         st.error(f"ログインエラー: {e}")
@@ -357,20 +335,17 @@ class StreamlitPersistenceManager:
 
         # Display models
         for model in models:
-            with st.expander(
-                f"{model['model_type']} - "
-                f"{model['created_at'][:10]}"
-            ):
+            with st.expander(f"{model['model_type']} - " f"{model['created_at'][:10]}"):
                 st.write(f"**モデルID**: {model['model_id']}")
                 st.write(f"**作成日時**: {model['created_at']}")
 
-                if model.get('description'):
+                if model.get("description"):
                     st.write(f"**説明**: {model['description']}")
 
-                if model.get('parameters'):
+                if model.get("parameters"):
                     st.write("**パラメータ**:")
-                    st.json(model['parameters'])
+                    st.json(model["parameters"])
 
-                if model.get('metrics'):
+                if model.get("metrics"):
                     st.write("**メトリクス**:")
-                    st.json(model['metrics'])
+                    st.json(model["metrics"])

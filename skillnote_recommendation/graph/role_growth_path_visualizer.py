@@ -23,16 +23,15 @@ class RoleGrowthPathVisualizer:
         """初期化"""
         # 段階ごとの色設定
         self.stage_colors = {
-            'early': '#28a745',      # 緑（初期段階）
-            'mid': '#ffc107',        # 黄色（中期段階）
-            'late': '#dc3545',       # 赤（後期段階）
-            'default': '#6c757d'     # グレー（その他）
+            "early": "#28a745",  # 緑（初期段階）
+            "mid": "#ffc107",  # 黄色（中期段階）
+            "late": "#dc3545",  # 赤（後期段階）
+            "default": "#6c757d",  # グレー（その他）
         }
 
-    def visualize_growth_path(self,
-                              growth_path: RoleGrowthPath,
-                              max_skills: int = 30,
-                              show_edges: bool = True) -> go.Figure:
+    def visualize_growth_path(
+        self, growth_path: RoleGrowthPath, max_skills: int = 30, show_edges: bool = True
+    ) -> go.Figure:
         """
         役職の成長パスをグラフとして可視化
 
@@ -69,26 +68,21 @@ class RoleGrowthPathVisualizer:
         )
 
         fig.update_layout(
-            title=dict(
-                text=title_text,
-                x=0.5,
-                xanchor='center',
-                font=dict(size=16)
-            ),
+            title=dict(text=title_text, x=0.5, xanchor="center", font=dict(size=16)),
             showlegend=True,
-            hovermode='closest',
+            hovermode="closest",
             margin=dict(b=20, l=5, r=5, t=100),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            plot_bgcolor='white',
-            height=600
+            plot_bgcolor="white",
+            height=600,
         )
 
         return fig
 
-    def visualize_multiple_roles(self,
-                                  growth_paths: Dict[str, RoleGrowthPath],
-                                  max_skills_per_role: int = 20) -> Dict[str, go.Figure]:
+    def visualize_multiple_roles(
+        self, growth_paths: Dict[str, RoleGrowthPath], max_skills_per_role: int = 20
+    ) -> Dict[str, go.Figure]:
         """
         複数の役職の成長パスを可視化
 
@@ -104,9 +98,7 @@ class RoleGrowthPathVisualizer:
         for role_name, growth_path in growth_paths.items():
             try:
                 fig = self.visualize_growth_path(
-                    growth_path=growth_path,
-                    max_skills=max_skills_per_role,
-                    show_edges=True
+                    growth_path=growth_path, max_skills=max_skills_per_role, show_edges=True
                 )
                 figures[role_name] = fig
             except Exception as e:
@@ -115,9 +107,7 @@ class RoleGrowthPathVisualizer:
 
         return figures
 
-    def _build_graph(self,
-                     skills: List[SkillAcquisitionPattern],
-                     show_edges: bool) -> nx.DiGraph:
+    def _build_graph(self, skills: List[SkillAcquisitionPattern], show_edges: bool) -> nx.DiGraph:
         """
         NetworkXグラフを構築
 
@@ -139,23 +129,18 @@ class RoleGrowthPathVisualizer:
                 acquisition_rate=skill.acquisition_rate,
                 acquisition_count=skill.acquisition_count,
                 total_members=skill.total_members,
-                category=skill.category
+                category=skill.category,
             )
 
         # エッジを追加（取得順序に基づく）
         if show_edges and len(skills) > 1:
             # 隣接するスキル間にエッジを追加
             for i in range(len(skills) - 1):
-                G.add_edge(
-                    skills[i].competence_code,
-                    skills[i + 1].competence_code
-                )
+                G.add_edge(skills[i].competence_code, skills[i + 1].competence_code)
 
         return G
 
-    def _calculate_layout(self,
-                          skills: List[SkillAcquisitionPattern],
-                          total_skills: int) -> Dict:
+    def _calculate_layout(self, skills: List[SkillAcquisitionPattern], total_skills: int) -> Dict:
         """
         階層的なレイアウトを計算
 
@@ -186,17 +171,31 @@ class RoleGrowthPathVisualizer:
 
             if position_ratio < early_threshold:
                 # 初期段階
-                early_skills = [s for s in skills if (s.average_order + 1) / (total_skills + 1) < early_threshold]
+                early_skills = [
+                    s
+                    for s in skills
+                    if (s.average_order + 1) / (total_skills + 1) < early_threshold
+                ]
                 stage_index = early_skills.index(skill) if skill in early_skills else 0
                 stage_total = len(early_skills)
             elif position_ratio < late_threshold:
                 # 中期段階
-                mid_skills = [s for s in skills if early_threshold <= (s.average_order + 1) / (total_skills + 1) < late_threshold]
+                mid_skills = [
+                    s
+                    for s in skills
+                    if early_threshold
+                    <= (s.average_order + 1) / (total_skills + 1)
+                    < late_threshold
+                ]
                 stage_index = mid_skills.index(skill) if skill in mid_skills else 0
                 stage_total = len(mid_skills)
             else:
                 # 後期段階
-                late_skills = [s for s in skills if (s.average_order + 1) / (total_skills + 1) >= late_threshold]
+                late_skills = [
+                    s
+                    for s in skills
+                    if (s.average_order + 1) / (total_skills + 1) >= late_threshold
+                ]
                 stage_index = late_skills.index(skill) if skill in late_skills else 0
                 stage_total = len(late_skills)
 
@@ -210,11 +209,9 @@ class RoleGrowthPathVisualizer:
 
         return pos
 
-    def _create_plotly_figure(self,
-                              G: nx.DiGraph,
-                              pos: Dict,
-                              skills: List[SkillAcquisitionPattern],
-                              total_skills: int) -> go.Figure:
+    def _create_plotly_figure(
+        self, G: nx.DiGraph, pos: Dict, skills: List[SkillAcquisitionPattern], total_skills: int
+    ) -> go.Figure:
         """
         Plotly Figureを作成
 
@@ -265,18 +262,20 @@ class RoleGrowthPathVisualizer:
         return go.Scatter(
             x=edge_x,
             y=edge_y,
-            mode='lines',
-            line=dict(width=1, color='#888'),
-            hoverinfo='none',
-            showlegend=False
+            mode="lines",
+            line=dict(width=1, color="#888"),
+            hoverinfo="none",
+            showlegend=False,
         )
 
-    def _add_node_traces(self,
-                         fig: go.Figure,
-                         G: nx.DiGraph,
-                         pos: Dict,
-                         skills: List[SkillAcquisitionPattern],
-                         total_skills: int):
+    def _add_node_traces(
+        self,
+        fig: go.Figure,
+        G: nx.DiGraph,
+        pos: Dict,
+        skills: List[SkillAcquisitionPattern],
+        total_skills: int,
+    ):
         """
         ノードのトレースを追加
 
@@ -293,24 +292,24 @@ class RoleGrowthPathVisualizer:
 
         # 段階ごとにノードをグループ化
         stages = {
-            'early': {'skills': [], 'label': '🌱 初期段階'},
-            'mid': {'skills': [], 'label': '🌿 中期段階'},
-            'late': {'skills': [], 'label': '🌳 後期段階'}
+            "early": {"skills": [], "label": "🌱 初期段階"},
+            "mid": {"skills": [], "label": "🌿 中期段階"},
+            "late": {"skills": [], "label": "🌳 後期段階"},
         }
 
         for skill in skills:
             position_ratio = (skill.average_order + 1) / (total_skills + 1)
 
             if position_ratio < early_threshold:
-                stages['early']['skills'].append(skill)
+                stages["early"]["skills"].append(skill)
             elif position_ratio < late_threshold:
-                stages['mid']['skills'].append(skill)
+                stages["mid"]["skills"].append(skill)
             else:
-                stages['late']['skills'].append(skill)
+                stages["late"]["skills"].append(skill)
 
         # 各段階のノードを描画
         for stage_key, stage_data in stages.items():
-            if not stage_data['skills']:
+            if not stage_data["skills"]:
                 continue
 
             node_x = []
@@ -319,11 +318,15 @@ class RoleGrowthPathVisualizer:
             node_size = []
             node_hover = []
 
-            for skill in stage_data['skills']:
+            for skill in stage_data["skills"]:
                 x, y = pos[skill.competence_code]
                 node_x.append(x)
                 node_y.append(y)
-                node_text.append(skill.competence_name[:15] + '...' if len(skill.competence_name) > 15 else skill.competence_name)
+                node_text.append(
+                    skill.competence_name[:15] + "..."
+                    if len(skill.competence_name) > 15
+                    else skill.competence_name
+                )
 
                 # ノードサイズ：取得率に応じて（最小10、最大40）
                 size = 10 + (skill.acquisition_rate * 30)
@@ -338,23 +341,25 @@ class RoleGrowthPathVisualizer:
                 )
                 node_hover.append(hover_text)
 
-            fig.add_trace(go.Scatter(
-                x=node_x,
-                y=node_y,
-                mode='markers+text',
-                marker=dict(
-                    size=node_size,
-                    color=self.stage_colors[stage_key],
-                    line=dict(width=2, color='white')
-                ),
-                text=node_text,
-                textposition='top center',
-                textfont=dict(size=9),
-                hovertext=node_hover,
-                hoverinfo='text',
-                name=stage_data['label'],
-                showlegend=True
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=node_x,
+                    y=node_y,
+                    mode="markers+text",
+                    marker=dict(
+                        size=node_size,
+                        color=self.stage_colors[stage_key],
+                        line=dict(width=2, color="white"),
+                    ),
+                    text=node_text,
+                    textposition="top center",
+                    textfont=dict(size=9),
+                    hovertext=node_hover,
+                    hoverinfo="text",
+                    name=stage_data["label"],
+                    showlegend=True,
+                )
+            )
 
     def _create_empty_figure(self, message: str) -> go.Figure:
         """
@@ -374,11 +379,11 @@ class RoleGrowthPathVisualizer:
             x=0.5,
             y=0.5,
             showarrow=False,
-            font=dict(size=16)
+            font=dict(size=16),
         )
         fig.update_layout(
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            height=400
+            height=400,
         )
         return fig

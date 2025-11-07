@@ -17,6 +17,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 @dataclass
 class CareerPatternGroup:
     """キャリアパターングループ"""
+
     pattern_name: str  # 'similar', 'different1', 'different2'
     pattern_label: str  # 表示用ラベル
     member_codes: List[str]  # メンバーコードのリスト
@@ -35,7 +36,7 @@ class CareerPatternClassifier:
         similar_threshold: float = 0.7,
         different1_threshold: float = 0.4,
         max_persons_per_group: int = 5,
-        min_persons_per_group: int = 3
+        min_persons_per_group: int = 3,
     ):
         """
         初期化
@@ -57,10 +58,7 @@ class CareerPatternClassifier:
         self.max_persons_per_group = max_persons_per_group
         self.min_persons_per_group = min_persons_per_group
 
-    def classify_career_patterns(
-        self,
-        target_member_code: str
-    ) -> Dict[str, CareerPatternGroup]:
+    def classify_career_patterns(self, target_member_code: str) -> Dict[str, CareerPatternGroup]:
         """
         対象メンバーに対して、他のメンバーを3つのキャリアパターンに分類
 
@@ -107,36 +105,21 @@ class CareerPatternClassifier:
                 different2_group.append((member_code, similarity))
 
         # 各グループから上位を選択
-        similar_group = similar_group[:self.max_persons_per_group]
-        different1_group = different1_group[:self.max_persons_per_group]
-        different2_group = different2_group[:self.max_persons_per_group]
+        similar_group = similar_group[: self.max_persons_per_group]
+        different1_group = different1_group[: self.max_persons_per_group]
+        different2_group = different2_group[: self.max_persons_per_group]
 
         # CareerPatternGroupオブジェクトに変換
         result = {
-            'similar': self._create_group(
-                'similar',
-                '💼 類似キャリア',
-                similar_group
-            ),
-            'different1': self._create_group(
-                'different1',
-                '🌟 異なるキャリア1',
-                different1_group
-            ),
-            'different2': self._create_group(
-                'different2',
-                '🚀 異なるキャリア2',
-                different2_group
-            )
+            "similar": self._create_group("similar", "💼 類似キャリア", similar_group),
+            "different1": self._create_group("different1", "🌟 異なるキャリア1", different1_group),
+            "different2": self._create_group("different2", "🚀 異なるキャリア2", different2_group),
         }
 
         return result
 
     def _create_group(
-        self,
-        pattern_name: str,
-        pattern_label: str,
-        member_list: List[Tuple[str, float]]
+        self, pattern_name: str, pattern_label: str, member_list: List[Tuple[str, float]]
     ) -> CareerPatternGroup:
         """
         CareerPatternGroupオブジェクトを作成
@@ -158,9 +141,7 @@ class CareerPatternClassifier:
             similarities.append(similarity)
 
             # メンバー名を取得
-            member_info = self.member_master[
-                self.member_master["メンバーコード"] == member_code
-            ]
+            member_info = self.member_master[self.member_master["メンバーコード"] == member_code]
             if len(member_info) > 0:
                 member_names.append(member_info.iloc[0]["メンバー名"])
             else:
@@ -171,13 +152,10 @@ class CareerPatternClassifier:
             pattern_label=pattern_label,
             member_codes=member_codes,
             member_names=member_names,
-            similarities=similarities
+            similarities=similarities,
         )
 
-    def get_group_statistics(
-        self,
-        groups: Dict[str, CareerPatternGroup]
-    ) -> Dict[str, dict]:
+    def get_group_statistics(self, groups: Dict[str, CareerPatternGroup]) -> Dict[str, dict]:
         """
         各グループの統計情報を取得
 
@@ -191,20 +169,17 @@ class CareerPatternClassifier:
 
         for pattern_name, group in groups.items():
             stats[pattern_name] = {
-                'count': len(group.member_codes),
-                'avg_similarity': np.mean(group.similarities) if group.similarities else 0,
-                'min_similarity': np.min(group.similarities) if group.similarities else 0,
-                'max_similarity': np.max(group.similarities) if group.similarities else 0,
+                "count": len(group.member_codes),
+                "avg_similarity": np.mean(group.similarities) if group.similarities else 0,
+                "min_similarity": np.min(group.similarities) if group.similarities else 0,
+                "max_similarity": np.max(group.similarities) if group.similarities else 0,
             }
 
         return stats
 
 
 def create_classifier_from_config(
-    member_competence: pd.DataFrame,
-    member_master: pd.DataFrame,
-    mf_model,
-    config
+    member_competence: pd.DataFrame, member_master: pd.DataFrame, mf_model, config
 ) -> CareerPatternClassifier:
     """
     Configからキャリアパターン分類器を作成
@@ -224,8 +199,8 @@ def create_classifier_from_config(
         member_competence=member_competence,
         member_master=member_master,
         mf_model=mf_model,
-        similar_threshold=params['similar_career_threshold'],
-        different1_threshold=params['different_career1_threshold'],
-        max_persons_per_group=params['similar_career_ref_persons'],  # 全グループで同じ値を使用
-        min_persons_per_group=params['min_ref_persons']
+        similar_threshold=params["similar_career_threshold"],
+        different1_threshold=params["different_career1_threshold"],
+        max_persons_per_group=params["similar_career_ref_persons"],  # 全グループで同じ値を使用
+        min_persons_per_group=params["min_ref_persons"],
     )

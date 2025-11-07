@@ -18,19 +18,25 @@ from sklearn.model_selection import KFold, TimeSeriesSplit
 try:
     import optuna
     from optuna.samplers import TPESampler, RandomSampler, GridSampler
+
     OPTUNA_AVAILABLE = True
 
     # CmaEsSamplerは別途インポート（cmaesパッケージが必要）
     try:
         from optuna.samplers import CmaEsSampler
+
         CMAES_AVAILABLE = True
     except ImportError:
         CMAES_AVAILABLE = False
-        logging.info("CMA-ESサンプラーが利用できません。cmaesパッケージをインストールしてください。")
+        logging.info(
+            "CMA-ESサンプラーが利用できません。cmaesパッケージをインストールしてください。"
+        )
 except ImportError:
     OPTUNA_AVAILABLE = False
     CMAES_AVAILABLE = False
-    logging.warning("Optunaがインストールされていません。ハイパーパラメータチューニング機能が使用できません。")
+    logging.warning(
+        "Optunaがインストールされていません。ハイパーパラメータチューニング機能が使用できません。"
+    )
 
 from skillnote_recommendation.ml.matrix_factorization import MatrixFactorizationModel
 
@@ -56,7 +62,7 @@ class NMFHyperparameterTuner:
         test_size: float = 0.15,
         enable_early_stopping: bool = True,
         early_stopping_patience: int = 5,
-        early_stopping_batch_size: int = 50
+        early_stopping_batch_size: int = 50,
     ):
         """
         初期化
@@ -91,8 +97,10 @@ class NMFHyperparameterTuner:
             # そのため、単純に後ろから切り取る（最近のデータがテスト）
             split_idx = int(len(skill_matrix) * (1 - test_size))
             self.skill_matrix = skill_matrix.iloc[:split_idx]  # Train + Validation
-            self.test_matrix = skill_matrix.iloc[split_idx:]   # Test (隔離)
-            print(f"[Data Split] Train+Val: {len(self.skill_matrix)}, Test: {len(self.test_matrix)} (Test ratio: {test_size:.1%})")
+            self.test_matrix = skill_matrix.iloc[split_idx:]  # Test (隔離)
+            print(
+                f"[Data Split] Train+Val: {len(self.skill_matrix)}, Test: {len(self.test_matrix)} (Test ratio: {test_size:.1%})"
+            )
         else:
             self.skill_matrix = skill_matrix
             self.test_matrix = None
@@ -114,11 +122,11 @@ class NMFHyperparameterTuner:
 
         # 最適化された探索空間（より狭い範囲で効率的に探索）
         self.search_space = search_space or {
-            'n_components': (10, 30),  # 40 -> 30に縮小（計算効率改善）
-            'alpha_W': (0.001, 0.5),   # 1.0 -> 0.5に縮小（過度な正則化を避ける）
-            'alpha_H': (0.001, 0.5),   # 1.0 -> 0.5に縮小
-            'l1_ratio': (0.0, 1.0),
-            'max_iter': (500, 1500),   # 2000 -> 1500に縮小（計算効率改善）
+            "n_components": (10, 30),  # 40 -> 30に縮小（計算効率改善）
+            "alpha_W": (0.001, 0.5),  # 1.0 -> 0.5に縮小（過度な正則化を避ける）
+            "alpha_H": (0.001, 0.5),  # 1.0 -> 0.5に縮小
+            "l1_ratio": (0.0, 1.0),
+            "max_iter": (500, 1500),  # 2000 -> 1500に縮小（計算効率改善）
         }
 
         self.best_params = None
@@ -126,7 +134,7 @@ class NMFHyperparameterTuner:
         self.study = None
         self.test_score = None  # Test setでの最終評価スコア
 
-    def objective(self, trial: 'optuna.Trial') -> float:
+    def objective(self, trial: "optuna.Trial") -> float:
         """
         Optunaの目的関数（交差検証による再構成誤差を最小化）
 
@@ -151,13 +159,17 @@ class NMFHyperparameterTuner:
         try:
             if self.use_cross_validation:
                 # Matrix Factorization用のスキルベース交差検証
-                print(f"[DEBUG] Trial {trial.number}: Using skill-based cross-validation with {self.n_folds} folds")
+                print(
+                    f"[DEBUG] Trial {trial.number}: Using skill-based cross-validation with {self.n_folds} folds"
+                )
                 split_method = "SkillBasedCV"
 
                 # 交差検証を実行
                 cv_errors = []
                 for fold_idx in range(self.n_folds):
-                    print(f"[DEBUG] Trial {trial.number}, Fold {fold_idx+1}/{self.n_folds}: Training...")
+                    print(
+                        f"[DEBUG] Trial {trial.number}, Fold {fold_idx+1}/{self.n_folds}: Training..."
+                    )
 
                     # スキルベースの分割：各メンバーのスキルをランダムにマスク
                     train_matrix, val_mask = self._create_skill_based_split(fold_idx)
@@ -169,7 +181,7 @@ class NMFHyperparameterTuner:
                         early_stopping=self.enable_early_stopping,
                         early_stopping_patience=self.early_stopping_patience,
                         early_stopping_min_delta=1e-5,
-                        early_stopping_batch_size=self.early_stopping_batch_size
+                        early_stopping_batch_size=self.early_stopping_batch_size,
                     )
                     model.fit(train_matrix)
 
@@ -178,20 +190,26 @@ class NMFHyperparameterTuner:
                     cv_errors.append(val_error)
 
                     logger.debug(f"  Fold {fold_idx+1}/{self.n_folds}: error={val_error:.6f}")
-                    print(f"[DEBUG] Trial {trial.number}, Fold {fold_idx+1}/{self.n_folds}: error={val_error:.6f}")
+                    print(
+                        f"[DEBUG] Trial {trial.number}, Fold {fold_idx+1}/{self.n_folds}: error={val_error:.6f}"
+                    )
 
                 # 平均誤差を計算
                 mean_cv_error = np.mean(cv_errors)
                 std_cv_error = np.std(cv_errors)
 
-                logger.info(f"Trial {trial.number} CV error: {mean_cv_error:.6f} (±{std_cv_error:.6f})")
-                print(f"[DEBUG] Trial {trial.number} completed with CV error: {mean_cv_error:.6f} ({split_method})")
+                logger.info(
+                    f"Trial {trial.number} CV error: {mean_cv_error:.6f} (±{std_cv_error:.6f})"
+                )
+                print(
+                    f"[DEBUG] Trial {trial.number} completed with CV error: {mean_cv_error:.6f} ({split_method})"
+                )
 
                 # 追加メトリクスをログ
-                trial.set_user_attr('cv_std', std_cv_error)
-                trial.set_user_attr('cv_errors', cv_errors)
-                trial.set_user_attr('random_state', self.random_state)
-                trial.set_user_attr('split_method', split_method)
+                trial.set_user_attr("cv_std", std_cv_error)
+                trial.set_user_attr("cv_errors", cv_errors)
+                trial.set_user_attr("random_state", self.random_state)
+                trial.set_user_attr("split_method", split_method)
 
                 return mean_cv_error
             else:
@@ -205,26 +223,31 @@ class NMFHyperparameterTuner:
                 # 再構成誤差を取得
                 reconstruction_error = model.get_reconstruction_error()
 
-                logger.info(f"Trial {trial.number} reconstruction error: {reconstruction_error:.6f}")
-                print(f"[DEBUG] Trial {trial.number} completed with error: {reconstruction_error:.6f}")
+                logger.info(
+                    f"Trial {trial.number} reconstruction error: {reconstruction_error:.6f}"
+                )
+                print(
+                    f"[DEBUG] Trial {trial.number} completed with error: {reconstruction_error:.6f}"
+                )
 
                 # 追加メトリクスをログ
-                trial.set_user_attr('n_iter', model.model.n_iter_)
-                trial.set_user_attr('random_state', self.random_state)
-                trial.set_user_attr('sparsity_W', np.sum(model.W == 0) / model.W.size)
-                trial.set_user_attr('sparsity_H', np.sum(model.H == 0) / model.H.size)
+                trial.set_user_attr("n_iter", model.model.n_iter_)
+                trial.set_user_attr("random_state", self.random_state)
+                trial.set_user_attr("sparsity_W", np.sum(model.W == 0) / model.W.size)
+                trial.set_user_attr("sparsity_H", np.sum(model.H == 0) / model.H.size)
 
                 return reconstruction_error
 
         except Exception as e:
             import traceback
+
             error_msg = f"Trial {trial.number} failed: {type(e).__name__}: {e}"
             logger.error(error_msg)
             logger.error(traceback.format_exc())
             print(f"[ERROR] {error_msg}")
             print(f"[ERROR] Traceback:\n{traceback.format_exc()}")
             # 失敗した場合は大きな値を返す
-            return float('inf')
+            return float("inf")
 
     def _create_skill_based_split(self, fold_idx: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -242,7 +265,9 @@ class NMFHyperparameterTuner:
         """
         # 元のマトリックスをコピー
         train_matrix = self.skill_matrix.copy()
-        val_mask = pd.DataFrame(0.0, index=self.skill_matrix.index, columns=self.skill_matrix.columns)
+        val_mask = pd.DataFrame(
+            0.0, index=self.skill_matrix.index, columns=self.skill_matrix.columns
+        )
 
         # 各メンバーについて、スキルをランダムにマスク
         np.random.seed(self.random_state + fold_idx)  # fold毎に異なるseed
@@ -272,9 +297,7 @@ class NMFHyperparameterTuner:
         return train_matrix, val_mask
 
     def _calculate_skill_based_validation_error(
-        self,
-        model: MatrixFactorizationModel,
-        val_mask: pd.DataFrame
+        self, model: MatrixFactorizationModel, val_mask: pd.DataFrame
     ) -> float:
         """
         スキルベースのバリデーション誤差を計算
@@ -316,17 +339,14 @@ class NMFHyperparameterTuner:
 
         # Frobenius norm（平方根を取る）
         if total_elements == 0:
-            return float('inf')
+            return float("inf")
 
         reconstruction_error = np.sqrt(total_squared_error)
 
         return reconstruction_error
 
     def _calculate_validation_error(
-        self,
-        model: MatrixFactorizationModel,
-        train_matrix: pd.DataFrame,
-        val_matrix: pd.DataFrame
+        self, model: MatrixFactorizationModel, train_matrix: pd.DataFrame, val_matrix: pd.DataFrame
     ) -> float:
         """
         検証データでの再構成誤差を計算（レガシー - メンバーベース分割用）
@@ -375,13 +395,13 @@ class NMFHyperparameterTuner:
 
         # Frobenius norm（平方根を取る）
         if total_elements == 0:
-            return float('inf')
+            return float("inf")
 
         reconstruction_error = np.sqrt(total_squared_error)
 
         return reconstruction_error
 
-    def _suggest_params(self, trial: 'optuna.Trial') -> Dict:
+    def _suggest_params(self, trial: "optuna.Trial") -> Dict:
         """
         探索空間からハイパーパラメータをサンプリング
 
@@ -394,41 +414,47 @@ class NMFHyperparameterTuner:
         params = {}
 
         # n_components: 整数型
-        if 'n_components' in self.search_space:
-            min_val, max_val = self.search_space['n_components']
-            params['n_components'] = trial.suggest_int('n_components', min_val, max_val)
+        if "n_components" in self.search_space:
+            min_val, max_val = self.search_space["n_components"]
+            params["n_components"] = trial.suggest_int("n_components", min_val, max_val)
 
         # max_iter: 整数型
-        if 'max_iter' in self.search_space:
-            min_val, max_val = self.search_space['max_iter']
-            params['max_iter'] = trial.suggest_int('max_iter', min_val, max_val, step=100)
+        if "max_iter" in self.search_space:
+            min_val, max_val = self.search_space["max_iter"]
+            params["max_iter"] = trial.suggest_int("max_iter", min_val, max_val, step=100)
 
         # alpha_W: 対数スケールで探索（0に近い値も探索しやすくする）
-        if 'alpha_W' in self.search_space:
-            min_val, max_val = self.search_space['alpha_W']
-            params['alpha_W'] = trial.suggest_float('alpha_W', min_val, max_val, log=True) if min_val > 0 else trial.suggest_float('alpha_W', min_val, max_val)
+        if "alpha_W" in self.search_space:
+            min_val, max_val = self.search_space["alpha_W"]
+            params["alpha_W"] = (
+                trial.suggest_float("alpha_W", min_val, max_val, log=True)
+                if min_val > 0
+                else trial.suggest_float("alpha_W", min_val, max_val)
+            )
 
         # alpha_H: 対数スケールで探索
-        if 'alpha_H' in self.search_space:
-            min_val, max_val = self.search_space['alpha_H']
-            params['alpha_H'] = trial.suggest_float('alpha_H', min_val, max_val, log=True) if min_val > 0 else trial.suggest_float('alpha_H', min_val, max_val)
+        if "alpha_H" in self.search_space:
+            min_val, max_val = self.search_space["alpha_H"]
+            params["alpha_H"] = (
+                trial.suggest_float("alpha_H", min_val, max_val, log=True)
+                if min_val > 0
+                else trial.suggest_float("alpha_H", min_val, max_val)
+            )
 
         # l1_ratio: 線形スケールで探索
-        if 'l1_ratio' in self.search_space:
-            min_val, max_val = self.search_space['l1_ratio']
-            params['l1_ratio'] = trial.suggest_float('l1_ratio', min_val, max_val)
+        if "l1_ratio" in self.search_space:
+            min_val, max_val = self.search_space["l1_ratio"]
+            params["l1_ratio"] = trial.suggest_float("l1_ratio", min_val, max_val)
 
         # 固定パラメータ
-        params['init'] = 'nndsvda'
-        params['solver'] = 'cd'
-        params['tol'] = 1e-5
+        params["init"] = "nndsvda"
+        params["solver"] = "cd"
+        params["tol"] = 1e-5
 
         return params
 
     def optimize(
-        self,
-        show_progress_bar: bool = True,
-        callbacks: Optional[list] = None
+        self, show_progress_bar: bool = True, callbacks: Optional[list] = None
     ) -> Tuple[Dict, float]:
         """
         ハイパーパラメータ最適化を実行
@@ -480,8 +506,12 @@ class NMFHyperparameterTuner:
                 logger.info("サンプラー: CMA-ES (Covariance Matrix Adaptation Evolution Strategy)")
                 print("[DEBUG] Sampler: CMA-ES")
             else:
-                logger.warning("CMA-ESが利用できません。cmaesパッケージをインストールしてください。TPEにフォールバックします。")
-                print("[WARNING] CMA-ES is not available. Install 'cmaes' package to use CMA-ES sampler. Falling back to TPE.")
+                logger.warning(
+                    "CMA-ESが利用できません。cmaesパッケージをインストールしてください。TPEにフォールバックします。"
+                )
+                print(
+                    "[WARNING] CMA-ES is not available. Install 'cmaes' package to use CMA-ES sampler. Falling back to TPE."
+                )
                 sampler_instance = TPESampler(seed=self.random_state)
                 print("[DEBUG] Sampler: TPE (fallback)")
         else:
@@ -492,8 +522,7 @@ class NMFHyperparameterTuner:
         # Studyを作成
         print("[DEBUG] Creating Optuna study...")
         self.study = optuna.create_study(
-            direction='minimize',  # 再構成誤差を最小化
-            sampler=sampler_instance
+            direction="minimize", sampler=sampler_instance  # 再構成誤差を最小化
         )
         print("[DEBUG] Study created successfully")
 
@@ -501,8 +530,10 @@ class NMFHyperparameterTuner:
         all_callbacks = callbacks or []
         if self.progress_callback:
             print("[DEBUG] Adding progress callback")
+
             def progress_wrapper(study, trial):
                 self.progress_callback(trial, study)
+
             all_callbacks.append(progress_wrapper)
 
         # 最適化実行
@@ -514,13 +545,14 @@ class NMFHyperparameterTuner:
                 timeout=self.timeout,
                 n_jobs=self.n_jobs,
                 show_progress_bar=show_progress_bar,
-                callbacks=all_callbacks if all_callbacks else None
+                callbacks=all_callbacks if all_callbacks else None,
             )
             print(f"[DEBUG] Study.optimize completed. Total trials: {len(self.study.trials)}")
         except ModuleNotFoundError as e:
             # CMA-ES実行時にcmaesパッケージがない場合、TPEで再試行
             if self.sampler == "cmaes" and "cmaes" in str(e):
                 import traceback
+
                 print(f"\n{'='*80}")
                 print(f"⚠️  CMA-ES サンプラーが利用できません")
                 print(f"{'='*80}")
@@ -533,10 +565,7 @@ class NMFHyperparameterTuner:
                 # TPEサンプラーでStudyを再作成
                 print("[DEBUG] Creating new study with TPE sampler...")
                 sampler_instance = TPESampler(seed=self.random_state)
-                self.study = optuna.create_study(
-                    direction='minimize',
-                    sampler=sampler_instance
-                )
+                self.study = optuna.create_study(direction="minimize", sampler=sampler_instance)
                 self.sampler = "tpe"  # サンプラー情報を更新
                 print("[DEBUG] Study recreated with TPE sampler")
 
@@ -548,13 +577,16 @@ class NMFHyperparameterTuner:
                     timeout=self.timeout,
                     n_jobs=self.n_jobs,
                     show_progress_bar=show_progress_bar,
-                    callbacks=all_callbacks if all_callbacks else None
+                    callbacks=all_callbacks if all_callbacks else None,
                 )
-                print(f"[DEBUG] Study.optimize completed with TPE. Total trials: {len(self.study.trials)}")
+                print(
+                    f"[DEBUG] Study.optimize completed with TPE. Total trials: {len(self.study.trials)}"
+                )
             else:
                 raise
         except Exception as e:
             import traceback
+
             print(f"[ERROR] Study.optimize failed: {type(e).__name__}: {e}")
             print(f"[ERROR] Traceback:\n{traceback.format_exc()}")
             logger.error(f"Study.optimize failed: {e}")
@@ -589,9 +621,9 @@ class NMFHyperparameterTuner:
 
         # 固定パラメータを追加
         params = self.best_params.copy()
-        params['init'] = 'nndsvda'
-        params['solver'] = 'cd'
-        params['tol'] = 1e-5
+        params["init"] = "nndsvda"
+        params["solver"] = "cd"
+        params["tol"] = 1e-5
 
         logger.info(f"最良モデルの学習: params={params}, random_state={self.random_state}")
 
@@ -602,11 +634,13 @@ class NMFHyperparameterTuner:
             early_stopping=self.enable_early_stopping,
             early_stopping_patience=self.early_stopping_patience,
             early_stopping_min_delta=1e-5,
-            early_stopping_batch_size=self.early_stopping_batch_size
+            early_stopping_batch_size=self.early_stopping_batch_size,
         )
         model.fit(self.skill_matrix)
 
-        logger.info(f"最良モデル学習完了: reconstruction_error={model.get_reconstruction_error():.6f}")
+        logger.info(
+            f"最良モデル学習完了: reconstruction_error={model.get_reconstruction_error():.6f}"
+        )
 
         # Test setが存在する場合、最終評価を実行
         if self.test_matrix is not None:
@@ -638,7 +672,7 @@ class NMFHyperparameterTuner:
         test_error = self._calculate_validation_error(
             model,
             self.skill_matrix,  # Train+Valで学習したモデル
-            self.test_matrix    # Test setで評価
+            self.test_matrix,  # Test setで評価
         )
 
         logger.info(f"Test set reconstruction error: {test_error:.6f}")
@@ -658,7 +692,7 @@ class NMFHyperparameterTuner:
         trials_df = self.study.trials_dataframe()
         return trials_df
 
-    def plot_optimization_history(self) -> 'plotly.graph_objects.Figure':
+    def plot_optimization_history(self) -> "plotly.graph_objects.Figure":
         """
         最適化履歴をプロット（Plotly版）
 
@@ -676,29 +710,33 @@ class NMFHyperparameterTuner:
             fig = go.Figure()
 
             # 各試行の再構成誤差
-            fig.add_trace(go.Scatter(
-                x=trials_df['number'],
-                y=trials_df['value'],
-                mode='markers',
-                name='各試行',
-                marker=dict(size=8, opacity=0.6)
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=trials_df["number"],
+                    y=trials_df["value"],
+                    mode="markers",
+                    name="各試行",
+                    marker=dict(size=8, opacity=0.6),
+                )
+            )
 
             # ベストバリューの推移
-            best_values = trials_df['value'].cummin()
-            fig.add_trace(go.Scatter(
-                x=trials_df['number'],
-                y=best_values,
-                mode='lines',
-                name='最良値の推移',
-                line=dict(color='red', width=2)
-            ))
+            best_values = trials_df["value"].cummin()
+            fig.add_trace(
+                go.Scatter(
+                    x=trials_df["number"],
+                    y=best_values,
+                    mode="lines",
+                    name="最良値の推移",
+                    line=dict(color="red", width=2),
+                )
+            )
 
             fig.update_layout(
-                title='ハイパーパラメータ最適化の履歴',
-                xaxis_title='Trial',
-                yaxis_title='再構成誤差',
-                height=500
+                title="ハイパーパラメータ最適化の履歴",
+                xaxis_title="Trial",
+                yaxis_title="再構成誤差",
+                height=500,
             )
 
             return fig
@@ -707,7 +745,7 @@ class NMFHyperparameterTuner:
             logger.warning("Plotlyがインストールされていません。")
             return None
 
-    def plot_param_importances(self) -> 'plotly.graph_objects.Figure':
+    def plot_param_importances(self) -> "plotly.graph_objects.Figure":
         """
         パラメータの重要度をプロット
 
@@ -723,17 +761,15 @@ class NMFHyperparameterTuner:
             # パラメータの重要度を計算
             importances = optuna.importance.get_param_importances(self.study)
 
-            fig = go.Figure(go.Bar(
-                x=list(importances.values()),
-                y=list(importances.keys()),
-                orientation='h'
-            ))
+            fig = go.Figure(
+                go.Bar(x=list(importances.values()), y=list(importances.keys()), orientation="h")
+            )
 
             fig.update_layout(
-                title='パラメータの重要度',
-                xaxis_title='重要度',
-                yaxis_title='パラメータ',
-                height=400
+                title="パラメータの重要度",
+                xaxis_title="重要度",
+                yaxis_title="パラメータ",
+                height=400,
             )
 
             return fig
@@ -752,7 +788,7 @@ def tune_nmf_hyperparameters_from_config(
     custom_timeout: Optional[int] = None,
     custom_search_space: Optional[Dict] = None,
     custom_sampler: Optional[str] = None,
-    progress_callback: Optional[Callable] = None
+    progress_callback: Optional[Callable] = None,
 ) -> Tuple:
     """
     Configを使ってハイパーパラメータチューニングを実行
@@ -776,20 +812,20 @@ def tune_nmf_hyperparameters_from_config(
 
     tuner = NMFHyperparameterTuner(
         skill_matrix=skill_matrix,
-        n_trials=custom_n_trials or optuna_params['n_trials'],
-        timeout=custom_timeout or optuna_params['timeout'],
-        n_jobs=optuna_params['n_jobs'],
-        random_state=config.MF_PARAMS['random_state'],
-        search_space=custom_search_space or optuna_params['search_space'],
-        use_cross_validation=optuna_params.get('use_cross_validation', True),
-        n_folds=optuna_params.get('n_folds', 3),
+        n_trials=custom_n_trials or optuna_params["n_trials"],
+        timeout=custom_timeout or optuna_params["timeout"],
+        n_jobs=optuna_params["n_jobs"],
+        random_state=config.MF_PARAMS["random_state"],
+        search_space=custom_search_space or optuna_params["search_space"],
+        use_cross_validation=optuna_params.get("use_cross_validation", True),
+        n_folds=optuna_params.get("n_folds", 3),
         sampler=custom_sampler or "tpe",
         progress_callback=progress_callback,
-        use_time_series_split=optuna_params.get('use_time_series_split', True),
-        test_size=optuna_params.get('test_size', 0.15),
-        enable_early_stopping=optuna_params.get('enable_early_stopping', True),
-        early_stopping_patience=optuna_params.get('early_stopping_patience', 5),
-        early_stopping_batch_size=optuna_params.get('early_stopping_batch_size', 50)
+        use_time_series_split=optuna_params.get("use_time_series_split", True),
+        test_size=optuna_params.get("test_size", 0.15),
+        enable_early_stopping=optuna_params.get("enable_early_stopping", True),
+        early_stopping_patience=optuna_params.get("early_stopping_patience", 5),
+        early_stopping_batch_size=optuna_params.get("early_stopping_batch_size", 50),
     )
 
     best_params, best_value = tuner.optimize(show_progress_bar=show_progress_bar)

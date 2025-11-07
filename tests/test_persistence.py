@@ -13,14 +13,14 @@ from skillnote_recommendation.core.persistence.database import DatabaseManager
 from skillnote_recommendation.core.persistence.repository import (
     UserRepository,
     RecommendationHistoryRepository,
-    ModelRepository
+    ModelRepository,
 )
 from skillnote_recommendation.core.persistence.session_manager import SessionManager
 from skillnote_recommendation.core.persistence.model_storage import ModelStorage
 from skillnote_recommendation.core.persistence.models import (
     User,
     RecommendationHistory,
-    ModelMetadata
+    ModelMetadata,
 )
 
 
@@ -73,6 +73,7 @@ def model_storage(temp_db):
 
     # Cleanup
     import shutil
+
     shutil.rmtree(temp_dir)
 
 
@@ -82,9 +83,7 @@ class TestUserRepository:
     def test_create_user(self, user_repo):
         """Test creating a new user."""
         user = user_repo.create_user(
-            username="testuser",
-            email="test@example.com",
-            settings={"theme": "dark"}
+            username="testuser", email="test@example.com", settings={"theme": "dark"}
         )
 
         assert user.user_id is not None
@@ -143,11 +142,9 @@ class TestRecommendationHistoryRepository:
             member_code="M001",
             member_name="Test Member",
             method="nmf",
-            recommendations=[
-                {"competence_code": "C001", "priority_score": 0.9}
-            ],
+            recommendations=[{"competence_code": "C001", "priority_score": 0.9}],
             parameters={"top_n": 10},
-            execution_time=1.5
+            execution_time=1.5,
         )
 
         created_history = history_repo.create_history(history)
@@ -168,7 +165,7 @@ class TestRecommendationHistoryRepository:
                 member_code=f"M00{i}",
                 member_name=f"Member {i}",
                 method="nmf",
-                recommendations=[]
+                recommendations=[],
             )
             history_repo.create_history(history)
 
@@ -189,7 +186,7 @@ class TestRecommendationHistoryRepository:
                 member_code="M001" if i % 2 == 0 else "M002",
                 member_name=f"Member {i}",
                 method="nmf",
-                recommendations=[]
+                recommendations=[],
             )
             history_repo.create_history(history)
 
@@ -212,7 +209,7 @@ class TestModelRepository:
             parameters={"n_components": 10},
             metrics={"error": 0.05},
             file_path="/path/to/model.pkl",
-            data_hash="abc123"
+            data_hash="abc123",
         )
 
         created_metadata = model_repo.create_model(metadata)
@@ -230,7 +227,7 @@ class TestModelRepository:
                 model_id=f"model_{i}",
                 user_id=user.user_id,
                 model_type="nmf",
-                file_path=f"/path/to/model_{i}.pkl"
+                file_path=f"/path/to/model_{i}.pkl",
             )
             model_repo.create_model(metadata)
 
@@ -244,13 +241,14 @@ class TestModelRepository:
 
         # Create models with different timestamps
         import time
+
         for i in range(3):
             metadata = ModelMetadata(
                 model_id=f"model_{i}",
                 user_id=user.user_id,
                 model_type="nmf",
                 file_path=f"/path/to/model_{i}.pkl",
-                data_hash="abc123"
+                data_hash="abc123",
             )
             model_repo.create_model(metadata)
             time.sleep(0.01)  # Ensure different timestamps
@@ -281,10 +279,7 @@ class TestSessionManager:
         session = session_manager.create_session(user.user_id)
 
         session_manager.update_session_state(
-            session.session_id,
-            data_loaded=True,
-            model_trained=True,
-            current_model_id="model_001"
+            session.session_id, data_loaded=True, model_trained=True, current_model_id="model_001"
         )
 
         updated_session = session_manager.get_session(session.session_id)
@@ -311,7 +306,7 @@ class TestModelStorage:
             model_type="test",
             parameters={"param": 1},
             metrics={"metric": 0.5},
-            description="Test model"
+            description="Test model",
         )
 
         assert metadata.model_id is not None
@@ -329,10 +324,7 @@ class TestModelStorage:
         user = user_repo.create_user("testuser")
 
         # Create training data
-        training_data = pd.DataFrame({
-            "col1": [1, 2, 3],
-            "col2": [4, 5, 6]
-        })
+        training_data = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
 
         # Save multiple models
         for i in range(3):
@@ -343,14 +335,12 @@ class TestModelStorage:
                 model_type="test",
                 parameters={},
                 metrics={},
-                training_data=training_data
+                training_data=training_data,
             )
 
         # Load latest
         loaded_model, metadata = model_storage.load_latest_model(
-            user_id=user.user_id,
-            model_type="test",
-            training_data=training_data
+            user_id=user.user_id, model_type="test", training_data=training_data
         )
 
         assert loaded_model is not None
@@ -363,11 +353,7 @@ class TestModelStorage:
         # Save model
         model = {"test": "data"}
         metadata = model_storage.save_model(
-            model=model,
-            user_id=user.user_id,
-            model_type="test",
-            parameters={},
-            metrics={}
+            model=model, user_id=user.user_id, model_type="test", parameters={}, metrics={}
         )
 
         model_id = metadata.model_id

@@ -26,10 +26,7 @@ class UserRepository:
         self.db = db_manager
 
     def create_user(
-        self,
-        username: str,
-        email: Optional[str] = None,
-        settings: Optional[Dict[str, Any]] = None
+        self, username: str, email: Optional[str] = None, settings: Optional[Dict[str, Any]] = None
     ) -> User:
         """
         Create a new user.
@@ -54,7 +51,7 @@ class UserRepository:
             username,
             email,
             created_at.isoformat(),
-            self.db.serialize_json(settings or {})
+            self.db.serialize_json(settings or {}),
         )
 
         self.db.execute_insert(query, params)
@@ -64,7 +61,7 @@ class UserRepository:
             username=username,
             email=email,
             created_at=created_at,
-            settings=settings or {}
+            settings=settings or {},
         )
         logger.info(f"Created user: {username} ({user_id})")
         return user
@@ -92,7 +89,7 @@ class UserRepository:
             email=row["email"],
             created_at=datetime.fromisoformat(row["created_at"]),
             last_login=datetime.fromisoformat(row["last_login"]) if row["last_login"] else None,
-            settings=self.db.deserialize_json(row["settings"])
+            settings=self.db.deserialize_json(row["settings"]),
         )
 
     def get_user_by_username(self, username: str) -> Optional[User]:
@@ -118,7 +115,7 @@ class UserRepository:
             email=row["email"],
             created_at=datetime.fromisoformat(row["created_at"]),
             last_login=datetime.fromisoformat(row["last_login"]) if row["last_login"] else None,
-            settings=self.db.deserialize_json(row["settings"])
+            settings=self.db.deserialize_json(row["settings"]),
         )
 
     def update_last_login(self, user_id: str):
@@ -155,14 +152,18 @@ class UserRepository:
 
         users = []
         for row in results:
-            users.append(User(
-                user_id=row["user_id"],
-                username=row["username"],
-                email=row["email"],
-                created_at=datetime.fromisoformat(row["created_at"]),
-                last_login=datetime.fromisoformat(row["last_login"]) if row["last_login"] else None,
-                settings=self.db.deserialize_json(row["settings"])
-            ))
+            users.append(
+                User(
+                    user_id=row["user_id"],
+                    username=row["username"],
+                    email=row["email"],
+                    created_at=datetime.fromisoformat(row["created_at"]),
+                    last_login=(
+                        datetime.fromisoformat(row["last_login"]) if row["last_login"] else None
+                    ),
+                    settings=self.db.deserialize_json(row["settings"]),
+                )
+            )
         return users
 
 
@@ -209,7 +210,7 @@ class RecommendationHistoryRepository:
             self.db.serialize_json(history.recommendations),
             self.db.serialize_json(history.reference_persons),
             self.db.serialize_json(history.parameters),
-            history.execution_time
+            history.execution_time,
         )
 
         self.db.execute_insert(query, params)
@@ -236,10 +237,7 @@ class RecommendationHistoryRepository:
         return self._row_to_history(row)
 
     def get_user_history(
-        self,
-        user_id: str,
-        limit: Optional[int] = None,
-        offset: int = 0
+        self, user_id: str, limit: Optional[int] = None, offset: int = 0
     ) -> List[RecommendationHistory]:
         """
         Get recommendation history for a user.
@@ -265,10 +263,7 @@ class RecommendationHistoryRepository:
         return [self._row_to_history(row) for row in results]
 
     def get_member_history(
-        self,
-        user_id: str,
-        member_code: str,
-        limit: Optional[int] = None
+        self, user_id: str, member_code: str, limit: Optional[int] = None
     ) -> List[RecommendationHistory]:
         """
         Get recommendation history for a specific member.
@@ -319,7 +314,7 @@ class RecommendationHistoryRepository:
             recommendations=self.db.deserialize_json(row["recommendations"]),
             reference_persons=self.db.deserialize_json(row["reference_persons"]),
             parameters=self.db.deserialize_json(row["parameters"]),
-            execution_time=row["execution_time"]
+            execution_time=row["execution_time"],
         )
 
 
@@ -363,7 +358,7 @@ class ModelRepository:
             self.db.serialize_json(metadata.metrics),
             metadata.file_path,
             metadata.data_hash,
-            metadata.description
+            metadata.description,
         )
 
         self.db.execute_insert(query, params)
@@ -390,9 +385,7 @@ class ModelRepository:
         return self._row_to_metadata(row)
 
     def get_user_models(
-        self,
-        user_id: str,
-        model_type: Optional[str] = None
+        self, user_id: str, model_type: Optional[str] = None
     ) -> List[ModelMetadata]:
         """
         Get models for a user.
@@ -422,10 +415,7 @@ class ModelRepository:
         return [self._row_to_metadata(row) for row in results]
 
     def get_latest_model(
-        self,
-        user_id: str,
-        model_type: str,
-        data_hash: Optional[str] = None
+        self, user_id: str, model_type: str, data_hash: Optional[str] = None
     ) -> Optional[ModelMetadata]:
         """
         Get the latest model for a user.
@@ -485,5 +475,5 @@ class ModelRepository:
             metrics=self.db.deserialize_json(row["metrics"]),
             file_path=row["file_path"],
             data_hash=row["data_hash"],
-            description=row["description"]
+            description=row["description"],
         )

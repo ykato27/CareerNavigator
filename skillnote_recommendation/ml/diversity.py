@@ -19,10 +19,9 @@ from collections import defaultdict
 class DiversityReranker:
     """多様性を考慮した再ランキングクラス"""
 
-    def __init__(self,
-                 lambda_relevance: float = 0.7,
-                 category_weight: float = 0.5,
-                 type_weight: float = 0.3):
+    def __init__(
+        self, lambda_relevance: float = 0.7, category_weight: float = 0.5, type_weight: float = 0.3
+    ):
         """
         初期化
 
@@ -35,11 +34,13 @@ class DiversityReranker:
         self.category_weight = category_weight
         self.type_weight = type_weight
 
-    def rerank_mmr(self,
-                   candidates: List[Tuple[str, float]],
-                   competence_info: pd.DataFrame,
-                   k: int = 10,
-                   use_position_aware: bool = False) -> List[Tuple[str, float]]:
+    def rerank_mmr(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        use_position_aware: bool = False,
+    ) -> List[Tuple[str, float]]:
         """
         MMR (Maximal Marginal Relevance)による再ランキング（効率化版）
 
@@ -61,7 +62,7 @@ class DiversityReranker:
             return []
 
         # 力量情報をマッピング
-        competence_dict = competence_info.set_index('力量コード').to_dict('index')
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
 
         # 類似度のキャッシュ
         similarity_cache = {}
@@ -71,8 +72,7 @@ class DiversityReranker:
             key = tuple(sorted([code1, code2]))
             if key not in similarity_cache:
                 similarity_cache[key] = self._calculate_similarity(
-                    competence_dict.get(code1, {}),
-                    competence_dict.get(code2, {})
+                    competence_dict.get(code1, {}), competence_dict.get(code2, {})
                 )
             return similarity_cache[key]
 
@@ -102,14 +102,12 @@ class DiversityReranker:
                 else:
                     # 選択済みアイテムとの最大類似度（キャッシュ使用）
                     max_similarity = max(
-                        cached_similarity(comp_code, sel_code)
-                        for sel_code, _ in selected
+                        cached_similarity(comp_code, sel_code) for sel_code, _ in selected
                     )
                     diversity_score = 1.0 - max_similarity
 
                 # MMRスコア（position-aware lambdaを使用）
-                mmr_score = (current_lambda * rel_score +
-                            (1 - current_lambda) * diversity_score)
+                mmr_score = current_lambda * rel_score + (1 - current_lambda) * diversity_score
 
                 if mmr_score > best_mmr_score:
                     best_mmr_score = mmr_score
@@ -122,11 +120,13 @@ class DiversityReranker:
 
         return selected
 
-    def rerank_category_diversity(self,
-                                  candidates: List[Tuple[str, float]],
-                                  competence_info: pd.DataFrame,
-                                  k: int = 10,
-                                  max_per_category: Optional[int] = None) -> List[Tuple[str, float]]:
+    def rerank_category_diversity(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        max_per_category: Optional[int] = None,
+    ) -> List[Tuple[str, float]]:
         """
         カテゴリ多様性を考慮した再ランキング
 
@@ -143,7 +143,7 @@ class DiversityReranker:
             return []
 
         # 力量情報をマッピング
-        competence_dict = competence_info.set_index('力量コード').to_dict('index')
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
 
         # カテゴリごとのカウント
         category_counts = defaultdict(int)
@@ -155,7 +155,7 @@ class DiversityReranker:
 
             # カテゴリを取得
             comp_info = competence_dict.get(comp_code, {})
-            category = comp_info.get('力量カテゴリー名', 'Unknown')
+            category = comp_info.get("力量カテゴリー名", "Unknown")
 
             # カテゴリごとの制限をチェック
             if max_per_category is None or category_counts[category] < max_per_category:
@@ -172,11 +172,13 @@ class DiversityReranker:
 
         return selected[:k]
 
-    def rerank_type_diversity(self,
-                              candidates: List[Tuple[str, float]],
-                              competence_info: pd.DataFrame,
-                              k: int = 10,
-                              type_ratios: Optional[Dict[str, float]] = None) -> List[Tuple[str, float]]:
+    def rerank_type_diversity(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        type_ratios: Optional[Dict[str, float]] = None,
+    ) -> List[Tuple[str, float]]:
         """
         タイプ多様性を考慮した再ランキング（SKILL/EDUCATION/LICENSE）
 
@@ -194,16 +196,16 @@ class DiversityReranker:
 
         # デフォルトの比率
         if type_ratios is None:
-            type_ratios = {'SKILL': 0.5, 'EDUCATION': 0.3, 'LICENSE': 0.2}
+            type_ratios = {"SKILL": 0.5, "EDUCATION": 0.3, "LICENSE": 0.2}
 
         # 力量情報をマッピング
-        competence_dict = competence_info.set_index('力量コード').to_dict('index')
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
 
         # 候補をタイプごとに分類
         candidates_by_type = defaultdict(list)
         for comp_code, score in candidates:
             comp_info = competence_dict.get(comp_code, {})
-            comp_type = comp_info.get('力量タイプ', 'SKILL')
+            comp_type = comp_info.get("力量タイプ", "SKILL")
             candidates_by_type[comp_type].append((comp_code, score))
 
         # 各タイプから目標比率に従って選択
@@ -222,20 +224,22 @@ class DiversityReranker:
                 for comp_code, score in candidates
                 if (comp_code, score) not in selected
             ]
-            selected.extend(remaining[:k - len(selected)])
+            selected.extend(remaining[: k - len(selected)])
 
         # スコアでソート
         selected.sort(key=lambda x: x[1], reverse=True)
 
         return selected[:k]
 
-    def rerank_hybrid(self,
-                     candidates: List[Tuple[str, float]],
-                     competence_info: pd.DataFrame,
-                     k: int = 10,
-                     max_per_category: Optional[int] = 3,
-                     type_ratios: Optional[Dict[str, float]] = None,
-                     use_position_aware: bool = True) -> List[Tuple[str, float]]:
+    def rerank_hybrid(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        max_per_category: Optional[int] = 3,
+        type_ratios: Optional[Dict[str, float]] = None,
+        use_position_aware: bool = True,
+    ) -> List[Tuple[str, float]]:
         """
         ハイブリッド再ランキング（MMR + カテゴリ多様性 + タイプ多様性）
 
@@ -285,11 +289,11 @@ class DiversityReranker:
         similarity = 0.0
 
         # カテゴリが同じ
-        if comp1.get('力量カテゴリー名') == comp2.get('力量カテゴリー名'):
+        if comp1.get("力量カテゴリー名") == comp2.get("力量カテゴリー名"):
             similarity += self.category_weight
 
         # タイプが同じ
-        if comp1.get('力量タイプ') == comp2.get('力量タイプ'):
+        if comp1.get("力量タイプ") == comp2.get("力量タイプ"):
             similarity += self.type_weight
 
         # 正規化
@@ -299,10 +303,12 @@ class DiversityReranker:
 
         return min(similarity, 1.0)
 
-    def calculate_diversity_metrics(self,
-                                    recommendations: List[Tuple[str, float]],
-                                    competence_info: pd.DataFrame,
-                                    all_competences: Optional[List[str]] = None) -> Dict[str, float]:
+    def calculate_diversity_metrics(
+        self,
+        recommendations: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        all_competences: Optional[List[str]] = None,
+    ) -> Dict[str, float]:
         """
         推薦結果の多様性指標を計算
 
@@ -316,22 +322,22 @@ class DiversityReranker:
         """
         if len(recommendations) == 0:
             return {
-                'category_diversity': 0.0,
-                'type_diversity': 0.0,
-                'intra_list_diversity': 0.0,
-                'intra_list_similarity': 0.0,
-                'coverage': 0.0
+                "category_diversity": 0.0,
+                "type_diversity": 0.0,
+                "intra_list_diversity": 0.0,
+                "intra_list_similarity": 0.0,
+                "coverage": 0.0,
             }
 
-        competence_dict = competence_info.set_index('力量コード').to_dict('index')
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
 
         # カテゴリ多様性：ユニークなカテゴリ数 / 推薦数
         categories = set()
         types = set()
         for comp_code, _ in recommendations:
             comp_info = competence_dict.get(comp_code, {})
-            categories.add(comp_info.get('力量カテゴリー名', 'Unknown'))
-            types.add(comp_info.get('力量タイプ', 'SKILL'))
+            categories.add(comp_info.get("力量カテゴリー名", "Unknown"))
+            types.add(comp_info.get("力量タイプ", "SKILL"))
 
         category_diversity = len(categories) / len(recommendations)
         type_diversity = len(types) / len(recommendations)
@@ -358,18 +364,18 @@ class DiversityReranker:
             coverage = 0.0
 
         return {
-            'category_diversity': category_diversity,
-            'type_diversity': type_diversity,
-            'intra_list_diversity': intra_list_diversity,
-            'intra_list_similarity': intra_list_similarity,
-            'coverage': coverage,
-            'unique_categories': len(categories),
-            'unique_types': len(types)
+            "category_diversity": category_diversity,
+            "type_diversity": type_diversity,
+            "intra_list_diversity": intra_list_diversity,
+            "intra_list_similarity": intra_list_similarity,
+            "coverage": coverage,
+            "unique_categories": len(categories),
+            "unique_types": len(types),
         }
 
-    def calculate_coverage(self,
-                          all_recommendations: List[List[Tuple[str, float]]],
-                          all_competences: List[str]) -> float:
+    def calculate_coverage(
+        self, all_recommendations: List[List[Tuple[str, float]]], all_competences: List[str]
+    ) -> float:
         """
         カバレッジを計算（全ユーザーの推薦結果を考慮）
 
@@ -387,12 +393,14 @@ class DiversityReranker:
 
         return len(recommended_comps) / len(all_competences) if all_competences else 0.0
 
-    def calculate_serendipity(self,
-                             recommendations: List[Tuple[str, float]],
-                             member_competence: pd.DataFrame,
-                             member_code: str,
-                             competence_info: pd.DataFrame,
-                             popularity_threshold: float = 0.3) -> float:
+    def calculate_serendipity(
+        self,
+        recommendations: List[Tuple[str, float]],
+        member_competence: pd.DataFrame,
+        member_code: str,
+        competence_info: pd.DataFrame,
+        popularity_threshold: float = 0.3,
+    ) -> float:
         """
         セレンディピティ（意外だが有用な推薦）を計算
 
@@ -415,45 +423,40 @@ class DiversityReranker:
             return 0.0
 
         # ユーザーの既習得力量を取得
-        acquired_comps = member_competence[
-            member_competence['メンバーコード'] == member_code
-        ]['力量コード'].tolist()
+        acquired_comps = member_competence[member_competence["メンバーコード"] == member_code][
+            "力量コード"
+        ].tolist()
 
         if not acquired_comps:
             # 既習得力量がない場合、全て意外とみなす
             return 1.0
 
         # 既習得力量のカテゴリとタイプを取得
-        competence_dict = competence_info.set_index('力量コード').to_dict('index')
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
 
         acquired_categories = set()
         acquired_types = set()
         for comp_code in acquired_comps:
             comp_info = competence_dict.get(comp_code, {})
-            acquired_categories.add(comp_info.get('力量カテゴリー名'))
-            acquired_types.add(comp_info.get('力量タイプ'))
+            acquired_categories.add(comp_info.get("力量カテゴリー名"))
+            acquired_types.add(comp_info.get("力量タイプ"))
 
         # 人気度を計算（全メンバーでの習得率）
         popularity_scores = {}
-        all_members = member_competence['メンバーコード'].nunique()
-        for comp_code in competence_info['力量コード']:
-            member_count = len(member_competence[
-                member_competence['力量コード'] == comp_code
-            ])
+        all_members = member_competence["メンバーコード"].nunique()
+        for comp_code in competence_info["力量コード"]:
+            member_count = len(member_competence[member_competence["力量コード"] == comp_code])
             popularity_scores[comp_code] = member_count / all_members if all_members > 0 else 0.0
 
         # セレンディピティをカウント
         serendipitous_count = 0
         for comp_code, score in recommendations:
             comp_info = competence_dict.get(comp_code, {})
-            category = comp_info.get('力量カテゴリー名')
-            comp_type = comp_info.get('力量タイプ')
+            category = comp_info.get("力量カテゴリー名")
+            comp_type = comp_info.get("力量タイプ")
 
             # 意外性の判定：既習得力量と異なるカテゴリまたはタイプ
-            is_unexpected = (
-                category not in acquired_categories or
-                comp_type not in acquired_types
-            )
+            is_unexpected = category not in acquired_categories or comp_type not in acquired_types
 
             # 人気度の判定：適度に人気（あまりにマイナーすぎない）
             popularity = popularity_scores.get(comp_code, 0.0)

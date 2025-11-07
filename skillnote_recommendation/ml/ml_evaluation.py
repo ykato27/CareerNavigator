@@ -37,7 +37,7 @@ class MLRecommendationEvaluator:
         top_k: int = 10,
         use_temporal_split: bool = True,
         random_state: int = 42,
-        **mf_params
+        **mf_params,
     ) -> Dict[str, float]:
         """
         Hold-out評価を実行
@@ -60,18 +60,15 @@ class MLRecommendationEvaluator:
         logger.info("=" * 80)
 
         # データ分割
-        if use_temporal_split and '取得日' in member_competence.columns:
+        if use_temporal_split and "取得日" in member_competence.columns:
             logger.info("時系列分割を使用")
             train_data, test_data = self.base_evaluator.temporal_train_test_split(
-                member_competence,
-                train_ratio=train_ratio
+                member_competence, train_ratio=train_ratio
             )
         else:
             logger.info("ランダム分割を使用")
             train_data, test_data = self.base_evaluator.random_user_split(
-                member_competence,
-                train_ratio=train_ratio,
-                random_state=random_state
+                member_competence, train_ratio=train_ratio, random_state=random_state
             )
 
         logger.info(f"訓練データ: {len(train_data)}件")
@@ -84,7 +81,7 @@ class MLRecommendationEvaluator:
             competence_master=competence_master,
             member_master=member_master,
             use_preprocessing=True,
-            use_tuning=False
+            use_tuning=False,
         )
 
         # 評価実行
@@ -94,13 +91,13 @@ class MLRecommendationEvaluator:
             train_data=train_data,
             test_data=test_data,
             competence_master=competence_master,
-            top_k=top_k
+            top_k=top_k,
         )
 
         # モデル固有の情報を追加
-        metrics['reconstruction_error'] = ml_recommender.mf_model.get_reconstruction_error()
-        metrics['n_components'] = ml_recommender.mf_model.n_components
-        metrics['n_iterations'] = ml_recommender.mf_model.model.n_iter_
+        metrics["reconstruction_error"] = ml_recommender.mf_model.get_reconstruction_error()
+        metrics["n_components"] = ml_recommender.mf_model.n_components
+        metrics["n_iterations"] = ml_recommender.mf_model.model.n_iter_
 
         return metrics
 
@@ -113,7 +110,7 @@ class MLRecommendationEvaluator:
         top_k: int = 10,
         use_temporal: bool = True,
         random_state: int = 42,
-        **mf_params
+        **mf_params,
     ) -> Tuple[Dict[str, float], List[Dict[str, float]]]:
         """
         交差検証による評価
@@ -137,12 +134,12 @@ class MLRecommendationEvaluator:
 
         fold_metrics = []
 
-        if use_temporal and '取得日' in member_competence.columns:
+        if use_temporal and "取得日" in member_competence.columns:
             # 時系列交差検証
             df = member_competence.copy()
-            df['取得日_dt'] = pd.to_datetime(df['取得日'], errors='coerce')
-            df = df[df['取得日_dt'].notna()].sort_values('取得日_dt')
-            df = df.drop(columns=['取得日_dt'])
+            df["取得日_dt"] = pd.to_datetime(df["取得日"], errors="coerce")
+            df = df[df["取得日_dt"].notna()].sort_values("取得日_dt")
+            df = df.drop(columns=["取得日_dt"])
 
             total_size = len(df)
             fold_size = total_size // (n_folds + 1)
@@ -161,8 +158,7 @@ class MLRecommendationEvaluator:
 
                 # モデル学習と評価
                 metrics = self._train_and_evaluate_fold(
-                    train_data, test_data, competence_master,
-                    member_master, top_k, i + 1
+                    train_data, test_data, competence_master, member_master, top_k, i + 1
                 )
                 fold_metrics.append(metrics)
         else:
@@ -175,14 +171,13 @@ class MLRecommendationEvaluator:
                 test_data = member_competence.iloc[test_idx]
 
                 metrics = self._train_and_evaluate_fold(
-                    train_data, test_data, competence_master,
-                    member_master, top_k, i + 1
+                    train_data, test_data, competence_master, member_master, top_k, i + 1
                 )
                 fold_metrics.append(metrics)
 
         # 平均メトリクスを計算
         avg_metrics = self._average_metrics(fold_metrics)
-        avg_metrics['n_folds'] = len(fold_metrics)
+        avg_metrics["n_folds"] = len(fold_metrics)
 
         logger.info("\n" + "=" * 80)
         logger.info("交差検証完了")
@@ -197,7 +192,7 @@ class MLRecommendationEvaluator:
         competence_master: pd.DataFrame,
         member_master: pd.DataFrame,
         top_k: int,
-        fold_num: int
+        fold_num: int,
     ) -> Dict[str, float]:
         """
         1つのfoldでモデルを学習して評価
@@ -219,7 +214,7 @@ class MLRecommendationEvaluator:
             competence_master=competence_master,
             member_master=member_master,
             use_preprocessing=True,
-            use_tuning=False
+            use_tuning=False,
         )
 
         # 評価
@@ -228,15 +223,17 @@ class MLRecommendationEvaluator:
             train_data=train_data,
             test_data=test_data,
             competence_master=competence_master,
-            top_k=top_k
+            top_k=top_k,
         )
 
-        metrics['fold'] = fold_num
-        metrics['train_size'] = len(train_data)
-        metrics['test_size'] = len(test_data)
-        metrics['reconstruction_error'] = ml_recommender.mf_model.get_reconstruction_error()
+        metrics["fold"] = fold_num
+        metrics["train_size"] = len(train_data)
+        metrics["test_size"] = len(test_data)
+        metrics["reconstruction_error"] = ml_recommender.mf_model.get_reconstruction_error()
 
-        logger.info(f"Fold {fold_num} 完了: Precision@{top_k}={metrics.get(f'precision@{top_k}', 0):.4f}")
+        logger.info(
+            f"Fold {fold_num} 完了: Precision@{top_k}={metrics.get(f'precision@{top_k}', 0):.4f}"
+        )
 
         return metrics
 
@@ -246,7 +243,7 @@ class MLRecommendationEvaluator:
         train_data: pd.DataFrame,
         test_data: pd.DataFrame,
         competence_master: pd.DataFrame,
-        top_k: int
+        top_k: int,
     ) -> Dict[str, float]:
         """
         MLRecommenderを評価
@@ -262,7 +259,7 @@ class MLRecommendationEvaluator:
             評価メトリクス
         """
         # 評価対象メンバー
-        member_sample = test_data['メンバーコード'].unique().tolist()
+        member_sample = test_data["メンバーコード"].unique().tolist()
 
         # メトリクス集計用
         precision_scores = []
@@ -276,9 +273,11 @@ class MLRecommendationEvaluator:
 
         for member_code in member_sample:
             # テストデータでの習得力量（正解データ）
-            actual_acquired = test_data[
-                test_data['メンバーコード'] == member_code
-            ]['力量コード'].unique().tolist()
+            actual_acquired = (
+                test_data[test_data["メンバーコード"] == member_code]["力量コード"]
+                .unique()
+                .tolist()
+            )
 
             if len(actual_acquired) == 0:
                 continue
@@ -290,7 +289,7 @@ class MLRecommendationEvaluator:
                 recommendations = ml_recommender.recommend(
                     member_code=member_code,
                     top_n=top_k,
-                    use_diversity=False  # 純粋な精度評価のため多様性オフ
+                    use_diversity=False,  # 純粋な精度評価のため多様性オフ
                 )
 
                 recommended_codes = [rec.competence_code for rec in recommendations]
@@ -308,16 +307,24 @@ class MLRecommendationEvaluator:
                 hits = len(set(recommended_codes) & set(actual_acquired))
                 precision = hits / len(recommended_codes)
                 recall = hits / len(actual_acquired)
-                f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+                f1 = (
+                    2 * (precision * recall) / (precision + recall)
+                    if (precision + recall) > 0
+                    else 0.0
+                )
 
                 precision_scores.append(precision)
                 recall_scores.append(recall)
                 f1_scores.append(f1)
 
                 # NDCG, MRR, AP
-                ndcg = self.base_evaluator._calculate_ndcg(recommended_codes, actual_acquired, top_k)
+                ndcg = self.base_evaluator._calculate_ndcg(
+                    recommended_codes, actual_acquired, top_k
+                )
                 mrr = self.base_evaluator._calculate_mrr(recommended_codes, actual_acquired)
-                ap = self.base_evaluator._calculate_average_precision(recommended_codes, actual_acquired)
+                ap = self.base_evaluator._calculate_average_precision(
+                    recommended_codes, actual_acquired
+                )
 
                 ndcg_scores.append(ndcg)
                 mrr_scores.append(mrr)
@@ -333,31 +340,28 @@ class MLRecommendationEvaluator:
         # 平均を計算
         if total_members == 0:
             return {
-                f'precision@{top_k}': 0.0,
-                f'recall@{top_k}': 0.0,
-                f'ndcg@{top_k}': 0.0,
-                f'f1@{top_k}': 0.0,
-                'hit_rate': 0.0,
-                'mrr': 0.0,
-                f'map@{top_k}': 0.0,
-                'evaluated_members': 0
+                f"precision@{top_k}": 0.0,
+                f"recall@{top_k}": 0.0,
+                f"ndcg@{top_k}": 0.0,
+                f"f1@{top_k}": 0.0,
+                "hit_rate": 0.0,
+                "mrr": 0.0,
+                f"map@{top_k}": 0.0,
+                "evaluated_members": 0,
             }
 
         return {
-            f'precision@{top_k}': np.mean(precision_scores),
-            f'recall@{top_k}': np.mean(recall_scores),
-            f'ndcg@{top_k}': np.mean(ndcg_scores),
-            f'f1@{top_k}': np.mean(f1_scores),
-            'hit_rate': hit_count / total_members,
-            'mrr': np.mean(mrr_scores),
-            f'map@{top_k}': np.mean(ap_scores),
-            'evaluated_members': total_members
+            f"precision@{top_k}": np.mean(precision_scores),
+            f"recall@{top_k}": np.mean(recall_scores),
+            f"ndcg@{top_k}": np.mean(ndcg_scores),
+            f"f1@{top_k}": np.mean(f1_scores),
+            "hit_rate": hit_count / total_members,
+            "mrr": np.mean(mrr_scores),
+            f"map@{top_k}": np.mean(ap_scores),
+            "evaluated_members": total_members,
         }
 
-    def _average_metrics(
-        self,
-        metrics_list: List[Dict[str, float]]
-    ) -> Dict[str, float]:
+    def _average_metrics(self, metrics_list: List[Dict[str, float]]) -> Dict[str, float]:
         """
         複数のメトリクスの平均を計算
 
@@ -372,19 +376,17 @@ class MLRecommendationEvaluator:
 
         avg_metrics = {}
         for key in metrics_list[0].keys():
-            if key in ['fold', 'train_size', 'test_size']:
+            if key in ["fold", "train_size", "test_size"]:
                 continue
             values = [m[key] for m in metrics_list if key in m and not np.isnan(m[key])]
             if values:
                 avg_metrics[key] = np.mean(values)
-                avg_metrics[f'{key}_std'] = np.std(values)
+                avg_metrics[f"{key}_std"] = np.std(values)
 
         return avg_metrics
 
     def print_ml_evaluation_results(
-        self,
-        metrics: Dict[str, float],
-        fold_metrics: Optional[List[Dict[str, float]]] = None
+        self, metrics: Dict[str, float], fold_metrics: Optional[List[Dict[str, float]]] = None
     ):
         """
         ML推薦システムの評価結果を表示
@@ -398,7 +400,7 @@ class MLRecommendationEvaluator:
         logger.info("=" * 80)
 
         # モデル情報
-        if 'n_components' in metrics:
+        if "n_components" in metrics:
             logger.info("\n【モデル情報】")
             logger.info(f"  潜在因子数:       {metrics['n_components']}")
             logger.info(f"  イテレーション数: {metrics.get('n_iterations', 'N/A')}")
@@ -415,15 +417,17 @@ class MLRecommendationEvaluator:
             # K値を取得
             k = None
             for key in metrics.keys():
-                if key.startswith('precision@'):
-                    k = key.split('@')[1]
+                if key.startswith("precision@"):
+                    k = key.split("@")[1]
                     break
 
             if k:
                 logger.info(f"\n  Precision@{k} (各Fold):")
                 for i, m in enumerate(fold_metrics):
                     logger.info(f"    Fold {i+1}: {m.get(f'precision@{k}', 0):.4f}")
-                logger.info(f"  平均: {metrics.get(f'precision@{k}', 0):.4f} " +
-                           f"(±{metrics.get(f'precision@{k}_std', 0):.4f})")
+                logger.info(
+                    f"  平均: {metrics.get(f'precision@{k}', 0):.4f} "
+                    + f"(±{metrics.get(f'precision@{k}_std', 0):.4f})"
+                )
 
         logger.info("\n" + "=" * 80)

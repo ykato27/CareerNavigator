@@ -52,7 +52,7 @@ class DataNormalizer:
         code_str = code_str.strip()
 
         # Normalize full-width to half-width (NFKC normalization)
-        code_str = unicodedata.normalize('NFKC', code_str)
+        code_str = unicodedata.normalize("NFKC", code_str)
 
         return code_str
 
@@ -98,15 +98,13 @@ class DataNormalizer:
 
         text_str = str(text)
         text_str = text_str.strip()
-        text_str = unicodedata.normalize('NFKC', text_str)
+        text_str = unicodedata.normalize("NFKC", text_str)
 
         return text_str
 
     @staticmethod
     def normalize_dataframe_column(
-        df: pd.DataFrame,
-        column: str,
-        normalizer_func: Optional[callable] = None
+        df: pd.DataFrame, column: str, normalizer_func: Optional[callable] = None
     ) -> pd.DataFrame:
         """
         Apply normalization to an entire DataFrame column.

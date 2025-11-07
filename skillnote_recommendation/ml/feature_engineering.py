@@ -20,11 +20,13 @@ class FeatureEngineer:
     推薦に有用な特徴量を抽出する
     """
 
-    def __init__(self,
-                 member_master: pd.DataFrame,
-                 competence_master: pd.DataFrame,
-                 member_competence: pd.DataFrame,
-                 category_hierarchy: Optional[Dict] = None):
+    def __init__(
+        self,
+        member_master: pd.DataFrame,
+        competence_master: pd.DataFrame,
+        member_competence: pd.DataFrame,
+        category_hierarchy: Optional[Dict] = None,
+    ):
         """
         Args:
             member_master: メンバーマスタ (member_code, name, role, grade)
@@ -41,10 +43,10 @@ class FeatureEngineer:
         self._setup_column_mappings()
 
         # エンコーダーの初期化
-        self.role_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-        self.grade_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-        self.category_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-        self.type_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+        self.role_encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        self.grade_encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        self.category_encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        self.type_encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
 
         # フィッティング
         self._fit_encoders()
@@ -56,22 +58,22 @@ class FeatureEngineer:
         self.category_embeddings = self._compute_category_embeddings()
 
         print("\n特徴量エンジニアリング初期化完了")
-        if hasattr(self.role_encoder, 'categories_'):
+        if hasattr(self.role_encoder, "categories_"):
             print(f"  職種数: {len(self.role_encoder.categories_[0])}")
         else:
             print(f"  職種数: 0 (カラムなし)")
 
-        if hasattr(self.grade_encoder, 'categories_'):
+        if hasattr(self.grade_encoder, "categories_"):
             print(f"  等級数: {len(self.grade_encoder.categories_[0])}")
         else:
             print(f"  等級数: 0 (カラムなし)")
 
-        if hasattr(self.category_encoder, 'categories_'):
+        if hasattr(self.category_encoder, "categories_"):
             print(f"  カテゴリ数: {len(self.category_encoder.categories_[0])}")
         else:
             print(f"  カテゴリ数: 0 (カラムなし)")
 
-        if hasattr(self.type_encoder, 'categories_'):
+        if hasattr(self.type_encoder, "categories_"):
             print(f"  力量タイプ数: {len(self.type_encoder.categories_[0])}")
         else:
             print(f"  力量タイプ数: 0 (カラムなし)")
@@ -79,53 +81,79 @@ class FeatureEngineer:
     def _setup_column_mappings(self):
         """カラム名のマッピングを設定（日本語と英語の両方に対応）"""
         # メンバーコード
-        self.member_code_col = 'メンバーコード' if 'メンバーコード' in self.member_competence.columns else 'member_code'
+        self.member_code_col = (
+            "メンバーコード"
+            if "メンバーコード" in self.member_competence.columns
+            else "member_code"
+        )
 
         # 力量コード
-        self.competence_code_col = '力量コード' if '力量コード' in self.member_competence.columns else 'competence_code'
+        self.competence_code_col = (
+            "力量コード" if "力量コード" in self.member_competence.columns else "competence_code"
+        )
 
         # 取得日
-        self.acquired_date_col = '取得日' if '取得日' in self.member_competence.columns else 'acquired_date'
+        self.acquired_date_col = (
+            "取得日" if "取得日" in self.member_competence.columns else "acquired_date"
+        )
 
         # 力量マスタのカラム
-        self.comp_master_code_col = '力量コード' if '力量コード' in self.competence_master.columns else 'competence_code'
-        self.comp_master_type_col = '力量タイプ' if '力量タイプ' in self.competence_master.columns else 'competence_type'
-        self.comp_master_category_col = '力量カテゴリー名' if '力量カテゴリー名' in self.competence_master.columns else 'category'
+        self.comp_master_code_col = (
+            "力量コード" if "力量コード" in self.competence_master.columns else "competence_code"
+        )
+        self.comp_master_type_col = (
+            "力量タイプ" if "力量タイプ" in self.competence_master.columns else "competence_type"
+        )
+        self.comp_master_category_col = (
+            "力量カテゴリー名"
+            if "力量カテゴリー名" in self.competence_master.columns
+            else "category"
+        )
 
         # メンバーマスタのカラム
-        self.member_master_code_col = 'メンバーコード' if 'メンバーコード' in self.member_master.columns else 'member_code'
+        self.member_master_code_col = (
+            "メンバーコード" if "メンバーコード" in self.member_master.columns else "member_code"
+        )
 
     def _fit_encoders(self):
         """エンコーダーをフィッティング"""
         # 職種と等級のエンコーダー（カラムがない場合はダミーデータでfit）
-        if 'role' in self.member_master.columns:
-            roles = self.member_master['role'].fillna('UNKNOWN').values.reshape(-1, 1)
+        if "role" in self.member_master.columns:
+            roles = self.member_master["role"].fillna("UNKNOWN").values.reshape(-1, 1)
             self.role_encoder.fit(roles)
         else:
             # カラムがない場合はダミーでfit
-            self.role_encoder.fit([['UNKNOWN']])
+            self.role_encoder.fit([["UNKNOWN"]])
 
-        if 'grade' in self.member_master.columns:
-            grades = self.member_master['grade'].fillna('UNKNOWN').values.reshape(-1, 1)
+        if "grade" in self.member_master.columns:
+            grades = self.member_master["grade"].fillna("UNKNOWN").values.reshape(-1, 1)
             self.grade_encoder.fit(grades)
         else:
             # カラムがない場合はダミーでfit
-            self.grade_encoder.fit([['UNKNOWN']])
+            self.grade_encoder.fit([["UNKNOWN"]])
 
         # カテゴリと力量タイプのエンコーダー（日本語カラム名にも対応）
         if self.comp_master_category_col in self.competence_master.columns:
-            categories = self.competence_master[self.comp_master_category_col].fillna('UNKNOWN').values.reshape(-1, 1)
+            categories = (
+                self.competence_master[self.comp_master_category_col]
+                .fillna("UNKNOWN")
+                .values.reshape(-1, 1)
+            )
             self.category_encoder.fit(categories)
         else:
             # カラムがない場合はダミーでfit
-            self.category_encoder.fit([['UNKNOWN']])
+            self.category_encoder.fit([["UNKNOWN"]])
 
         if self.comp_master_type_col in self.competence_master.columns:
-            types = self.competence_master[self.comp_master_type_col].fillna('SKILL').values.reshape(-1, 1)
+            types = (
+                self.competence_master[self.comp_master_type_col]
+                .fillna("SKILL")
+                .values.reshape(-1, 1)
+            )
             self.type_encoder.fit(types)
         else:
             # カラムがない場合はダミーでfit
-            self.type_encoder.fit([['SKILL']])
+            self.type_encoder.fit([["SKILL"]])
 
     def encode_member_attributes(self, member_code: str) -> np.ndarray:
         """メンバー属性をワンホットエンコーディング
@@ -142,12 +170,12 @@ class FeatureEngineer:
 
         if member_info.empty:
             # デフォルト値を返す
-            role_vec = self.role_encoder.transform([['UNKNOWN']])[0]
-            grade_vec = self.grade_encoder.transform([['UNKNOWN']])[0]
+            role_vec = self.role_encoder.transform([["UNKNOWN"]])[0]
+            grade_vec = self.grade_encoder.transform([["UNKNOWN"]])[0]
         else:
             member_row = member_info.iloc[0]
-            role = member_row.get('role', 'UNKNOWN')
-            grade = member_row.get('grade', 'UNKNOWN')
+            role = member_row.get("role", "UNKNOWN")
+            grade = member_row.get("grade", "UNKNOWN")
 
             role_vec = self.role_encoder.transform([[role]])[0]
             grade_vec = self.grade_encoder.transform([[grade]])[0]
@@ -169,12 +197,12 @@ class FeatureEngineer:
         ]
 
         if comp_info.empty:
-            category_vec = self.category_encoder.transform([['UNKNOWN']])[0]
-            type_vec = self.type_encoder.transform([['SKILL']])[0]
+            category_vec = self.category_encoder.transform([["UNKNOWN"]])[0]
+            type_vec = self.type_encoder.transform([["SKILL"]])[0]
         else:
             comp_row = comp_info.iloc[0]
-            category = comp_row.get(self.comp_master_category_col, 'UNKNOWN')
-            comp_type = comp_row.get(self.comp_master_type_col, 'SKILL')
+            category = comp_row.get(self.comp_master_category_col, "UNKNOWN")
+            comp_type = comp_row.get(self.comp_master_type_col, "SKILL")
 
             category_vec = self.category_encoder.transform([[category]])[0]
             type_vec = self.type_encoder.transform([[comp_type]])[0]
@@ -203,18 +231,17 @@ class FeatureEngineer:
 
         if member_comps.empty:
             return {
-                'acquisition_rate': 0.0,
-                'recent_activity': 0.0,
-                'skill_variety': 0.0,
-                'category_focus': 0.0,
-                'learning_velocity': 0.0
+                "acquisition_rate": 0.0,
+                "recent_activity": 0.0,
+                "skill_variety": 0.0,
+                "category_focus": 0.0,
+                "learning_velocity": 0.0,
             }
 
         # acquired_dateがある場合のみ時系列分析を実施
         if self.acquired_date_col in member_comps.columns:
             member_comps[self.acquired_date_col] = pd.to_datetime(
-                member_comps[self.acquired_date_col],
-                errors='coerce'
+                member_comps[self.acquired_date_col], errors="coerce"
             )
             member_comps = member_comps.dropna(subset=[self.acquired_date_col])
 
@@ -255,18 +282,22 @@ class FeatureEngineer:
                 self.competence_master[[self.comp_master_code_col, self.comp_master_category_col]],
                 left_on=self.competence_code_col,
                 right_on=self.comp_master_code_col,
-                how='left'
+                how="left",
             )
 
             # mergeの結果、カテゴリカラムが存在するか確認
             if self.comp_master_category_col in member_comps_with_category.columns:
-                unique_categories = member_comps_with_category[self.comp_master_category_col].nunique()
+                unique_categories = member_comps_with_category[
+                    self.comp_master_category_col
+                ].nunique()
                 total_competences = len(member_comps)
                 skill_variety = unique_categories / max(total_competences, 1)
 
                 # カテゴリの集中度（最頻カテゴリの割合）
                 if not member_comps_with_category.empty:
-                    category_counts = member_comps_with_category[self.comp_master_category_col].value_counts()
+                    category_counts = member_comps_with_category[
+                        self.comp_master_category_col
+                    ].value_counts()
                     if len(category_counts) > 0:
                         category_focus = category_counts.iloc[0] / total_competences
                     else:
@@ -283,11 +314,11 @@ class FeatureEngineer:
             category_focus = 0.0
 
         return {
-            'acquisition_rate': float(acquisition_rate),
-            'recent_activity': float(recent_activity),
-            'skill_variety': float(skill_variety),
-            'category_focus': float(category_focus),
-            'learning_velocity': float(learning_velocity)
+            "acquisition_rate": float(acquisition_rate),
+            "recent_activity": float(recent_activity),
+            "skill_variety": float(skill_variety),
+            "category_focus": float(category_focus),
+            "learning_velocity": float(learning_velocity),
         }
 
     def _compute_competence_cooccurrence(self) -> Dict[str, Dict[str, float]]:
@@ -299,12 +330,14 @@ class FeatureEngineer:
         cooccurrence = defaultdict(lambda: defaultdict(int))
 
         # メンバーごとに力量を集計
-        member_groups = self.member_competence.groupby(self.member_code_col)[self.competence_code_col].apply(list)
+        member_groups = self.member_competence.groupby(self.member_code_col)[
+            self.competence_code_col
+        ].apply(list)
 
         # 共起をカウント
         for competences in member_groups:
             for i, comp1 in enumerate(competences):
-                for comp2 in competences[i+1:]:
+                for comp2 in competences[i + 1 :]:
                     cooccurrence[comp1][comp2] += 1
                     cooccurrence[comp2][comp1] += 1
 
@@ -312,14 +345,16 @@ class FeatureEngineer:
         normalized_cooccurrence = {}
         for comp1, related in cooccurrence.items():
             normalized_cooccurrence[comp1] = {}
-            comp1_count = len(self.member_competence[
-                self.member_competence[self.competence_code_col] == comp1
-            ])
+            comp1_count = len(
+                self.member_competence[self.member_competence[self.competence_code_col] == comp1]
+            )
 
             for comp2, count in related.items():
-                comp2_count = len(self.member_competence[
-                    self.member_competence[self.competence_code_col] == comp2
-                ])
+                comp2_count = len(
+                    self.member_competence[
+                        self.member_competence[self.competence_code_col] == comp2
+                    ]
+                )
                 # Jaccard係数: intersection / union
                 union = comp1_count + comp2_count - count
                 if union > 0:
@@ -327,9 +362,7 @@ class FeatureEngineer:
 
         return normalized_cooccurrence
 
-    def get_competence_cooccurrence_score(self,
-                                         comp1: str,
-                                         comp2: str) -> float:
+    def get_competence_cooccurrence_score(self, comp1: str, comp2: str) -> float:
         """2つの力量の共起スコアを取得
 
         Args:
@@ -341,9 +374,9 @@ class FeatureEngineer:
         """
         return self.competence_cooccurrence.get(comp1, {}).get(comp2, 0.0)
 
-    def get_related_competences(self,
-                               competence_code: str,
-                               top_k: int = 10) -> List[Tuple[str, float]]:
+    def get_related_competences(
+        self, competence_code: str, top_k: int = 10
+    ) -> List[Tuple[str, float]]:
         """関連する力量を共起スコア順で取得
 
         Args:
@@ -383,20 +416,22 @@ class FeatureEngineer:
             # このカテゴリの力量を習得しているメンバー数
             member_counts = []
             for comp_code in comp_codes:
-                count = len(self.member_competence[
-                    self.member_competence[self.competence_code_col] == comp_code
-                ])
+                count = len(
+                    self.member_competence[
+                        self.member_competence[self.competence_code_col] == comp_code
+                    ]
+                )
                 member_counts.append(count)
 
             # 統計情報から埋め込みを生成
             if member_counts:
                 features = [
-                    np.mean(member_counts),       # 平均習得者数
-                    np.std(member_counts),        # 標準偏差
-                    np.median(member_counts),     # 中央値
-                    np.max(member_counts),        # 最大値
-                    np.min(member_counts),        # 最小値
-                    len(comp_codes),              # カテゴリ内力量数
+                    np.mean(member_counts),  # 平均習得者数
+                    np.std(member_counts),  # 標準偏差
+                    np.median(member_counts),  # 中央値
+                    np.max(member_counts),  # 最大値
+                    np.min(member_counts),  # 最小値
+                    len(comp_codes),  # カテゴリ内力量数
                 ]
 
                 # embedding_dimに合わせてパディングまたはトランケート
@@ -420,14 +455,9 @@ class FeatureEngineer:
         Returns:
             埋め込みベクトル
         """
-        return self.category_embeddings.get(
-            category,
-            np.zeros(16, dtype=np.float32)
-        )
+        return self.category_embeddings.get(category, np.zeros(16, dtype=np.float32))
 
-    def compute_member_competence_affinity(self,
-                                          member_code: str,
-                                          competence_code: str) -> float:
+    def compute_member_competence_affinity(self, member_code: str, competence_code: str) -> float:
         """メンバーと力量の親和性スコアを計算（コンテンツベース）
 
         メンバーの属性（職種・等級）と力量の属性（カテゴリ・タイプ）、
@@ -468,7 +498,7 @@ class FeatureEngineer:
         ]
 
         if not comp_info.empty and self.comp_master_category_col in self.competence_master.columns:
-            comp_category = comp_info.iloc[0].get(self.comp_master_category_col, 'UNKNOWN')
+            comp_category = comp_info.iloc[0].get(self.comp_master_category_col, "UNKNOWN")
 
             # メンバーが習得済みの力量のカテゴリ分布
             acquired_with_category = self.member_competence[
@@ -477,14 +507,16 @@ class FeatureEngineer:
                 self.competence_master[[self.comp_master_code_col, self.comp_master_category_col]],
                 left_on=self.competence_code_col,
                 right_on=self.comp_master_code_col,
-                how='left'
+                how="left",
             )
 
             # mergeの結果、カテゴリカラムが存在する場合のみ処理
             if self.comp_master_category_col in acquired_with_category.columns:
                 acquired_categories = acquired_with_category[self.comp_master_category_col].tolist()
                 # このカテゴリの習得比率
-                category_familiarity = acquired_categories.count(comp_category) / max(len(acquired_categories), 1)
+                category_familiarity = acquired_categories.count(comp_category) / max(
+                    len(acquired_categories), 1
+                )
             else:
                 category_familiarity = 0.0
         else:
@@ -492,18 +524,18 @@ class FeatureEngineer:
 
         # 親和性スコアの計算（重み付き平均）
         affinity_score = (
-            0.3 * avg_cooccurrence +              # 共起関係
-            0.2 * category_familiarity +           # カテゴリ親和性
-            0.2 * temporal_features['skill_variety'] +  # スキル多様性
-            0.15 * temporal_features['learning_velocity'] +  # 学習速度
-            0.15 * temporal_features['recent_activity']      # 直近活動度
+            0.3 * avg_cooccurrence  # 共起関係
+            + 0.2 * category_familiarity  # カテゴリ親和性
+            + 0.2 * temporal_features["skill_variety"]  # スキル多様性
+            + 0.15 * temporal_features["learning_velocity"]  # 学習速度
+            + 0.15 * temporal_features["recent_activity"]  # 直近活動度
         )
 
         return min(max(affinity_score, 0.0), 1.0)  # 0-1にクリップ
 
-    def compute_batch_affinity(self,
-                              member_code: str,
-                              competence_codes: List[str]) -> Dict[str, float]:
+    def compute_batch_affinity(
+        self, member_code: str, competence_codes: List[str]
+    ) -> Dict[str, float]:
         """複数の力量に対して親和性スコアをバッチ計算
 
         Args:

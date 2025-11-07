@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class ValidationError(Exception):
     """Custom exception for data validation errors."""
+
     pass
 
 
@@ -27,9 +28,7 @@ class DataValidator:
 
     @staticmethod
     def validate_required_columns(
-        df: pd.DataFrame,
-        required_columns: List[str],
-        df_name: str = "DataFrame"
+        df: pd.DataFrame, required_columns: List[str], df_name: str = "DataFrame"
     ) -> None:
         """
         Validate that all required columns exist in the DataFrame.
@@ -62,10 +61,7 @@ class DataValidator:
         logger.debug(f"{df_name}: All required columns present")
 
     @staticmethod
-    def validate_non_empty(
-        df: pd.DataFrame,
-        df_name: str = "DataFrame"
-    ) -> None:
+    def validate_non_empty(df: pd.DataFrame, df_name: str = "DataFrame") -> None:
         """
         Validate that DataFrame is not empty.
 
@@ -90,10 +86,7 @@ class DataValidator:
 
     @staticmethod
     def validate_column_data_type(
-        df: pd.DataFrame,
-        column: str,
-        expected_type: type,
-        df_name: str = "DataFrame"
+        df: pd.DataFrame, column: str, expected_type: type, df_name: str = "DataFrame"
     ) -> None:
         """
         Validate that a column has the expected data type.
@@ -124,10 +117,7 @@ class DataValidator:
         # Check compatibility
         if expected_type == str and not pd.api.types.is_string_dtype(actual_dtype):
             if not pd.api.types.is_object_dtype(actual_dtype):
-                error_msg = (
-                    f"{df_name}.{column}: Expected string type, "
-                    f"got {actual_dtype}"
-                )
+                error_msg = f"{df_name}.{column}: Expected string type, " f"got {actual_dtype}"
                 logger.error(error_msg)
                 raise ValidationError(error_msg)
 
@@ -135,9 +125,7 @@ class DataValidator:
 
     @staticmethod
     def validate_no_duplicates(
-        df: pd.DataFrame,
-        columns: List[str],
-        df_name: str = "DataFrame"
+        df: pd.DataFrame, columns: List[str], df_name: str = "DataFrame"
     ) -> None:
         """
         Validate that there are no duplicate rows based on specified columns.
@@ -158,10 +146,7 @@ class DataValidator:
         duplicates = df[df.duplicated(subset=columns, keep=False)]
 
         if not duplicates.empty:
-            error_msg = (
-                f"{df_name} has {len(duplicates)} duplicate row(s) "
-                f"based on {columns}"
-            )
+            error_msg = f"{df_name} has {len(duplicates)} duplicate row(s) " f"based on {columns}"
             logger.warning(error_msg)
             # Note: This is a warning, not an error, as duplicates might be handled
             # by the caller
@@ -172,7 +157,7 @@ class DataValidator:
         column: str,
         reference_values: set,
         df_name: str = "DataFrame",
-        reference_name: str = "reference"
+        reference_name: str = "reference",
     ) -> Dict[str, Any]:
         """
         Validate that all values in a column exist in a reference set.
@@ -203,10 +188,10 @@ class DataValidator:
         valid_values = df_values & reference_values
 
         result = {
-            'valid_count': len(valid_values),
-            'invalid_count': len(invalid_values),
-            'invalid_values': list(invalid_values)[:10],  # Sample first 10
-            'total_reference_count': len(reference_values)
+            "valid_count": len(valid_values),
+            "invalid_count": len(invalid_values),
+            "invalid_values": list(invalid_values)[:10],  # Sample first 10
+            "total_reference_count": len(reference_values),
         }
 
         if invalid_values:
@@ -215,9 +200,7 @@ class DataValidator:
                 f"in {reference_name}. Sample: {list(invalid_values)[:5]}"
             )
         else:
-            logger.debug(
-                f"{df_name}.{column}: All {len(valid_values)} value(s) are valid"
-            )
+            logger.debug(f"{df_name}.{column}: All {len(valid_values)} value(s) are valid")
 
         return result
 

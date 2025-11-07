@@ -54,7 +54,7 @@ class SessionManager:
             0,  # data_loaded
             0,  # model_trained
             None,  # current_model_id
-            self.db.serialize_json({})  # state_data
+            self.db.serialize_json({}),  # state_data
         )
 
         self.db.execute_insert(query, params)
@@ -67,7 +67,7 @@ class SessionManager:
             data_loaded=False,
             model_trained=False,
             current_model_id=None,
-            state_data={}
+            state_data={},
         )
 
         # Update user's last login
@@ -95,11 +95,7 @@ class SessionManager:
         row = results[0]
         return self._row_to_session(row)
 
-    def get_user_sessions(
-        self,
-        user_id: str,
-        active_only: bool = False
-    ) -> list:
+    def get_user_sessions(self, user_id: str, active_only: bool = False) -> list:
         """
         Get sessions for a user.
 
@@ -144,7 +140,7 @@ class SessionManager:
         data_loaded: Optional[bool] = None,
         model_trained: Optional[bool] = None,
         current_model_id: Optional[str] = None,
-        state_data: Optional[Dict[str, Any]] = None
+        state_data: Optional[Dict[str, Any]] = None,
     ):
         """
         Update session state.
@@ -217,7 +213,7 @@ class SessionManager:
             DELETE FROM user_sessions
             WHERE datetime(last_active) < datetime('now', ?)
         """
-        affected = self.db.execute_update(query, (f'-{days} days',))
+        affected = self.db.execute_update(query, (f"-{days} days",))
         logger.info(f"Cleaned up {affected} old sessions")
         return affected
 
@@ -231,5 +227,5 @@ class SessionManager:
             data_loaded=bool(row["data_loaded"]),
             model_trained=bool(row["model_trained"]),
             current_model_id=row["current_model_id"],
-            state_data=self.db.deserialize_json(row["state_data"])
+            state_data=self.db.deserialize_json(row["state_data"]),
         )

@@ -45,9 +45,9 @@ def test_knowledge_graph():
     # 3. Knowledge Graph 構築
     logger.info("\n[3/3] Knowledge Graph 構築中...")
     kg = CompetenceKnowledgeGraph(
-        member_competence=transformed_data['member_competence'],
-        member_master=transformed_data['members_clean'],
-        competence_master=transformed_data['competence_master']
+        member_competence=transformed_data["member_competence"],
+        member_master=transformed_data["members_clean"],
+        competence_master=transformed_data["competence_master"],
     )
 
     # 4. 基本機能のテスト
@@ -56,8 +56,8 @@ def test_knowledge_graph():
     logger.info("=" * 80)
 
     # サンプルメンバーを選択
-    sample_member_code = transformed_data['members_clean']['メンバーコード'].iloc[0]
-    sample_member_name = transformed_data['members_clean']['メンバー名'].iloc[0]
+    sample_member_code = transformed_data["members_clean"]["メンバーコード"].iloc[0]
+    sample_member_name = transformed_data["members_clean"]["メンバー名"].iloc[0]
 
     logger.info("\nテスト対象メンバー: %s (%s)", sample_member_name, sample_member_code)
 
@@ -76,8 +76,8 @@ def test_knowledge_graph():
             edge_data = kg.G[member_node][similar_node]
             logger.info(
                 "    - %s (類似度: %.3f)",
-                similar_info.get('name', 'N/A'),
-                edge_data.get('similarity', 0),
+                similar_info.get("name", "N/A"),
+                edge_data.get("similarity", 0),
             )
 
     # (3) サンプル力量のカテゴリーを取得
@@ -85,9 +85,9 @@ def test_knowledge_graph():
         sample_comp_code = list(acquired)[0]
         category = kg.get_competence_category(sample_comp_code)
         comp_info = kg.get_node_info(f"competence_{sample_comp_code}")
-        logger.info("\n  サンプル力量: %s (%s)", comp_info.get('name', 'N/A'), sample_comp_code)
+        logger.info("\n  サンプル力量: %s (%s)", comp_info.get("name", "N/A"), sample_comp_code)
         logger.info("    カテゴリー: %s", category)
-        logger.info("    タイプ: %s", comp_info.get('type', 'N/A'))
+        logger.info("    タイプ: %s", comp_info.get("type", "N/A"))
 
     # (4) グラフのエクスポート（任意）
     # kg.export_to_gexf("output/knowledge_graph.gexf")

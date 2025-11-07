@@ -41,7 +41,7 @@ class ModelSerializer(LoggerMixin):
         competence_index: dict[str, int],
         params: dict[str, Any],
         reconstruction_err: float,
-        n_iter: int
+        n_iter: int,
     ) -> None:
         """
         Matrix Factorizationモデルを保存
@@ -67,36 +67,36 @@ class ModelSerializer(LoggerMixin):
 
             # 1. メタデータをJSON形式で保存（人間可読）
             metadata = {
-                'model_type': 'MatrixFactorization',
-                'version': MODEL_VERSION,
-                'created_at': datetime.utcnow().isoformat(),
-                'params': params,
-                'metrics': {
-                    'reconstruction_error': float(reconstruction_err),
-                    'n_iterations': int(n_iter)
+                "model_type": "MatrixFactorization",
+                "version": MODEL_VERSION,
+                "created_at": datetime.utcnow().isoformat(),
+                "params": params,
+                "metrics": {
+                    "reconstruction_error": float(reconstruction_err),
+                    "n_iterations": int(n_iter),
                 },
-                'dimensions': {
-                    'n_members': len(member_codes),
-                    'n_competences': len(competence_codes),
-                    'n_components': W.shape[1]
+                "dimensions": {
+                    "n_members": len(member_codes),
+                    "n_competences": len(competence_codes),
+                    "n_components": W.shape[1],
                 },
-                'member_codes': member_codes,
-                'competence_codes': competence_codes
+                "member_codes": member_codes,
+                "competence_codes": competence_codes,
             }
 
-            metadata_path = base_path.with_suffix('.json')
-            with open(metadata_path, 'w', encoding='utf-8') as f:
+            metadata_path = base_path.with_suffix(".json")
+            with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
 
             # 2. 行列データをjoblibで保存（圧縮 + 安全）
             model_data = {
-                'W': W,
-                'H': H,
-                'member_index': member_index,
-                'competence_index': competence_index
+                "W": W,
+                "H": H,
+                "member_index": member_index,
+                "competence_index": competence_index,
             }
 
-            data_path = base_path.with_suffix('.joblib')
+            data_path = base_path.with_suffix(".joblib")
             joblib.dump(model_data, data_path, compress=3)
 
             logger = LoggerMixin().logger
@@ -105,19 +105,14 @@ class ModelSerializer(LoggerMixin):
                 filepath=str(filepath),
                 metadata_path=str(metadata_path),
                 data_path=str(data_path),
-                model_version=MODEL_VERSION
+                model_version=MODEL_VERSION,
             )
 
         except Exception as e:
-            raise ModelSaveError(
-                filepath=filepath,
-                reason=str(e)
-            ) from e
+            raise ModelSaveError(filepath=filepath, reason=str(e)) from e
 
     @staticmethod
-    def load_matrix_factorization_model(
-        filepath: str
-    ) -> dict[str, Any]:
+    def load_matrix_factorization_model(filepath: str) -> dict[str, Any]:
         """
         Matrix Factorizationモデルを読み込み
 
@@ -134,32 +129,33 @@ class ModelSerializer(LoggerMixin):
             base_path = Path(filepath)
 
             # 1. メタデータを読み込み
-            metadata_path = base_path.with_suffix('.json')
+            metadata_path = base_path.with_suffix(".json")
             if not metadata_path.exists():
                 raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
 
-            with open(metadata_path, 'r', encoding='utf-8') as f:
+            with open(metadata_path, "r", encoding="utf-8") as f:
                 metadata = json.load(f)
 
             # バージョンチェック
-            model_version = metadata.get('version', '1.0.0')
-            if model_version.split('.')[0] != MODEL_VERSION.split('.')[0]:
+            model_version = metadata.get("version", "1.0.0")
+            if model_version.split(".")[0] != MODEL_VERSION.split(".")[0]:
                 # メジャーバージョンが異なる場合は警告
                 logger = LoggerMixin().logger
                 logger.warning(
                     "model_version_mismatch",
                     saved_version=model_version,
-                    current_version=MODEL_VERSION
+                    current_version=MODEL_VERSION,
                 )
 
             # 2. 行列データを読み込み
-            data_path = base_path.with_suffix('.joblib')
+            data_path = base_path.with_suffix(".joblib")
             if not data_path.exists():
                 # 後方互換性: .joblibがない場合は古い形式（.pkl）を試す
-                data_path = base_path.with_suffix('.pkl')
+                data_path = base_path.with_suffix(".pkl")
                 if data_path.exists():
                     import pickle
-                    with open(data_path, 'rb') as f:
+
+                    with open(data_path, "rb") as f:
                         model_data = pickle.load(f)
                 else:
                     raise FileNotFoundError(f"Model data file not found: {data_path}")
@@ -167,32 +163,25 @@ class ModelSerializer(LoggerMixin):
                 model_data = joblib.load(data_path)
 
             # 3. メタデータとモデルデータを統合
-            result = {
-                **metadata,
-                **model_data
-            }
+            result = {**metadata, **model_data}
 
             logger = LoggerMixin().logger
             logger.info(
                 "model_loaded",
                 filepath=str(filepath),
                 model_version=model_version,
-                n_members=metadata['dimensions']['n_members'],
-                n_competences=metadata['dimensions']['n_competences']
+                n_members=metadata["dimensions"]["n_members"],
+                n_competences=metadata["dimensions"]["n_competences"],
             )
 
             return result
 
         except Exception as e:
-            raise ModelLoadError(
-                filepath=filepath,
-                reason=str(e)
-            ) from e
+            raise ModelLoadError(filepath=filepath, reason=str(e)) from e
 
     @staticmethod
     def validate_model_compatibility(
-        saved_params: dict[str, Any],
-        current_params: dict[str, Any]
+        saved_params: dict[str, Any], current_params: dict[str, Any]
     ) -> tuple[bool, list[str]]:
         """
         保存されたモデルと現在のパラメータの互換性を検証
@@ -207,7 +196,7 @@ class ModelSerializer(LoggerMixin):
         warnings = []
 
         # 重要なパラメータの不一致を検出
-        critical_params = ['n_components', 'init', 'solver']
+        critical_params = ["n_components", "init", "solver"]
 
         for param in critical_params:
             if saved_params.get(param) != current_params.get(param):

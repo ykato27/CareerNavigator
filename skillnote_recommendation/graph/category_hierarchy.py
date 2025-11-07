@@ -42,30 +42,30 @@ class CategoryHierarchy:
         hierarchy = {}
 
         for _, row in self.competence_master.iterrows():
-            category = row.get('力量カテゴリー名')
+            category = row.get("力量カテゴリー名")
             if pd.isna(category) or not str(category).strip():
                 continue
 
             # 階層をパースする
-            path = [p.strip() for p in str(category).split('>')]
+            path = [p.strip() for p in str(category).split(">")]
 
             # 各レベルのカテゴリーを登録
             for i in range(len(path)):
-                partial_path = ' > '.join(path[:i+1])
+                partial_path = " > ".join(path[: i + 1])
 
                 if partial_path not in hierarchy:
                     hierarchy[partial_path] = {
-                        'level': i,
-                        'path': path[:i+1],
-                        'leaf': False,
-                        'full_path': partial_path
+                        "level": i,
+                        "path": path[: i + 1],
+                        "leaf": False,
+                        "full_path": partial_path,
                     }
 
             # 最下層は葉ノード
             if path:
-                full_path = ' > '.join(path)
+                full_path = " > ".join(path)
                 if full_path in hierarchy:
-                    hierarchy[full_path]['leaf'] = True
+                    hierarchy[full_path]["leaf"] = True
 
         return hierarchy
 
@@ -78,11 +78,11 @@ class CategoryHierarchy:
         parent_map = {}
 
         for category, info in self.hierarchy.items():
-            if info['level'] == 0:
+            if info["level"] == 0:
                 parent_map[category] = None
             else:
-                path = info['path']
-                parent_path = ' > '.join(path[:-1])
+                path = info["path"]
+                parent_path = " > ".join(path[:-1])
                 parent_map[category] = parent_path
 
         return parent_map
@@ -152,8 +152,11 @@ class CategoryHierarchy:
         parent = self.get_parent(category)
         if parent is None:
             # ルートレベルの兄弟を取得
-            return [c for c in self.hierarchy.keys()
-                    if self.hierarchy[c]['level'] == 0 and c != category]
+            return [
+                c
+                for c in self.hierarchy.keys()
+                if self.hierarchy[c]["level"] == 0 and c != category
+            ]
 
         siblings = self.get_children(parent)
         return [s for s in siblings if s != category]
@@ -161,18 +164,18 @@ class CategoryHierarchy:
     def get_level(self, category: str) -> int:
         """カテゴリーの階層レベルを取得（0=ルート）"""
         info = self.hierarchy.get(category)
-        return info['level'] if info else -1
+        return info["level"] if info else -1
 
     def is_leaf(self, category: str) -> bool:
         """葉ノード（最下層）かどうか"""
         info = self.hierarchy.get(category)
-        return info['leaf'] if info else False
+        return info["leaf"] if info else False
 
     def _count_levels(self) -> int:
         """階層の深さを取得"""
         if not self.hierarchy:
             return 0
-        return max(info['level'] for info in self.hierarchy.values()) + 1
+        return max(info["level"] for info in self.hierarchy.values()) + 1
 
     def get_category_tree(self) -> Dict:
         """カテゴリーツリーを取得（可視化用）
@@ -183,7 +186,7 @@ class CategoryHierarchy:
         tree = {}
 
         # ルートレベルから構築
-        roots = [cat for cat, info in self.hierarchy.items() if info['level'] == 0]
+        roots = [cat for cat, info in self.hierarchy.items() if info["level"] == 0]
 
         def _build_tree(category):
             children = self.get_children(category)

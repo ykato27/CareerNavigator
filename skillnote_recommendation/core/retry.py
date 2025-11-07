@@ -15,7 +15,7 @@ from tenacity import (
     wait_exponential,
     retry_if_exception,
     before_sleep_log,
-    after_log
+    after_log,
 )
 import logging
 
@@ -24,7 +24,7 @@ from skillnote_recommendation.core.errors import RecommendationError
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 def is_retryable_error(exception: BaseException) -> bool:
@@ -46,7 +46,7 @@ def with_retry(
     max_attempts: int = 3,
     min_wait_seconds: int = 1,
     max_wait_seconds: int = 10,
-    log_level: int = logging.WARNING
+    log_level: int = logging.WARNING,
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """
     リトライデコレータ
@@ -65,23 +65,22 @@ def with_retry(
             # リトライ可能なエラーの場合、最大3回リトライ
             ...
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @retry(
             stop=stop_after_attempt(max_attempts),
-            wait=wait_exponential(
-                multiplier=1,
-                min=min_wait_seconds,
-                max=max_wait_seconds
-            ),
+            wait=wait_exponential(multiplier=1, min=min_wait_seconds, max=max_wait_seconds),
             retry=retry_if_exception(is_retryable_error),
             before_sleep=before_sleep_log(logger, log_level),
             after=after_log(logger, log_level),
-            reraise=True
+            reraise=True,
         )
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> T:
             return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -89,7 +88,7 @@ def with_retry_on_exception(
     exception_types: tuple[type[Exception], ...],
     max_attempts: int = 3,
     min_wait_seconds: int = 1,
-    max_wait_seconds: int = 10
+    max_wait_seconds: int = 10,
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """
     特定の例外でリトライするデコレータ
@@ -105,20 +104,19 @@ def with_retry_on_exception(
         def fetch_from_api():
             ...
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @retry(
             stop=stop_after_attempt(max_attempts),
-            wait=wait_exponential(
-                multiplier=1,
-                min=min_wait_seconds,
-                max=max_wait_seconds
-            ),
+            wait=wait_exponential(multiplier=1, min=min_wait_seconds, max=max_wait_seconds),
             retry=retry_if_exception(lambda e: isinstance(e, exception_types)),
             before_sleep=before_sleep_log(logger, logging.WARNING),
-            reraise=True
+            reraise=True,
         )
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> T:
             return func(*args, **kwargs)
+
         return wrapper
+
     return decorator

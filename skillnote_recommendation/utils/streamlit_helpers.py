@@ -13,6 +13,7 @@ from typing import Dict, Any
 # Session State Management
 # =========================================================
 
+
 def init_session_state(defaults: Dict[str, Any] = None) -> None:
     """
     Initialize Streamlit session state with default values.
@@ -46,6 +47,7 @@ def init_session_state(defaults: Dict[str, Any] = None) -> None:
 # =========================================================
 # State Checking Functions
 # =========================================================
+
 
 def check_data_loaded(stop_if_not_loaded: bool = True) -> bool:
     """
@@ -96,10 +98,7 @@ def check_model_trained(stop_if_not_trained: bool = True) -> bool:
 
     if not is_trained and stop_if_not_trained:
         st.warning("⚠️ まずMLモデルを学習してください。")
-        st.info(
-            "👉 サイドバーから「モデル学習」ページに移動して、"
-            "MLモデルを学習してください。"
-        )
+        st.info("👉 サイドバーから「モデル学習」ページに移動して、" "MLモデルを学習してください。")
         st.stop()
 
     return is_trained
@@ -108,6 +107,7 @@ def check_model_trained(stop_if_not_trained: bool = True) -> bool:
 # =========================================================
 # Display Helper Functions
 # =========================================================
+
 
 def display_error_details(error: Exception, context: str = "") -> None:
     """

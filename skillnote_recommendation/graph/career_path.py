@@ -20,7 +20,7 @@ PHASE_EXPERT = "エキスパート"
 
 # スコアリング重み
 WEIGHT_HIERARCHY = 0.3  # カテゴリー階層の重み
-WEIGHT_EASE = 0.3       # 習得容易性の重み
+WEIGHT_EASE = 0.3  # 習得容易性の重み
 WEIGHT_IMPORTANCE = 0.4  # 重要度の重み
 
 
@@ -40,6 +40,7 @@ class CompetenceGap:
         phase: 推奨習得フェーズ
         prerequisites: 前提となる力量のリスト
     """
+
     competence_code: str
     competence_name: str
     competence_type: str
@@ -67,6 +68,7 @@ class CareerPathAnalysis:
         phase_3_competences: Phase 3の力量リスト
         estimated_completion_rate: 現在の到達度（0-1）
     """
+
     source_member_code: str
     target_member_code: str
     gap_score: float
@@ -85,10 +87,12 @@ class CareerGapAnalyzer:
     ギャップを定量化する。
     """
 
-    def __init__(self,
-                 knowledge_graph: CompetenceKnowledgeGraph,
-                 member_competence_df: pd.DataFrame,
-                 competence_master_df: pd.DataFrame):
+    def __init__(
+        self,
+        knowledge_graph: CompetenceKnowledgeGraph,
+        member_competence_df: pd.DataFrame,
+        competence_master_df: pd.DataFrame,
+    ):
         """
         Args:
             knowledge_graph: ナレッジグラフ
@@ -99,9 +103,7 @@ class CareerGapAnalyzer:
         self.member_competence_df = member_competence_df
         self.competence_master_df = competence_master_df
 
-    def analyze_gap(self,
-                    source_member_code: str,
-                    target_member_code: str) -> Dict:
+    def analyze_gap(self, source_member_code: str, target_member_code: str) -> Dict:
         """
         2人のメンバー間の力量ギャップを分析
 
@@ -147,18 +149,20 @@ class CareerGapAnalyzer:
             if comp_info:
                 # 目標メンバーのレベルを重要度とする
                 importance = target_competences.get(code, 1.0) / 5.0  # 正規化
-                comp_info['importance_score'] = importance
+                comp_info["importance_score"] = importance
                 missing_competences_info.append(comp_info)
 
         return {
-            'source_member_code': source_member_code,
-            'target_member_code': target_member_code,
-            'gap_score': gap_score,
-            'common_competences': common_competences,
-            'missing_competences': missing_competences_info,
-            'source_competences': source_competences,
-            'target_competences': target_competences,
-            'estimated_completion_rate': len(common_codes) / len(target_competences) if len(target_competences) > 0 else 0.0
+            "source_member_code": source_member_code,
+            "target_member_code": target_member_code,
+            "gap_score": gap_score,
+            "common_competences": common_competences,
+            "missing_competences": missing_competences_info,
+            "source_competences": source_competences,
+            "target_competences": target_competences,
+            "estimated_completion_rate": (
+                len(common_codes) / len(target_competences) if len(target_competences) > 0 else 0.0
+            ),
         }
 
     def _get_member_competences(self, member_code: str) -> Dict[str, float]:
@@ -172,12 +176,12 @@ class CareerGapAnalyzer:
             {力量コード: レベル} の辞書
         """
         member_data = self.member_competence_df[
-            self.member_competence_df['メンバーコード'] == member_code
+            self.member_competence_df["メンバーコード"] == member_code
         ]
 
         competences = {}
         for _, row in member_data.iterrows():
-            competences[row['力量コード']] = row['正規化レベル']
+            competences[row["力量コード"]] = row["正規化レベル"]
 
         return competences
 
@@ -192,7 +196,7 @@ class CareerGapAnalyzer:
             力量情報の辞書（存在しない場合はNone）
         """
         comp_data = self.competence_master_df[
-            self.competence_master_df['力量コード'] == competence_code
+            self.competence_master_df["力量コード"] == competence_code
         ]
 
         if len(comp_data) == 0:
@@ -200,10 +204,10 @@ class CareerGapAnalyzer:
 
         row = comp_data.iloc[0]
         return {
-            'competence_code': row['力量コード'],
-            'competence_name': row['力量名'],
-            'competence_type': row['力量タイプ'],
-            'category': row.get('力量カテゴリー名', 'その他'),
+            "competence_code": row["力量コード"],
+            "competence_name": row["力量名"],
+            "competence_type": row["力量タイプ"],
+            "category": row.get("力量カテゴリー名", "その他"),
         }
 
 
@@ -214,9 +218,11 @@ class LearningPathGenerator:
     バランス型スコアリング: 階層 + 容易性 + 重要度を総合的に考慮
     """
 
-    def __init__(self,
-                 knowledge_graph: CompetenceKnowledgeGraph,
-                 category_hierarchy: Optional[CategoryHierarchy] = None):
+    def __init__(
+        self,
+        knowledge_graph: CompetenceKnowledgeGraph,
+        category_hierarchy: Optional[CategoryHierarchy] = None,
+    ):
         """
         Args:
             knowledge_graph: ナレッジグラフ
@@ -225,9 +231,9 @@ class LearningPathGenerator:
         self.kg = knowledge_graph
         self.category_hierarchy = category_hierarchy
 
-    def generate_learning_path(self,
-                                gap_analysis: Dict,
-                                max_per_phase: int = 5) -> CareerPathAnalysis:
+    def generate_learning_path(
+        self, gap_analysis: Dict, max_per_phase: int = 5
+    ) -> CareerPathAnalysis:
         """
         学習パスを生成
 
@@ -242,16 +248,13 @@ class LearningPathGenerator:
         print(f"学習パス生成")
         print(f"{'='*80}")
 
-        missing_competences = gap_analysis['missing_competences']
-        source_competences = gap_analysis['source_competences']
+        missing_competences = gap_analysis["missing_competences"]
+        source_competences = gap_analysis["source_competences"]
 
         # 各力量にスコアを付与
         scored_gaps = []
         for comp_info in missing_competences:
-            gap = self._score_competence(
-                comp_info,
-                source_competences
-            )
+            gap = self._score_competence(comp_info, source_competences)
             scored_gaps.append(gap)
 
         # 優先度順にソート
@@ -268,20 +271,20 @@ class LearningPathGenerator:
         print(f"  Phase 3（{PHASE_EXPERT}）: {len(phase_3)}個")
 
         return CareerPathAnalysis(
-            source_member_code=gap_analysis['source_member_code'],
-            target_member_code=gap_analysis['target_member_code'],
-            gap_score=gap_analysis['gap_score'],
-            common_competences=gap_analysis['common_competences'],
+            source_member_code=gap_analysis["source_member_code"],
+            target_member_code=gap_analysis["target_member_code"],
+            gap_score=gap_analysis["gap_score"],
+            common_competences=gap_analysis["common_competences"],
             missing_competences=scored_gaps,
             phase_1_competences=phase_1,
             phase_2_competences=phase_2,
             phase_3_competences=phase_3,
-            estimated_completion_rate=gap_analysis['estimated_completion_rate']
+            estimated_completion_rate=gap_analysis["estimated_completion_rate"],
         )
 
-    def _score_competence(self,
-                          comp_info: Dict,
-                          source_competences: Dict[str, float]) -> CompetenceGap:
+    def _score_competence(
+        self, comp_info: Dict, source_competences: Dict[str, float]
+    ) -> CompetenceGap:
         """
         力量をスコアリング（バランス型）
 
@@ -299,13 +302,13 @@ class LearningPathGenerator:
         ease_score = self._calculate_ease_score(comp_info, source_competences)
 
         # 3. 重要度スコア（目標メンバーのレベル）
-        importance_score = comp_info.get('importance_score', 0.5)
+        importance_score = comp_info.get("importance_score", 0.5)
 
         # 4. 総合優先度スコア（バランス型）
         priority_score = (
-            WEIGHT_HIERARCHY * (1.0 - (hierarchy_level - 1) / 2.0) +  # 基礎ほど高スコア
-            WEIGHT_EASE * ease_score +
-            WEIGHT_IMPORTANCE * importance_score
+            WEIGHT_HIERARCHY * (1.0 - (hierarchy_level - 1) / 2.0)  # 基礎ほど高スコア
+            + WEIGHT_EASE * ease_score
+            + WEIGHT_IMPORTANCE * importance_score
         )
 
         # 5. フェーズを決定
@@ -315,16 +318,16 @@ class LearningPathGenerator:
         prerequisites = self._identify_prerequisites(comp_info, source_competences)
 
         return CompetenceGap(
-            competence_code=comp_info['competence_code'],
-            competence_name=comp_info['competence_name'],
-            competence_type=comp_info['competence_type'],
-            category=comp_info['category'],
+            competence_code=comp_info["competence_code"],
+            competence_name=comp_info["competence_name"],
+            competence_type=comp_info["competence_type"],
+            category=comp_info["category"],
             importance_score=importance_score,
             ease_score=ease_score,
             hierarchy_level=hierarchy_level,
             priority_score=priority_score,
             phase=phase,
-            prerequisites=prerequisites
+            prerequisites=prerequisites,
         )
 
     def _determine_hierarchy_level(self, comp_info: Dict) -> int:
@@ -335,23 +338,21 @@ class LearningPathGenerator:
             1=基礎, 2=応用, 3=専門
         """
         # カテゴリー名から推定（簡易実装）
-        category = comp_info.get('category', '').lower()
-        comp_name = comp_info.get('competence_name', '').lower()
+        category = comp_info.get("category", "").lower()
+        comp_name = comp_info.get("competence_name", "").lower()
 
         # キーワードベースの判定
-        if '基礎' in comp_name or '入門' in comp_name or '初級' in comp_name:
+        if "基礎" in comp_name or "入門" in comp_name or "初級" in comp_name:
             return 1
-        elif '応用' in comp_name or '中級' in comp_name or '実践' in comp_name:
+        elif "応用" in comp_name or "中級" in comp_name or "実践" in comp_name:
             return 2
-        elif '専門' in comp_name or '上級' in comp_name or 'エキスパート' in comp_name:
+        elif "専門" in comp_name or "上級" in comp_name or "エキスパート" in comp_name:
             return 3
 
         # デフォルトは中間レベル
         return 2
 
-    def _calculate_ease_score(self,
-                               comp_info: Dict,
-                               source_competences: Dict[str, float]) -> float:
+    def _calculate_ease_score(self, comp_info: Dict, source_competences: Dict[str, float]) -> float:
         """
         習得容易性を計算
 
@@ -360,7 +361,7 @@ class LearningPathGenerator:
         Returns:
             0.0-1.0 のスコア（1.0=非常に習得しやすい）
         """
-        category = comp_info.get('category', '')
+        category = comp_info.get("category", "")
 
         # 同じカテゴリーの保有力量数をカウント
         same_category_count = 0
@@ -369,7 +370,7 @@ class LearningPathGenerator:
             comp_node = f"competence_{comp_code}"
             if self.kg.G.has_node(comp_node):
                 node_data = self.kg.get_node_info(comp_node)
-                if node_data.get('category') == category:
+                if node_data.get("category") == category:
                     same_category_count += 1
 
         # 保有数に応じたスコア（最大10個で飽和）
@@ -390,9 +391,9 @@ class LearningPathGenerator:
         else:
             return PHASE_EXPERT
 
-    def _identify_prerequisites(self,
-                                 comp_info: Dict,
-                                 source_competences: Dict[str, float]) -> List[str]:
+    def _identify_prerequisites(
+        self, comp_info: Dict, source_competences: Dict[str, float]
+    ) -> List[str]:
         """
         前提条件となる力量を特定
 
@@ -407,6 +408,7 @@ class LearningPathGenerator:
 # グラフベース推薦専用の学習パス生成
 # ===================================================================
 
+
 @dataclass
 class RecommendationLearningPath:
     """グラフベース推薦の学習パス
@@ -417,6 +419,7 @@ class RecommendationLearningPath:
         phase_3_expert: Phase 3（エキスパート）の力量リスト
         all_recommendations: 全推薦力量（元のスコア順）
     """
+
     phase_1_basic: List[Dict]
     phase_2_intermediate: List[Dict]
     phase_3_expert: List[Dict]
@@ -428,7 +431,7 @@ def generate_learning_path_from_recommendations(
     knowledge_graph: CompetenceKnowledgeGraph,
     member_code: str,
     competence_master_df: pd.DataFrame,
-    member_competence_df: pd.DataFrame
+    member_competence_df: pd.DataFrame,
 ) -> RecommendationLearningPath:
     """
     グラフベース推薦結果から段階的な学習パスを生成
@@ -458,16 +461,14 @@ def generate_learning_path_from_recommendations(
         hierarchy_level = _determine_hierarchy_level_simple(comp_info)
 
         # 習得容易性を計算
-        ease_score = _calculate_ease_score_simple(
-            comp_info, member_competences, knowledge_graph
-        )
+        ease_score = _calculate_ease_score_simple(comp_info, member_competences, knowledge_graph)
 
         # 総合優先度スコア
         # RWRスコアを重視しつつ、階層と容易性も考慮
         priority_score = (
-            0.5 * rwr_score +  # RWRスコアを50%
-            0.3 * (1.0 - (hierarchy_level - 1) / 2.0) +  # 基礎ほど高スコア（30%）
-            0.2 * ease_score  # 習得容易性（20%）
+            0.5 * rwr_score  # RWRスコアを50%
+            + 0.3 * (1.0 - (hierarchy_level - 1) / 2.0)  # 基礎ほど高スコア（30%）
+            + 0.2 * ease_score  # 習得容易性（20%）
         )
 
         # フェーズを決定
@@ -478,80 +479,76 @@ def generate_learning_path_from_recommendations(
         else:
             phase = PHASE_EXPERT
 
-        scored_recommendations.append({
-            'competence_code': comp_code,
-            'competence_name': comp_info['competence_name'],
-            'competence_type': comp_info['competence_type'],
-            'category': comp_info['category'],
-            'rwr_score': rwr_score,
-            'hierarchy_level': hierarchy_level,
-            'ease_score': ease_score,
-            'priority_score': priority_score,
-            'phase': phase,
-            'paths': paths
-        })
+        scored_recommendations.append(
+            {
+                "competence_code": comp_code,
+                "competence_name": comp_info["competence_name"],
+                "competence_type": comp_info["competence_type"],
+                "category": comp_info["category"],
+                "rwr_score": rwr_score,
+                "hierarchy_level": hierarchy_level,
+                "ease_score": ease_score,
+                "priority_score": priority_score,
+                "phase": phase,
+                "paths": paths,
+            }
+        )
 
     # フェーズごとに分類（各フェーズ内では優先度順）
     phase_1 = sorted(
-        [r for r in scored_recommendations if r['phase'] == PHASE_BASIC],
-        key=lambda x: x['priority_score'],
-        reverse=True
+        [r for r in scored_recommendations if r["phase"] == PHASE_BASIC],
+        key=lambda x: x["priority_score"],
+        reverse=True,
     )
 
     phase_2 = sorted(
-        [r for r in scored_recommendations if r['phase'] == PHASE_INTERMEDIATE],
-        key=lambda x: x['priority_score'],
-        reverse=True
+        [r for r in scored_recommendations if r["phase"] == PHASE_INTERMEDIATE],
+        key=lambda x: x["priority_score"],
+        reverse=True,
     )
 
     phase_3 = sorted(
-        [r for r in scored_recommendations if r['phase'] == PHASE_EXPERT],
-        key=lambda x: x['priority_score'],
-        reverse=True
+        [r for r in scored_recommendations if r["phase"] == PHASE_EXPERT],
+        key=lambda x: x["priority_score"],
+        reverse=True,
     )
 
     return RecommendationLearningPath(
         phase_1_basic=phase_1,
         phase_2_intermediate=phase_2,
         phase_3_expert=phase_3,
-        all_recommendations=scored_recommendations
+        all_recommendations=scored_recommendations,
     )
 
 
 def _get_member_competence_dict(
-    member_code: str,
-    member_competence_df: pd.DataFrame
+    member_code: str, member_competence_df: pd.DataFrame
 ) -> Dict[str, float]:
     """メンバーの保有力量を辞書形式で取得"""
-    member_data = member_competence_df[
-        member_competence_df['メンバーコード'] == member_code
-    ]
+    member_data = member_competence_df[member_competence_df["メンバーコード"] == member_code]
 
     competences = {}
     for _, row in member_data.iterrows():
-        competences[row['力量コード']] = row['正規化レベル']
+        competences[row["力量コード"]] = row["正規化レベル"]
 
     return competences
 
 
 def _get_competence_info_dict(
-    competence_code: str,
-    competence_master_df: pd.DataFrame
+    competence_code: str, competence_master_df: pd.DataFrame
 ) -> Optional[Dict]:
     """力量の詳細情報を辞書形式で取得"""
-    comp_data = competence_master_df[
-        competence_master_df['力量コード'] == competence_code
-    ]
+    comp_data = competence_master_df[competence_master_df["力量コード"] == competence_code]
 
     if len(comp_data) == 0:
         return None
 
     row = comp_data.iloc[0]
     return {
-        'competence_code': row['力量コード'],
-        'competence_name': row['力量名'],
-        'competence_type': row['力量タイプ'],
-        'category': row.get('力量カテゴリー名', 'その他'),
+        "competence_code": row["力量コード"],
+        "competence_name": row["力量名"],
+        "competence_type": row["力量タイプ"],
+        "category": row.get("力量カテゴリー名", "その他"),
     }
 
 
@@ -562,13 +559,13 @@ def _determine_hierarchy_level_simple(comp_info: Dict) -> int:
     Returns:
         1=基礎, 2=応用, 3=専門
     """
-    comp_name = comp_info.get('competence_name', '').lower()
-    category = comp_info.get('category', '').lower()
+    comp_name = comp_info.get("competence_name", "").lower()
+    category = comp_info.get("category", "").lower()
 
     # キーワードベースの判定
-    basic_keywords = ['基礎', '入門', '初級', '基本', '概論', 'basic', 'intro']
-    intermediate_keywords = ['応用', '中級', '実践', '活用', 'intermediate', 'practical']
-    expert_keywords = ['専門', '上級', 'エキスパート', '高度', 'advanced', 'expert']
+    basic_keywords = ["基礎", "入門", "初級", "基本", "概論", "basic", "intro"]
+    intermediate_keywords = ["応用", "中級", "実践", "活用", "intermediate", "practical"]
+    expert_keywords = ["専門", "上級", "エキスパート", "高度", "advanced", "expert"]
 
     # 力量名でチェック
     if any(keyword in comp_name for keyword in basic_keywords):
@@ -589,9 +586,7 @@ def _determine_hierarchy_level_simple(comp_info: Dict) -> int:
 
 
 def _calculate_ease_score_simple(
-    comp_info: Dict,
-    member_competences: Dict[str, float],
-    knowledge_graph: CompetenceKnowledgeGraph
+    comp_info: Dict, member_competences: Dict[str, float], knowledge_graph: CompetenceKnowledgeGraph
 ) -> float:
     """
     習得容易性を簡易計算
@@ -601,7 +596,7 @@ def _calculate_ease_score_simple(
     Returns:
         0.0-1.0 のスコア（1.0=非常に習得しやすい）
     """
-    category = comp_info.get('category', '')
+    category = comp_info.get("category", "")
 
     # 同じカテゴリーの保有力量数をカウント
     same_category_count = 0
@@ -609,7 +604,7 @@ def _calculate_ease_score_simple(
         comp_node = f"competence_{comp_code}"
         if knowledge_graph.G.has_node(comp_node):
             node_data = knowledge_graph.get_node_info(comp_node)
-            if node_data.get('category') == category:
+            if node_data.get("category") == category:
                 same_category_count += 1
 
     # 保有数に応じたスコア（最大10個で飽和）
@@ -622,7 +617,7 @@ def generate_progressive_learning_paths(
     learning_path: RecommendationLearningPath,
     member_code: str,
     member_name: str,
-    max_paths: int = 5
+    max_paths: int = 5,
 ) -> List[List[Dict]]:
     """
     段階的な学習パス（Phase 1 → Phase 2 → Phase 3）を生成
@@ -640,15 +635,17 @@ def generate_progressive_learning_paths(
 
     # 各フェーズから最大max_paths個の力量を取得
     phase_1_comps = learning_path.phase_1_basic[:max_paths] if learning_path.phase_1_basic else []
-    phase_2_comps = learning_path.phase_2_intermediate[:max_paths] if learning_path.phase_2_intermediate else []
+    phase_2_comps = (
+        learning_path.phase_2_intermediate[:max_paths] if learning_path.phase_2_intermediate else []
+    )
     phase_3_comps = learning_path.phase_3_expert[:max_paths] if learning_path.phase_3_expert else []
 
     # メンバーノード（起点）
     member_node = {
-        'id': f'member_{member_code}',
-        'type': 'member',
-        'name': member_name,
-        'code': member_code
+        "id": f"member_{member_code}",
+        "type": "member",
+        "name": member_name,
+        "code": member_code,
     }
 
     # Phase 1のみの場合
@@ -657,10 +654,10 @@ def generate_progressive_learning_paths(
             path = [
                 member_node,
                 {
-                    'id': f"competence_{comp['competence_code']}",
-                    'type': 'competence',
-                    'name': comp['competence_name']
-                }
+                    "id": f"competence_{comp['competence_code']}",
+                    "type": "competence",
+                    "name": comp["competence_name"],
+                },
             ]
             progressive_paths.append(path)
         return progressive_paths
@@ -676,15 +673,15 @@ def generate_progressive_learning_paths(
                 path = [
                     member_node,
                     {
-                        'id': f"competence_{comp1['competence_code']}",
-                        'type': 'competence',
-                        'name': comp1['competence_name']
+                        "id": f"competence_{comp1['competence_code']}",
+                        "type": "competence",
+                        "name": comp1["competence_name"],
                     },
                     {
-                        'id': f"competence_{comp2['competence_code']}",
-                        'type': 'competence',
-                        'name': comp2['competence_name']
-                    }
+                        "id": f"competence_{comp2['competence_code']}",
+                        "type": "competence",
+                        "name": comp2["competence_name"],
+                    },
                 ]
                 progressive_paths.append(path)
             else:
@@ -693,20 +690,20 @@ def generate_progressive_learning_paths(
                 path = [
                     member_node,
                     {
-                        'id': f"competence_{comp1['competence_code']}",
-                        'type': 'competence',
-                        'name': comp1['competence_name']
+                        "id": f"competence_{comp1['competence_code']}",
+                        "type": "competence",
+                        "name": comp1["competence_name"],
                     },
                     {
-                        'id': f"competence_{comp2['competence_code']}",
-                        'type': 'competence',
-                        'name': comp2['competence_name']
+                        "id": f"competence_{comp2['competence_code']}",
+                        "type": "competence",
+                        "name": comp2["competence_name"],
                     },
                     {
-                        'id': f"competence_{comp3['competence_code']}",
-                        'type': 'competence',
-                        'name': comp3['competence_name']
-                    }
+                        "id": f"competence_{comp3['competence_code']}",
+                        "type": "competence",
+                        "name": comp3["competence_name"],
+                    },
                 ]
                 progressive_paths.append(path)
 
@@ -718,10 +715,10 @@ def generate_progressive_learning_paths(
                 path = [
                     member_node,
                     {
-                        'id': f"competence_{comp2['competence_code']}",
-                        'type': 'competence',
-                        'name': comp2['competence_name']
-                    }
+                        "id": f"competence_{comp2['competence_code']}",
+                        "type": "competence",
+                        "name": comp2["competence_name"],
+                    },
                 ]
                 progressive_paths.append(path)
             else:
@@ -730,15 +727,15 @@ def generate_progressive_learning_paths(
                 path = [
                     member_node,
                     {
-                        'id': f"competence_{comp2['competence_code']}",
-                        'type': 'competence',
-                        'name': comp2['competence_name']
+                        "id": f"competence_{comp2['competence_code']}",
+                        "type": "competence",
+                        "name": comp2["competence_name"],
                     },
                     {
-                        'id': f"competence_{comp3['competence_code']}",
-                        'type': 'competence',
-                        'name': comp3['competence_name']
-                    }
+                        "id": f"competence_{comp3['competence_code']}",
+                        "type": "competence",
+                        "name": comp3["competence_name"],
+                    },
                 ]
                 progressive_paths.append(path)
 
@@ -748,10 +745,10 @@ def generate_progressive_learning_paths(
             path = [
                 member_node,
                 {
-                    'id': f"competence_{comp['competence_code']}",
-                    'type': 'competence',
-                    'name': comp['competence_name']
-                }
+                    "id": f"competence_{comp['competence_code']}",
+                    "type": "competence",
+                    "name": comp["competence_name"],
+                },
             ]
             progressive_paths.append(path)
 

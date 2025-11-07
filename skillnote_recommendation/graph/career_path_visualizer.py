@@ -7,14 +7,20 @@ Career Path Roadmap Visualizer
 import plotly.graph_objects as go
 import plotly.express as px
 from typing import List, Dict
-from .career_path import CareerPathAnalysis, CompetenceGap, PHASE_BASIC, PHASE_INTERMEDIATE, PHASE_EXPERT
+from .career_path import (
+    CareerPathAnalysis,
+    CompetenceGap,
+    PHASE_BASIC,
+    PHASE_INTERMEDIATE,
+    PHASE_EXPERT,
+)
 
 
 # フェーズごとの色設定
 PHASE_COLORS = {
-    PHASE_BASIC: '#4ECDC4',  # 青緑（基礎）
-    PHASE_INTERMEDIATE: '#FFD93D',  # 黄色（中級）
-    PHASE_EXPERT: '#FF6B6B',  # 赤（上級）
+    PHASE_BASIC: "#4ECDC4",  # 青緑（基礎）
+    PHASE_INTERMEDIATE: "#FFD93D",  # 黄色（中級）
+    PHASE_EXPERT: "#FF6B6B",  # 赤（上級）
 }
 
 
@@ -25,9 +31,7 @@ class CareerPathVisualizer:
         """初期化"""
         pass
 
-    def create_roadmap(self,
-                       career_path: CareerPathAnalysis,
-                       target_member_name: str) -> go.Figure:
+    def create_roadmap(self, career_path: CareerPathAnalysis, target_member_name: str) -> go.Figure:
         """
         ガントチャート風のロードマップを作成
 
@@ -44,44 +48,50 @@ class CareerPathVisualizer:
 
         # Phase 1
         for gap in career_path.phase_1_competences:
-            tasks.append({
-                'Task': gap.competence_name,
-                'Start': task_id,
-                'Finish': task_id + 1,
-                'Phase': PHASE_BASIC,
-                'Priority': gap.priority_score,
-                'Ease': gap.ease_score,
-                'Importance': gap.importance_score,
-                'Category': gap.category,
-            })
+            tasks.append(
+                {
+                    "Task": gap.competence_name,
+                    "Start": task_id,
+                    "Finish": task_id + 1,
+                    "Phase": PHASE_BASIC,
+                    "Priority": gap.priority_score,
+                    "Ease": gap.ease_score,
+                    "Importance": gap.importance_score,
+                    "Category": gap.category,
+                }
+            )
             task_id += 1
 
         # Phase 2
         for gap in career_path.phase_2_competences:
-            tasks.append({
-                'Task': gap.competence_name,
-                'Start': task_id,
-                'Finish': task_id + 1,
-                'Phase': PHASE_INTERMEDIATE,
-                'Priority': gap.priority_score,
-                'Ease': gap.ease_score,
-                'Importance': gap.importance_score,
-                'Category': gap.category,
-            })
+            tasks.append(
+                {
+                    "Task": gap.competence_name,
+                    "Start": task_id,
+                    "Finish": task_id + 1,
+                    "Phase": PHASE_INTERMEDIATE,
+                    "Priority": gap.priority_score,
+                    "Ease": gap.ease_score,
+                    "Importance": gap.importance_score,
+                    "Category": gap.category,
+                }
+            )
             task_id += 1
 
         # Phase 3
         for gap in career_path.phase_3_competences:
-            tasks.append({
-                'Task': gap.competence_name,
-                'Start': task_id,
-                'Finish': task_id + 1,
-                'Phase': PHASE_EXPERT,
-                'Priority': gap.priority_score,
-                'Ease': gap.ease_score,
-                'Importance': gap.importance_score,
-                'Category': gap.category,
-            })
+            tasks.append(
+                {
+                    "Task": gap.competence_name,
+                    "Start": task_id,
+                    "Finish": task_id + 1,
+                    "Phase": PHASE_EXPERT,
+                    "Priority": gap.priority_score,
+                    "Ease": gap.ease_score,
+                    "Importance": gap.importance_score,
+                    "Category": gap.category,
+                }
+            )
             task_id += 1
 
         # 空の場合
@@ -93,65 +103,66 @@ class CareerPathVisualizer:
 
         # フェーズごとにバーを追加
         for task in tasks:
-            fig.add_trace(go.Bar(
-                name=task['Task'],
-                x=[task['Finish'] - task['Start']],
-                y=[task['Task']],
-                orientation='h',
-                marker=dict(
-                    color=PHASE_COLORS[task['Phase']],
-                    line=dict(color='white', width=1)
-                ),
-                hovertemplate=(
-                    f"<b>{task['Task']}</b><br>" +
-                    f"フェーズ: {task['Phase']}<br>" +
-                    f"カテゴリー: {task['Category']}<br>" +
-                    f"優先度: {task['Priority']:.2f}<br>" +
-                    f"習得容易性: {task['Ease']:.2f}<br>" +
-                    f"重要度: {task['Importance']:.2f}<br>" +
-                    "<extra></extra>"
-                ),
-                base=task['Start'],
-                showlegend=False,
-            ))
+            fig.add_trace(
+                go.Bar(
+                    name=task["Task"],
+                    x=[task["Finish"] - task["Start"]],
+                    y=[task["Task"]],
+                    orientation="h",
+                    marker=dict(
+                        color=PHASE_COLORS[task["Phase"]], line=dict(color="white", width=1)
+                    ),
+                    hovertemplate=(
+                        f"<b>{task['Task']}</b><br>"
+                        + f"フェーズ: {task['Phase']}<br>"
+                        + f"カテゴリー: {task['Category']}<br>"
+                        + f"優先度: {task['Priority']:.2f}<br>"
+                        + f"習得容易性: {task['Ease']:.2f}<br>"
+                        + f"重要度: {task['Importance']:.2f}<br>"
+                        + "<extra></extra>"
+                    ),
+                    base=task["Start"],
+                    showlegend=False,
+                )
+            )
 
         # レイアウト設定
         fig.update_layout(
             title=dict(
                 text=f"📚 キャリアロードマップ → {target_member_name}さん",
                 x=0.5,
-                xanchor='center',
-                font=dict(size=20)
+                xanchor="center",
+                font=dict(size=20),
             ),
             xaxis=dict(
                 title="学習順序",
                 showgrid=True,
-                gridcolor='lightgray',
+                gridcolor="lightgray",
             ),
             yaxis=dict(
                 title="力量",
                 autorange="reversed",  # 上から下に表示
             ),
-            barmode='overlay',
+            barmode="overlay",
             height=max(400, len(tasks) * 40),  # タスク数に応じて高さを調整
-            plot_bgcolor='white',
-            hovermode='closest',
+            plot_bgcolor="white",
+            hovermode="closest",
         )
 
         # フェーズの境界線を追加
         phase_boundaries = self._calculate_phase_boundaries(
             career_path.phase_1_competences,
             career_path.phase_2_competences,
-            career_path.phase_3_competences
+            career_path.phase_3_competences,
         )
 
         for boundary in phase_boundaries:
             fig.add_vline(
-                x=boundary['x'],
+                x=boundary["x"],
                 line_dash="dash",
                 line_color="gray",
-                annotation_text=boundary['label'],
-                annotation_position="top"
+                annotation_text=boundary["label"],
+                annotation_position="top",
             )
 
         return fig
@@ -166,32 +177,31 @@ class CareerPathVisualizer:
         Returns:
             Plotly Figure
         """
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
-            value=completion_rate * 100,
-            domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "目標到達度", 'font': {'size': 24}},
-            delta={'reference': 100, 'increasing': {'color': "green"}},
-            gauge={
-                'axis': {'range': [None, 100], 'ticksuffix': "%"},
-                'bar': {'color': "darkblue"},
-                'steps': [
-                    {'range': [0, 30], 'color': "#FFE5E5"},
-                    {'range': [30, 70], 'color': "#FFF9E5"},
-                    {'range': [70, 100], 'color': "#E5FFE5"}
-                ],
-                'threshold': {
-                    'line': {'color': "red", 'width': 4},
-                    'thickness': 0.75,
-                    'value': 90
-                }
-            }
-        ))
-
-        fig.update_layout(
-            height=300,
-            margin=dict(l=20, r=20, t=60, b=20)
+        fig = go.Figure(
+            go.Indicator(
+                mode="gauge+number+delta",
+                value=completion_rate * 100,
+                domain={"x": [0, 1], "y": [0, 1]},
+                title={"text": "目標到達度", "font": {"size": 24}},
+                delta={"reference": 100, "increasing": {"color": "green"}},
+                gauge={
+                    "axis": {"range": [None, 100], "ticksuffix": "%"},
+                    "bar": {"color": "darkblue"},
+                    "steps": [
+                        {"range": [0, 30], "color": "#FFE5E5"},
+                        {"range": [30, 70], "color": "#FFF9E5"},
+                        {"range": [70, 100], "color": "#E5FFE5"},
+                    ],
+                    "threshold": {
+                        "line": {"color": "red", "width": 4},
+                        "thickness": 0.75,
+                        "value": 90,
+                    },
+                },
+            )
         )
+
+        fig.update_layout(height=300, margin=dict(l=20, r=20, t=60, b=20))
 
         return fig
 
@@ -214,32 +224,31 @@ class CareerPathVisualizer:
             category_counts[cat] += 1
 
         # 円グラフを作成
-        fig = go.Figure(data=[go.Pie(
-            labels=list(category_counts.keys()),
-            values=list(category_counts.values()),
-            hole=0.3,
-            marker=dict(
-                colors=px.colors.qualitative.Pastel
-            )
-        )])
+        fig = go.Figure(
+            data=[
+                go.Pie(
+                    labels=list(category_counts.keys()),
+                    values=list(category_counts.values()),
+                    hole=0.3,
+                    marker=dict(colors=px.colors.qualitative.Pastel),
+                )
+            ]
+        )
 
         fig.update_layout(
-            title=dict(
-                text="カテゴリー別の不足力量",
-                x=0.5,
-                xanchor='center',
-                font=dict(size=18)
-            ),
+            title=dict(text="カテゴリー別の不足力量", x=0.5, xanchor="center", font=dict(size=18)),
             height=400,
-            showlegend=True
+            showlegend=True,
         )
 
         return fig
 
-    def _calculate_phase_boundaries(self,
-                                     phase_1: List[CompetenceGap],
-                                     phase_2: List[CompetenceGap],
-                                     phase_3: List[CompetenceGap]) -> List[Dict]:
+    def _calculate_phase_boundaries(
+        self,
+        phase_1: List[CompetenceGap],
+        phase_2: List[CompetenceGap],
+        phase_3: List[CompetenceGap],
+    ) -> List[Dict]:
         """
         フェーズの境界線を計算
 
@@ -251,17 +260,11 @@ class CareerPathVisualizer:
 
         if phase_1:
             x += len(phase_1)
-            boundaries.append({
-                'x': x - 0.5,
-                'label': f"{PHASE_BASIC} → {PHASE_INTERMEDIATE}"
-            })
+            boundaries.append({"x": x - 0.5, "label": f"{PHASE_BASIC} → {PHASE_INTERMEDIATE}"})
 
         if phase_2:
             x += len(phase_2)
-            boundaries.append({
-                'x': x - 0.5,
-                'label': f"{PHASE_INTERMEDIATE} → {PHASE_EXPERT}"
-            })
+            boundaries.append({"x": x - 0.5, "label": f"{PHASE_INTERMEDIATE} → {PHASE_EXPERT}"})
 
         return boundaries
 
@@ -283,18 +286,17 @@ class CareerPathVisualizer:
             x=0.5,
             y=0.5,
             showarrow=False,
-            font=dict(size=20, color="gray")
+            font=dict(size=20, color="gray"),
         )
         fig.update_layout(
             xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
             yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
-            height=400
+            height=400,
         )
         return fig
 
 
-def format_career_path_summary(career_path: CareerPathAnalysis,
-                                 target_member_name: str) -> str:
+def format_career_path_summary(career_path: CareerPathAnalysis, target_member_name: str) -> str:
     """
     キャリアパス分析のサマリーをMarkdown形式でフォーマット
 

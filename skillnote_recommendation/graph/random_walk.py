@@ -38,9 +38,11 @@ logger = logging.getLogger(__name__)
 # Data Models
 # ===================================================================
 
+
 @dataclass
 class RecommendationStats:
     """推薦統計情報"""
+
     total_nodes: int
     acquired_count: int
     all_competence_count: int
@@ -53,6 +55,7 @@ class RecommendationStats:
 # ===================================================================
 # Random Walk Recommender
 # ===================================================================
+
 
 class RandomWalkRecommender:
     """RWRベースの推薦エンジン
@@ -79,7 +82,7 @@ class RandomWalkRecommender:
         tolerance: float = DEFAULT_TOLERANCE,
         max_path_length: int = DEFAULT_MAX_PATH_LENGTH,
         max_paths: int = DEFAULT_MAX_PATHS,
-        enable_cache: bool = True
+        enable_cache: bool = True,
     ):
         """
         Args:
@@ -112,7 +115,7 @@ class RandomWalkRecommender:
         member_code: str,
         top_n: int = 10,
         return_paths: bool = True,
-        competence_type: Optional[List[str]] = None
+        competence_type: Optional[List[str]] = None,
     ) -> List[Tuple[str, float, List[List[str]]]]:
         """RWRで力量を推薦
 
@@ -171,16 +174,10 @@ class RandomWalkRecommender:
 
     def get_cache_stats(self) -> Dict[str, int]:
         """キャッシュ統計を取得"""
-        return {
-            'cached_members': len(self._pagerank_cache),
-            'total_nodes': len(self.graph.nodes())
-        }
+        return {"cached_members": len(self._pagerank_cache), "total_nodes": len(self.graph.nodes())}
 
     def explain_recommendation(
-        self,
-        member_code: str,
-        competence_code: str,
-        max_paths: int = 3
+        self, member_code: str, competence_code: str, max_paths: int = 3
     ) -> Dict:
         """推薦の説明を生成
 
@@ -205,10 +202,10 @@ class RandomWalkRecommender:
         reasons = self._generate_reasons(paths)
 
         return {
-            'member_code': member_code,
-            'competence_code': competence_code,
-            'paths': readable_paths,
-            'reasons': reasons,
+            "member_code": member_code,
+            "competence_code": competence_code,
+            "paths": readable_paths,
+            "reasons": reasons,
         }
 
     # ===============================================================
@@ -236,13 +233,12 @@ class RandomWalkRecommender:
             personalization={start_node: 1.0},
             max_iter=self.max_iter,
             tol=self.tolerance,
-            weight='weight'
+            weight="weight",
         )
 
         # 非常に小さいスコアは除外
         filtered_scores = {
-            node: score for node, score in scores.items()
-            if score > MIN_SCORE_THRESHOLD
+            node: score for node, score in scores.items() if score > MIN_SCORE_THRESHOLD
         }
 
         # キャッシュに保存
@@ -257,7 +253,7 @@ class RandomWalkRecommender:
         self,
         scores: Dict[str, float],
         acquired_competences: Set[str],
-        competence_type: Optional[List[str]]
+        competence_type: Optional[List[str]],
     ) -> Tuple[List[Tuple[str, float]], RecommendationStats]:
         """力量候補を抽出してフィルタリング
 
@@ -276,7 +272,7 @@ class RandomWalkRecommender:
             all_competence_count=0,
             excluded_acquired=0,
             excluded_type=0,
-            candidate_count=0
+            candidate_count=0,
         )
 
         # 力量ノードを抽出
@@ -298,7 +294,7 @@ class RandomWalkRecommender:
             # 力量タイプフィルタ
             if competence_type is not None:
                 comp_info = self.kg.get_node_info(node)
-                comp_type = comp_info.get('type', comp_info.get('competence_type', 'UNKNOWN'))
+                comp_type = comp_info.get("type", comp_info.get("competence_type", "UNKNOWN"))
                 if comp_type not in competence_type:
                     stats.excluded_type += 1
                     continue
@@ -320,7 +316,7 @@ class RandomWalkRecommender:
         member_node: str,
         competence_scores: List[Tuple[str, float]],
         top_n: int,
-        return_paths: bool
+        return_paths: bool,
     ) -> List[Tuple[str, float, List[List[str]]]]:
         """Top-N選択とパス抽出
 
@@ -345,7 +341,7 @@ class RandomWalkRecommender:
                     member_node,
                     f"competence_{comp_code}",
                     max_paths=self.max_paths,
-                    max_length=self.max_path_length
+                    max_length=self.max_path_length,
                 )
             recommendations.append((comp_code, score, paths))
 
@@ -356,10 +352,7 @@ class RandomWalkRecommender:
     # ===============================================================
 
     def _apply_fallback(
-        self,
-        member_code: str,
-        acquired_competences: Set[str],
-        competence_type: Optional[List[str]]
+        self, member_code: str, acquired_competences: Set[str], competence_type: Optional[List[str]]
     ) -> List[Tuple[str, float]]:
         """フォールバック推薦を適用
 
@@ -372,9 +365,7 @@ class RandomWalkRecommender:
             [(力量コード, スコア), ...]
         """
         # 1. カテゴリーベース推薦
-        category_scores = self._category_based_fallback(
-            acquired_competences, competence_type
-        )
+        category_scores = self._category_based_fallback(acquired_competences, competence_type)
 
         # 2. 類似メンバーベース推薦（候補が少ない場合）
         if len(category_scores) < 5:
@@ -387,23 +378,21 @@ class RandomWalkRecommender:
         # 3. 最終フォールバック：人気スキル推薦（候補がまだ少ない場合）
         if len(category_scores) < 5:
             logger.info("候補が少ないため、人気スキル推薦を追加")
-            popular_scores = self._popular_skills_fallback(
-                acquired_competences, competence_type
-            )
+            popular_scores = self._popular_skills_fallback(acquired_competences, competence_type)
             category_scores.extend(popular_scores)
 
         # 重複除去
         result = self._deduplicate_scores(category_scores)
 
         if len(result) == 0:
-            logger.warning("⚠️ 全てのフォールバック手法でも推薦が0件です。グラフの構造を確認してください。")
+            logger.warning(
+                "⚠️ 全てのフォールバック手法でも推薦が0件です。グラフの構造を確認してください。"
+            )
 
         return result
 
     def _category_based_fallback(
-        self,
-        acquired_competences: Set[str],
-        competence_type: Optional[List[str]]
+        self, acquired_competences: Set[str], competence_type: Optional[List[str]]
     ) -> List[Tuple[str, float]]:
         """カテゴリーベースのフォールバック推薦
 
@@ -418,8 +407,7 @@ class RandomWalkRecommender:
         """
         # 既習得力量のカテゴリーを取得
         acquired_categories = {
-            self.kg.get_competence_category(comp_code)
-            for comp_code in acquired_competences
+            self.kg.get_competence_category(comp_code) for comp_code in acquired_competences
         }
         acquired_categories.discard(None)
 
@@ -452,10 +440,7 @@ class RandomWalkRecommender:
         return fallback_scores
 
     def _similar_member_fallback(
-        self,
-        member_code: str,
-        acquired_competences: Set[str],
-        competence_type: Optional[List[str]]
+        self, member_code: str, acquired_competences: Set[str], competence_type: Optional[List[str]]
     ) -> List[Tuple[str, float]]:
         """類似メンバーベースのフォールバック推薦
 
@@ -496,9 +481,7 @@ class RandomWalkRecommender:
         return fallback_scores
 
     def _popular_skills_fallback(
-        self,
-        acquired_competences: Set[str],
-        competence_type: Optional[List[str]]
+        self, acquired_competences: Set[str], competence_type: Optional[List[str]]
     ) -> List[Tuple[str, float]]:
         """人気スキルベースのフォールバック推薦
 
@@ -528,8 +511,7 @@ class RandomWalkRecommender:
 
             # このスキルを保有しているメンバー数をカウント
             member_count = sum(
-                1 for neighbor in self.graph.neighbors(node)
-                if neighbor.startswith("member_")
+                1 for neighbor in self.graph.neighbors(node) if neighbor.startswith("member_")
             )
 
             if member_count > 0:
@@ -537,9 +519,7 @@ class RandomWalkRecommender:
 
         # メンバー数でソートして上位を推薦
         sorted_competences = sorted(
-            competence_member_count.items(),
-            key=lambda x: x[1],
-            reverse=True
+            competence_member_count.items(), key=lambda x: x[1], reverse=True
         )
 
         # スコアは人気度に基づく（0.0001 - 0.0005の範囲）
@@ -561,7 +541,7 @@ class RandomWalkRecommender:
         source: str,
         target: str,
         max_paths: int = DEFAULT_MAX_PATHS,
-        max_length: int = DEFAULT_MAX_PATH_LENGTH
+        max_length: int = DEFAULT_MAX_PATH_LENGTH,
     ) -> List[List[str]]:
         """推薦パスを抽出
 
@@ -576,9 +556,7 @@ class RandomWalkRecommender:
         """
         try:
             # k-shortest pathsアルゴリズム使用
-            path_generator = nx.shortest_simple_paths(
-                self.graph, source, target, weight=None
-            )
+            path_generator = nx.shortest_simple_paths(self.graph, source, target, weight=None)
 
             # パス抽出
             paths = []
@@ -603,12 +581,7 @@ class RandomWalkRecommender:
         # フォールバック: 代替パスを生成
         return self._generate_fallback_paths(source, target, max_paths)
 
-    def _generate_fallback_paths(
-        self,
-        source: str,
-        target: str,
-        max_paths: int
-    ) -> List[List[str]]:
+    def _generate_fallback_paths(self, source: str, target: str, max_paths: int) -> List[List[str]]:
         """代替パスを生成
 
         Args:
@@ -650,7 +623,7 @@ class RandomWalkRecommender:
             return None
 
         target_data = self.kg.get_node_info(target)
-        target_category = target_data.get('category')
+        target_category = target_data.get("category")
 
         if target_category:
             category_node = f"category_{target_category}"
@@ -659,26 +632,21 @@ class RandomWalkRecommender:
 
         return None
 
-    def _create_competence_paths(
-        self,
-        source: str,
-        target: str,
-        max_paths: int
-    ) -> List[List[str]]:
+    def _create_competence_paths(self, source: str, target: str, max_paths: int) -> List[List[str]]:
         """既習得力量経由パスを作成"""
         paths = []
 
         try:
             member_neighbors = list(self.graph.neighbors(source))
             target_data = self.kg.get_node_info(target)
-            target_category = target_data.get('category')
+            target_category = target_data.get("category")
 
             for neighbor in member_neighbors[:3]:
                 if not neighbor.startswith("competence_"):
                     continue
 
                 neighbor_data = self.kg.get_node_info(neighbor)
-                neighbor_category = neighbor_data.get('category')
+                neighbor_category = neighbor_data.get("category")
 
                 if neighbor_category == target_category and neighbor_category:
                     category_node = f"category_{target_category}"
@@ -693,10 +661,7 @@ class RandomWalkRecommender:
         return paths
 
     def _create_similar_member_paths(
-        self,
-        source: str,
-        target: str,
-        max_paths: int
+        self, source: str, target: str, max_paths: int
     ) -> List[List[str]]:
         """類似メンバー経由パスを作成"""
         paths = []
@@ -732,8 +697,8 @@ class RandomWalkRecommender:
         for neighbor in self.graph.neighbors(member_node):
             if neighbor.startswith("member_"):
                 edge_data = self.graph[member_node][neighbor]
-                if edge_data.get('edge_type') == 'similar':
-                    similarity = edge_data.get('similarity', 0.5)
+                if edge_data.get("edge_type") == "similar":
+                    similarity = edge_data.get("similarity", 0.5)
                     similar_members.append((neighbor, similarity))
 
         return sorted(similar_members, key=lambda x: x[1], reverse=True)
@@ -743,7 +708,7 @@ class RandomWalkRecommender:
         comp_code: str,
         comp_node: str,
         acquired_competences: Set[str],
-        competence_type: Optional[List[str]]
+        competence_type: Optional[List[str]],
     ) -> bool:
         """力量を除外すべきか判定
 
@@ -763,16 +728,13 @@ class RandomWalkRecommender:
         # 力量タイプチェック
         if competence_type is not None:
             comp_info = self.kg.get_node_info(comp_node)
-            comp_type = comp_info.get('type', comp_info.get('competence_type', 'UNKNOWN'))
+            comp_type = comp_info.get("type", comp_info.get("competence_type", "UNKNOWN"))
             if comp_type not in competence_type:
                 return True
 
         return False
 
-    def _deduplicate_scores(
-        self,
-        scores: List[Tuple[str, float]]
-    ) -> List[Tuple[str, float]]:
+    def _deduplicate_scores(self, scores: List[Tuple[str, float]]) -> List[Tuple[str, float]]:
         """スコアリストから重複を除去
 
         Args:
@@ -789,10 +751,7 @@ class RandomWalkRecommender:
                 unique_scores.append((comp_code, score))
         return unique_scores
 
-    def _convert_paths_to_readable(
-        self,
-        paths: List[List[str]]
-    ) -> List[List[Dict]]:
+    def _convert_paths_to_readable(self, paths: List[List[str]]) -> List[List[Dict]]:
         """パスを人間が読める形式に変換
 
         Args:
@@ -806,11 +765,13 @@ class RandomWalkRecommender:
             readable_path = []
             for node in path:
                 node_info = self.kg.get_node_info(node)
-                readable_path.append({
-                    'id': node,
-                    'type': node_info.get('node_type', 'unknown'),
-                    'name': node_info.get('name', node),
-                })
+                readable_path.append(
+                    {
+                        "id": node,
+                        "type": node_info.get("node_type", "unknown"),
+                        "name": node_info.get("name", node),
+                    }
+                )
             readable_paths.append(readable_path)
         return readable_paths
 
@@ -830,29 +791,22 @@ class RandomWalkRecommender:
                 continue
 
             # パスのパターンを解析
-            path_types = [
-                self.graph.nodes[node].get('node_type', 'unknown')
-                for node in path
-            ]
+            path_types = [self.graph.nodes[node].get("node_type", "unknown") for node in path]
 
             # パターンごとに説明を生成
-            if 'category' in path_types:
-                category_node = next(
-                    (n for n in path if n.startswith('category_')), None
-                )
+            if "category" in path_types:
+                category_node = next((n for n in path if n.startswith("category_")), None)
                 if category_node:
-                    category_name = self.graph.nodes[category_node].get('name', '')
+                    category_name = self.graph.nodes[category_node].get("name", "")
                     reasons.append(f"同じカテゴリー「{category_name}」の力量として推薦")
 
-            elif path_types.count('member') > 1:
+            elif path_types.count("member") > 1:
                 similar_member_node = (
-                    path[1] if len(path) > 1 and path[1].startswith('member_') else None
+                    path[1] if len(path) > 1 and path[1].startswith("member_") else None
                 )
                 if similar_member_node:
-                    similar_name = self.graph.nodes[similar_member_node].get('name', '')
-                    reasons.append(
-                        f"類似メンバー「{similar_name}」が保有している力量として推薦"
-                    )
+                    similar_name = self.graph.nodes[similar_member_node].get("name", "")
+                    reasons.append(f"類似メンバー「{similar_name}」が保有している力量として推薦")
 
             else:
                 reasons.append("グラフ構造に基づく推薦")

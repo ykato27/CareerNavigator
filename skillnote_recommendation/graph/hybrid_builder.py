@@ -26,7 +26,7 @@ def build_hybrid_recommender(
     max_paths: int = 10,
     use_tuning: bool = False,
     enable_cache: bool = True,
-    category_hierarchy: Optional[dict] = None
+    category_hierarchy: Optional[dict] = None,
 ) -> HybridGraphRecommender:
     """
     ハイブリッド推薦システムを構築
@@ -70,7 +70,7 @@ def build_hybrid_recommender(
     kg = CompetenceKnowledgeGraph(
         member_competence=member_competence,
         member_master=member_master,
-        competence_master=competence_master
+        competence_master=competence_master,
     )
 
     # 2. ML推薦エンジンの構築
@@ -79,7 +79,7 @@ def build_hybrid_recommender(
         member_competence=member_competence,
         competence_master=competence_master,
         member_master=member_master,
-        use_tuning=use_tuning
+        use_tuning=use_tuning,
     )
 
     # 3. 特徴量エンジニアの構築
@@ -88,7 +88,7 @@ def build_hybrid_recommender(
         member_master=member_master,
         competence_master=competence_master,
         member_competence=member_competence,
-        category_hierarchy=category_hierarchy
+        category_hierarchy=category_hierarchy,
     )
 
     # 4. コンテンツベース推薦エンジンの構築
@@ -97,7 +97,7 @@ def build_hybrid_recommender(
         feature_engineer=feature_engineer,
         member_master=member_master,
         competence_master=competence_master,
-        member_competence=member_competence
+        member_competence=member_competence,
     )
 
     # 5. ハイブリッド推薦エンジンの構築
@@ -112,7 +112,7 @@ def build_hybrid_recommender(
         content_weight=content_weight,
         max_path_length=max_path_length,
         max_paths=max_paths,
-        enable_cache=enable_cache
+        enable_cache=enable_cache,
     )
 
     print("\n" + "=" * 80)
@@ -132,7 +132,7 @@ def quick_recommend(
     cf_weight: float = 0.3,
     content_weight: float = 0.3,
     max_path_length: int = 10,
-    max_paths: int = 10
+    max_paths: int = 10,
 ):
     """
     クイック推薦（ハイブリッド推薦システムを構築して推薦を実行）
@@ -169,12 +169,9 @@ def quick_recommend(
         cf_weight=cf_weight,
         content_weight=content_weight,
         max_path_length=max_path_length,
-        max_paths=max_paths
+        max_paths=max_paths,
     )
 
-    recommendations = hybrid_recommender.recommend(
-        member_code=member_code,
-        top_n=top_n
-    )
+    recommendations = hybrid_recommender.recommend(member_code=member_code, top_n=top_n)
 
     return recommendations

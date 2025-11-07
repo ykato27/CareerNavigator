@@ -10,18 +10,19 @@ from skillnote_recommendation.ml.matrix_factorization import MatrixFactorization
 
 # ==================== フィクスチャ ====================
 
+
 @pytest.fixture
 def sample_skill_matrix():
     """サンプルメンバー×力量マトリクス"""
     return pd.DataFrame(
         {
-            's001': [3, 0, 2, 0, 1],
-            's002': [0, 4, 0, 3, 0],
-            's003': [2, 0, 5, 0, 2],
-            's004': [0, 3, 0, 4, 0],
-            's005': [1, 0, 2, 0, 3],
+            "s001": [3, 0, 2, 0, 1],
+            "s002": [0, 4, 0, 3, 0],
+            "s003": [2, 0, 5, 0, 2],
+            "s004": [0, 3, 0, 4, 0],
+            "s005": [1, 0, 2, 0, 3],
         },
-        index=['m001', 'm002', 'm003', 'm004', 'm005']
+        index=["m001", "m002", "m003", "m004", "m005"],
     )
 
 
@@ -34,6 +35,7 @@ def trained_model(sample_skill_matrix):
 
 
 # ==================== モデル初期化テスト ====================
+
 
 class TestModelInitialization:
     """モデル初期化のテスト"""
@@ -48,19 +50,16 @@ class TestModelInitialization:
 
     def test_initialization_custom_params(self):
         """カスタムパラメータで初期化"""
-        model = MatrixFactorizationModel(
-            n_components=10,
-            random_state=123,
-            max_iter=200
-        )
+        model = MatrixFactorizationModel(n_components=10, random_state=123, max_iter=200)
 
         assert model.n_components == 10
         assert model.random_state == 123
-        assert 'max_iter' in model.nmf_params
-        assert model.nmf_params['max_iter'] == 200
+        assert "max_iter" in model.nmf_params
+        assert model.nmf_params["max_iter"] == 200
 
 
 # ==================== モデル学習テスト ====================
+
 
 class TestModelFitting:
     """モデル学習のテスト"""
@@ -81,18 +80,18 @@ class TestModelFitting:
         model = MatrixFactorizationModel(n_components=2)
         model.fit(sample_skill_matrix)
 
-        assert model.member_codes == ['m001', 'm002', 'm003', 'm004', 'm005']
-        assert model.competence_codes == ['s001', 's002', 's003', 's004', 's005']
+        assert model.member_codes == ["m001", "m002", "m003", "m004", "m005"]
+        assert model.competence_codes == ["s001", "s002", "s003", "s004", "s005"]
 
     def test_fit_creates_index_mapping(self, sample_skill_matrix):
         """学習後にインデックスマッピングが作成される"""
         model = MatrixFactorizationModel(n_components=2)
         model.fit(sample_skill_matrix)
 
-        assert model.member_index['m001'] == 0
-        assert model.member_index['m003'] == 2
-        assert model.competence_index['s001'] == 0
-        assert model.competence_index['s003'] == 2
+        assert model.member_index["m001"] == 0
+        assert model.member_index["m003"] == 2
+        assert model.competence_index["s001"] == 0
+        assert model.competence_index["s003"] == 2
 
     def test_fit_reconstruction(self, sample_skill_matrix):
         """学習後の再構成が元に近い"""
@@ -109,28 +108,29 @@ class TestModelFitting:
 
 # ==================== 予測テスト ====================
 
+
 class TestPrediction:
     """予測のテスト"""
 
     def test_predict_all_competences(self, trained_model):
         """全力量に対する予測"""
-        scores = trained_model.predict('m001')
+        scores = trained_model.predict("m001")
 
         assert isinstance(scores, pd.Series)
         assert len(scores) == 5
-        assert all(scores.index == ['s001', 's002', 's003', 's004', 's005'])
+        assert all(scores.index == ["s001", "s002", "s003", "s004", "s005"])
 
     def test_predict_specific_competences(self, trained_model):
         """特定の力量のみ予測"""
-        scores = trained_model.predict('m001', competence_codes=['s001', 's003'])
+        scores = trained_model.predict("m001", competence_codes=["s001", "s003"])
 
         assert len(scores) == 2
-        assert 's001' in scores.index
-        assert 's003' in scores.index
+        assert "s001" in scores.index
+        assert "s003" in scores.index
 
     def test_predict_scores_are_non_negative(self, trained_model):
         """予測スコアが非負"""
-        scores = trained_model.predict('m001')
+        scores = trained_model.predict("m001")
 
         assert all(scores >= 0)
 
@@ -139,22 +139,23 @@ class TestPrediction:
         model = MatrixFactorizationModel()
 
         with pytest.raises(ValueError, match="モデルが学習されていません"):
-            model.predict('m001')
+            model.predict("m001")
 
     def test_predict_unknown_member_raises_error(self, trained_model):
         """未知のメンバーで予測するとエラー"""
         with pytest.raises(ValueError, match="学習データに存在しません"):
-            trained_model.predict('m999')
+            trained_model.predict("m999")
 
 
 # ==================== Top-K推薦テスト ====================
+
 
 class TestTopKPrediction:
     """Top-K推薦のテスト"""
 
     def test_predict_top_k_basic(self, trained_model):
         """基本的なTop-K推薦"""
-        top_k = trained_model.predict_top_k('m001', k=3, exclude_acquired=False)
+        top_k = trained_model.predict_top_k("m001", k=3, exclude_acquired=False)
 
         assert len(top_k) == 3
         assert all(isinstance(item, tuple) for item in top_k)
@@ -167,14 +168,11 @@ class TestTopKPrediction:
     def test_predict_top_k_exclude_acquired(self, trained_model, sample_skill_matrix):
         """既習得力量を除外したTop-K推薦"""
         # m001が習得している力量（スコア>0）を取得
-        acquired = sample_skill_matrix.loc['m001']
+        acquired = sample_skill_matrix.loc["m001"]
         acquired_competences = acquired[acquired > 0].index.tolist()
 
         top_k = trained_model.predict_top_k(
-            'm001',
-            k=3,
-            exclude_acquired=True,
-            acquired_competences=acquired_competences
+            "m001", k=3, exclude_acquired=True, acquired_competences=acquired_competences
         )
 
         # 推薦に既習得力量が含まれていないことを確認
@@ -184,17 +182,18 @@ class TestTopKPrediction:
     def test_predict_top_k_without_acquired_param_raises_error(self, trained_model):
         """exclude_acquired=Trueで acquired_competences未指定はエラー"""
         with pytest.raises(ValueError, match="acquired_competencesを指定してください"):
-            trained_model.predict_top_k('m001', k=3, exclude_acquired=True)
+            trained_model.predict_top_k("m001", k=3, exclude_acquired=True)
 
 
 # ==================== 因子取得テスト ====================
+
 
 class TestFactorRetrieval:
     """因子取得のテスト"""
 
     def test_get_member_factors(self, trained_model):
         """メンバーの潜在因子を取得"""
-        factors = trained_model.get_member_factors('m001')
+        factors = trained_model.get_member_factors("m001")
 
         assert isinstance(factors, np.ndarray)
         assert factors.shape == (2,)  # n_components=2
@@ -202,7 +201,7 @@ class TestFactorRetrieval:
 
     def test_get_competence_factors(self, trained_model):
         """力量の潜在因子を取得"""
-        factors = trained_model.get_competence_factors('s001')
+        factors = trained_model.get_competence_factors("s001")
 
         assert isinstance(factors, np.ndarray)
         assert factors.shape == (2,)
@@ -213,22 +212,23 @@ class TestFactorRetrieval:
         model = MatrixFactorizationModel()
 
         with pytest.raises(ValueError, match="モデルが学習されていません"):
-            model.get_member_factors('m001')
+            model.get_member_factors("m001")
 
     def test_get_factors_unknown_code_raises_error(self, trained_model):
         """未知のコードで因子取得するとエラー"""
         with pytest.raises(ValueError, match="学習データに存在しません"):
-            trained_model.get_member_factors('m999')
+            trained_model.get_member_factors("m999")
 
 
 # ==================== モデル保存・読み込みテスト ====================
+
 
 class TestModelPersistence:
     """モデル保存・読み込みのテスト"""
 
     def test_save_and_load(self, trained_model, tmp_path):
         """モデルの保存と読み込み"""
-        filepath = tmp_path / 'model.pkl'
+        filepath = tmp_path / "model.pkl"
 
         # 保存
         trained_model.save(str(filepath))
@@ -238,22 +238,22 @@ class TestModelPersistence:
         loaded_model = MatrixFactorizationModel.load(str(filepath))
 
         # 同じ結果を返すことを確認
-        original_scores = trained_model.predict('m001')
-        loaded_scores = loaded_model.predict('m001')
+        original_scores = trained_model.predict("m001")
+        loaded_scores = loaded_model.predict("m001")
 
         pd.testing.assert_series_equal(original_scores, loaded_scores)
 
     def test_save_unfitted_raises_error(self, tmp_path):
         """未学習モデルの保存はエラー"""
         model = MatrixFactorizationModel()
-        filepath = tmp_path / 'model.pkl'
+        filepath = tmp_path / "model.pkl"
 
         with pytest.raises(ValueError, match="モデルが学習されていません"):
             model.save(str(filepath))
 
     def test_loaded_model_is_fitted(self, trained_model, tmp_path):
         """読み込まれたモデルは学習済み状態"""
-        filepath = tmp_path / 'model.pkl'
+        filepath = tmp_path / "model.pkl"
         trained_model.save(str(filepath))
 
         loaded_model = MatrixFactorizationModel.load(str(filepath))
@@ -265,29 +265,27 @@ class TestModelPersistence:
 
 # ==================== エッジケーステスト ====================
 
+
 class TestEdgeCases:
     """エッジケースのテスト"""
 
     def test_small_matrix(self):
         """小さなマトリクスでの学習"""
-        small_matrix = pd.DataFrame(
-            {'s001': [1, 0], 's002': [0, 1]},
-            index=['m001', 'm002']
-        )
+        small_matrix = pd.DataFrame({"s001": [1, 0], "s002": [0, 1]}, index=["m001", "m002"])
 
         model = MatrixFactorizationModel(n_components=1, random_state=42)
         model.fit(small_matrix)
 
         assert model.is_fitted
-        scores = model.predict('m001')
+        scores = model.predict("m001")
         assert len(scores) == 2
 
     def test_sparse_matrix(self):
         """疎なマトリクスでの学習"""
         sparse_matrix = pd.DataFrame(
             np.zeros((10, 10)),
-            index=[f'm{i:03d}' for i in range(10)],
-            columns=[f's{i:03d}' for i in range(10)]
+            index=[f"m{i:03d}" for i in range(10)],
+            columns=[f"s{i:03d}" for i in range(10)],
         )
         # 少しだけ値を設定
         sparse_matrix.iloc[0, 0] = 3
@@ -309,6 +307,7 @@ class TestEdgeCases:
 
 # ==================== 統合テスト ====================
 
+
 class TestIntegration:
     """統合テスト"""
 
@@ -321,30 +320,27 @@ class TestIntegration:
         model.fit(sample_skill_matrix)
 
         # 3. 予測
-        scores = model.predict('m001')
+        scores = model.predict("m001")
         assert len(scores) == 5
 
         # 4. Top-K推薦
-        acquired = sample_skill_matrix.loc['m001']
+        acquired = sample_skill_matrix.loc["m001"]
         acquired_competences = acquired[acquired > 0].index.tolist()
         top_k = model.predict_top_k(
-            'm001',
-            k=2,
-            exclude_acquired=True,
-            acquired_competences=acquired_competences
+            "m001", k=2, exclude_acquired=True, acquired_competences=acquired_competences
         )
         assert len(top_k) == 2
 
         # 5. 因子取得
-        member_factors = model.get_member_factors('m001')
+        member_factors = model.get_member_factors("m001")
         assert member_factors.shape == (2,)
 
         # 6. 保存
-        filepath = tmp_path / 'model.pkl'
+        filepath = tmp_path / "model.pkl"
         model.save(str(filepath))
 
         # 7. 読み込み
         loaded_model = MatrixFactorizationModel.load(str(filepath))
-        loaded_scores = loaded_model.predict('m001')
+        loaded_scores = loaded_model.predict("m001")
 
         pd.testing.assert_series_equal(scores, loaded_scores)

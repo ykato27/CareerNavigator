@@ -20,11 +20,7 @@ logger = logging.getLogger(__name__)
 class ModelStorage:
     """Handles model serialization and storage."""
 
-    def __init__(
-        self,
-        db_manager: DatabaseManager,
-        storage_dir: str = "models"
-    ):
+    def __init__(self, db_manager: DatabaseManager, storage_dir: str = "models"):
         """
         Initialize model storage.
 
@@ -46,7 +42,7 @@ class ModelStorage:
         metrics: Dict[str, float],
         training_data: Optional[pd.DataFrame] = None,
         description: Optional[str] = None,
-        use_joblib: bool = True
+        use_joblib: bool = True,
     ) -> ModelMetadata:
         """
         Save a trained model.
@@ -79,7 +75,7 @@ class ModelStorage:
             if use_joblib:
                 joblib.dump(model, file_path)
             else:
-                with open(file_path, 'wb') as f:
+                with open(file_path, "wb") as f:
                     pickle.dump(model, f)
             logger.info(f"Saved model file: {file_path}")
         except Exception as e:
@@ -95,17 +91,13 @@ class ModelStorage:
             metrics=metrics,
             file_path=str(file_path),
             data_hash=data_hash,
-            description=description
+            description=description,
         )
 
         self.model_repo.create_model(metadata)
         return metadata
 
-    def load_model(
-        self,
-        model_id: str,
-        use_joblib: bool = True
-    ) -> Optional[Any]:
+    def load_model(self, model_id: str, use_joblib: bool = True) -> Optional[Any]:
         """
         Load a saved model.
 
@@ -132,7 +124,7 @@ class ModelStorage:
             if use_joblib:
                 model = joblib.load(file_path)
             else:
-                with open(file_path, 'rb') as f:
+                with open(file_path, "rb") as f:
                     model = pickle.load(f)
             logger.info(f"Loaded model: {model_id}")
             return model
@@ -145,7 +137,7 @@ class ModelStorage:
         user_id: str,
         model_type: str,
         training_data: Optional[pd.DataFrame] = None,
-        use_joblib: bool = True
+        use_joblib: bool = True,
     ) -> tuple[Optional[Any], Optional[ModelMetadata]]:
         """
         Load the latest model for a user.
@@ -166,9 +158,7 @@ class ModelStorage:
 
         # Get latest metadata
         metadata = self.model_repo.get_latest_model(
-            user_id=user_id,
-            model_type=model_type,
-            data_hash=data_hash
+            user_id=user_id, model_type=model_type, data_hash=data_hash
         )
 
         if not metadata:
@@ -210,9 +200,7 @@ class ModelStorage:
         return self.model_repo.delete_model(model_id)
 
     def list_user_models(
-        self,
-        user_id: str,
-        model_type: Optional[str] = None
+        self, user_id: str, model_type: Optional[str] = None
     ) -> list[ModelMetadata]:
         """
         List models for a user.
@@ -242,11 +230,7 @@ class ModelStorage:
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     @staticmethod
-    def _generate_model_id(
-        user_id: str,
-        model_type: str,
-        data_hash: Optional[str]
-    ) -> str:
+    def _generate_model_id(user_id: str, model_type: str, data_hash: Optional[str]) -> str:
         """
         Generate unique model ID.
 

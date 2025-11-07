@@ -535,6 +535,12 @@ uv pip install -e .
 
 ### 🔬 技術ドキュメント
 
+- **[モデル技術ガイド (docs/MODELS_TECHNICAL_GUIDE.md)](docs/MODELS_TECHNICAL_GUIDE.md)** ⭐ **初級者向け！**
+  - Matrix Factorization（行列分解）の仕組みと使い方
+  - 多様性再ランキング戦略の選び方
+  - グラフベース推薦とハイブリッド推薦
+  - モデル選択ガイドとFAQ
+
 - **[機械学習技術詳細 (docs/ML_TECHNICAL_DETAILS.md)](docs/ML_TECHNICAL_DETAILS.md)** - ML推薦システムの技術解説
   - Matrix Factorization (NMF)
   - 多様性再ランキング戦略
