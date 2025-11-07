@@ -360,7 +360,11 @@ class RoleBasedGrowthPathAnalyzer:
         growth_path = self.get_growth_path_for_member(member_code)
 
         if not growth_path:
-            return []
+            logger.warning(f"メンバー {member_code} の成長パスが見つかりません。全スキルから推薦します。")
+            # フォールバック：全スキルから推薦
+            return self._fallback_recommend_from_all_skills(
+                member_code, top_n, min_acquisition_rate
+            )
 
         # メンバーの現在の保有スキルを取得
         member_skills = self.member_competence_df[
@@ -397,6 +401,32 @@ class RoleBasedGrowthPathAnalyzer:
 
         # 優先度スコアでソート
         recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+
+        # フォールバック：推薦が0件の場合、フィルタを緩める
+        if len(recommendations) == 0 and min_acquisition_rate > 0:
+            logger.info(f"推薦が0件のため、取得率フィルタを緩和: {min_acquisition_rate} → 0.0")
+            # 取得率フィルタなしで再試行
+            for skill_pattern in growth_path.skills_in_order:
+                # 既に習得済みのスキルはスキップ
+                if skill_pattern.competence_code in member_skills_set:
+                    continue
+
+                # 推薦理由を生成
+                reason = self._generate_recommendation_reason(skill_pattern, growth_path)
+                reason += "\n\n※ 取得率は低いですが、この役職での成長パス上にあるスキルです。"
+
+                recommendations.append({
+                    'competence_code': skill_pattern.competence_code,
+                    'competence_name': skill_pattern.competence_name,
+                    'competence_type': skill_pattern.competence_type,
+                    'category': skill_pattern.category,
+                    'priority_score': 1.0 / (skill_pattern.average_order + 1),
+                    'average_order': skill_pattern.average_order,
+                    'acquisition_rate': skill_pattern.acquisition_rate,
+                    'reason': reason
+                })
+
+            recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
 
         return recommendations[:top_n]
 
@@ -680,3 +710,91 @@ class RoleBasedGrowthPathAnalyzer:
             all_recommendations[role_name] = role_recommendations[:top_n_per_role]
 
         return all_recommendations
+
+    def _fallback_recommend_from_all_skills(self,
+                                           member_code: str,
+                                           top_n: int,
+                                           min_acquisition_rate: float) -> List[Dict]:
+        """
+        フォールバック：全スキルから推薦
+
+        成長パスが存在しない場合の最終フォールバック。
+        人気スキル（多くのメンバーが保有）を推薦する。
+
+        Args:
+            member_code: メンバーコード
+            top_n: 推薦するスキル数
+            min_acquisition_rate: 最小取得率（未使用、常に0）
+
+        Returns:
+            推薦スキルのリスト
+        """
+        logger.info("フォールバック：全スキルから人気スキルを推薦")
+
+        # メンバーの現在の保有スキルを取得
+        member_skills = self.member_competence_df[
+            self.member_competence_df[self.member_code_column] == member_code
+        ][self.competence_code_column].unique()
+
+        member_skills_set = set(member_skills)
+
+        # 全スキルについて保有メンバー数をカウント
+        skill_popularity = {}
+
+        for competence_code in self.competence_master_df['力量コード'].unique():
+            # 既に保有しているスキルはスキップ
+            if competence_code in member_skills_set:
+                continue
+
+            # このスキルを保有しているメンバー数
+            holder_count = len(self.member_competence_df[
+                self.member_competence_df[self.competence_code_column] == competence_code
+            ][self.member_code_column].unique())
+
+            if holder_count > 0:
+                skill_popularity[competence_code] = holder_count
+
+        # 人気順にソート
+        sorted_skills = sorted(
+            skill_popularity.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        # 推薦リストを生成
+        recommendations = []
+        for competence_code, holder_count in sorted_skills[:top_n]:
+            # スキル情報を取得
+            skill_info = self.competence_master_df[
+                self.competence_master_df['力量コード'] == competence_code
+            ]
+
+            if skill_info.empty:
+                continue
+
+            skill_info = skill_info.iloc[0]
+
+            # 全メンバーに対する取得率
+            total_members = len(self.members_df)
+            acquisition_rate = holder_count / total_members if total_members > 0 else 0
+
+            reason = (
+                f"【人気スキル推薦】\n"
+                f"このスキルは{total_members}名中{holder_count}名（{acquisition_rate*100:.1f}%）が保有しています。\n"
+                f"役職ベースの成長パスが見つからなかったため、人気のあるスキルから推薦しています。"
+            )
+
+            recommendations.append({
+                'competence_code': competence_code,
+                'competence_name': skill_info.get('力量名', competence_code),
+                'competence_type': skill_info.get('力量タイプ', 'UNKNOWN'),
+                'category': skill_info.get('力量カテゴリー名', ''),
+                'priority_score': acquisition_rate,  # 取得率をスコアとして使用
+                'average_order': 0,  # 順序情報なし
+                'acquisition_rate': acquisition_rate,
+                'reason': reason
+            })
+
+        logger.info(f"フォールバック推薦: {len(recommendations)}件")
+
+        return recommendations

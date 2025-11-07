@@ -384,8 +384,21 @@ class RandomWalkRecommender:
             )
             category_scores.extend(similar_scores)
 
+        # 3. 最終フォールバック：人気スキル推薦（候補がまだ少ない場合）
+        if len(category_scores) < 5:
+            logger.info("候補が少ないため、人気スキル推薦を追加")
+            popular_scores = self._popular_skills_fallback(
+                acquired_competences, competence_type
+            )
+            category_scores.extend(popular_scores)
+
         # 重複除去
-        return self._deduplicate_scores(category_scores)
+        result = self._deduplicate_scores(category_scores)
+
+        if len(result) == 0:
+            logger.warning("⚠️ 全てのフォールバック手法でも推薦が0件です。グラフの構造を確認してください。")
+
+        return result
 
     def _category_based_fallback(
         self,
@@ -480,6 +493,63 @@ class RandomWalkRecommender:
                 fallback_scores.append((comp_code, score))
 
         logger.info(f"類似メンバーベース推薦: {len(fallback_scores)}個")
+        return fallback_scores
+
+    def _popular_skills_fallback(
+        self,
+        acquired_competences: Set[str],
+        competence_type: Optional[List[str]]
+    ) -> List[Tuple[str, float]]:
+        """人気スキルベースのフォールバック推薦
+
+        多くのメンバーが保有しているスキルを推薦する
+
+        Args:
+            acquired_competences: 既習得力量コードのセット
+            competence_type: 力量タイプフィルタ
+
+        Returns:
+            [(力量コード, スコア), ...]
+        """
+        # 各力量を保有しているメンバー数をカウント
+        competence_member_count = {}
+
+        for node in self.graph.nodes():
+            if not node.startswith("competence_"):
+                continue
+
+            comp_code = node.replace("competence_", "")
+
+            # フィルタリング
+            if self._should_exclude_competence(
+                comp_code, node, acquired_competences, competence_type
+            ):
+                continue
+
+            # このスキルを保有しているメンバー数をカウント
+            member_count = sum(
+                1 for neighbor in self.graph.neighbors(node)
+                if neighbor.startswith("member_")
+            )
+
+            if member_count > 0:
+                competence_member_count[comp_code] = member_count
+
+        # メンバー数でソートして上位を推薦
+        sorted_competences = sorted(
+            competence_member_count.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        # スコアは人気度に基づく（0.0001 - 0.0005の範囲）
+        max_count = sorted_competences[0][1] if sorted_competences else 1
+        fallback_scores = [
+            (comp_code, 0.0001 + (count / max_count) * 0.0004)
+            for comp_code, count in sorted_competences[:20]  # 上位20件
+        ]
+
+        logger.info(f"人気スキルベース推薦: {len(fallback_scores)}個")
         return fallback_scores
 
     # ===============================================================
