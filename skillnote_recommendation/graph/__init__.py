@@ -25,6 +25,7 @@ from .role_based_growth_path import (
     RoleGrowthPath,
     SkillAcquisitionPattern
 )
+from .role_growth_path_visualizer import RoleGrowthPathVisualizer
 
 # 新しい改善版モジュール
 from .enhanced_path_visualizer import EnhancedPathVisualizer, EdgeStatistics, create_comparison_view
@@ -55,6 +56,7 @@ __all__ = [
     'RoleBasedGrowthPathAnalyzer',
     'RoleGrowthPath',
     'SkillAcquisitionPattern',
+    'RoleGrowthPathVisualizer',
     # 新しい改善版
     'EnhancedPathVisualizer',
     'EdgeStatistics',
