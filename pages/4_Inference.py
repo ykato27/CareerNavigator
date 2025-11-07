@@ -18,6 +18,8 @@ import logging
 
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
@@ -44,6 +46,182 @@ from skillnote_recommendation.utils.ui_components import (
 # =========================================================
 # ヘルパー関数
 # =========================================================
+
+def create_growth_path_timeline(growth_path, role_name: str):
+    """
+    役職の成長パス（スキル取得シナリオ）をタイムライン形式で可視化
+
+    Args:
+        growth_path: RoleGrowthPathオブジェクト
+        role_name: 役職名
+
+    Returns:
+        Plotlyのfigureオブジェクト
+    """
+    if not growth_path or not growth_path.skills_in_order:
+        return None
+
+    # データ準備
+    skills = growth_path.skills_in_order
+
+    # 成長段階を決定（取得率に基づく）
+    stages = []
+    colors = []
+    for skill in skills:
+        if skill.acquisition_rate < 0.3:
+            stages.append("🌱 初級")
+            colors.append("#90EE90")  # Light green
+        elif skill.acquisition_rate < 0.7:
+            stages.append("🌿 中級")
+            colors.append("#4CAF50")  # Green
+        else:
+            stages.append("🌳 上級")
+            colors.append("#2E7D32")  # Dark green
+
+    # スキル名（長すぎる場合は省略）
+    skill_names = [
+        skill.competence_name[:25] + "..." if len(skill.competence_name) > 25
+        else skill.competence_name
+        for skill in skills
+    ]
+
+    # 取得順序
+    orders = [skill.average_order for skill in skills]
+
+    # 取得率（パーセント）
+    acquisition_rates = [skill.acquisition_rate * 100 for skill in skills]
+
+    # ホバーテキスト
+    hover_texts = [
+        f"<b>{skill.competence_name}</b><br>"
+        f"平均取得順序: {skill.average_order:.1f}番目<br>"
+        f"取得率: {skill.acquisition_rate*100:.1f}% ({skill.acquisition_count}/{skill.total_members}名)<br>"
+        f"成長段階: {stage}<br>"
+        f"カテゴリー: {skill.category}"
+        for skill, stage in zip(skills, stages)
+    ]
+
+    # タイムライン図を作成
+    fig = go.Figure()
+
+    # スキルをバーで表示
+    fig.add_trace(go.Bar(
+        x=orders,
+        y=skill_names,
+        orientation='h',
+        marker=dict(
+            color=colors,
+            line=dict(color='white', width=1)
+        ),
+        hovertext=hover_texts,
+        hoverinfo='text',
+        text=[f"{rate:.0f}%" for rate in acquisition_rates],
+        textposition='inside',
+        textfont=dict(color='white', size=10),
+        name='スキル取得順序'
+    ))
+
+    # レイアウト設定
+    fig.update_layout(
+        title=dict(
+            text=f"<b>役職「{role_name}」のスキル取得シナリオ</b><br>"
+                 f"<sup>平均取得順序に基づく成長パス（{growth_path.total_members}名のデータから分析）</sup>",
+            x=0.5,
+            xanchor='center'
+        ),
+        xaxis=dict(
+            title="平均取得順序（番目）",
+            gridcolor='lightgray',
+            showgrid=True
+        ),
+        yaxis=dict(
+            title="",
+            autorange="reversed"  # 上から下に表示
+        ),
+        height=max(400, len(skills) * 30),  # スキル数に応じて高さを調整
+        margin=dict(l=200, r=50, t=100, b=50),
+        plot_bgcolor='white',
+        hovermode='closest',
+        showlegend=False
+    )
+
+    return fig
+
+
+def create_growth_path_stages_chart(growth_path, role_name: str):
+    """
+    役職の成長パスを段階別に可視化（初級・中級・上級）
+
+    Args:
+        growth_path: RoleGrowthPathオブジェクト
+        role_name: 役職名
+
+    Returns:
+        Plotlyのfigureオブジェクト
+    """
+    if not growth_path or not growth_path.skills_in_order:
+        return None
+
+    # 段階別にスキルを分類
+    early_skills = growth_path.get_early_stage_skills(threshold=0.3)
+    mid_skills = growth_path.get_mid_stage_skills(early_threshold=0.3, late_threshold=0.7)
+    late_skills = growth_path.get_late_stage_skills(threshold=0.7)
+
+    stages_data = [
+        {
+            'stage': '🌱 初級段階',
+            'count': len(early_skills),
+            'avg_acquisition_rate': sum(s.acquisition_rate for s in early_skills) / len(early_skills) * 100 if early_skills else 0,
+            'color': '#90EE90'
+        },
+        {
+            'stage': '🌿 中級段階',
+            'count': len(mid_skills),
+            'avg_acquisition_rate': sum(s.acquisition_rate for s in mid_skills) / len(mid_skills) * 100 if mid_skills else 0,
+            'color': '#4CAF50'
+        },
+        {
+            'stage': '🌳 上級段階',
+            'count': len(late_skills),
+            'avg_acquisition_rate': sum(s.acquisition_rate for s in late_skills) / len(late_skills) * 100 if late_skills else 0,
+            'color': '#2E7D32'
+        }
+    ]
+
+    # サンキー図を作成
+    fig = go.Figure()
+
+    # 棒グラフで表示
+    fig.add_trace(go.Bar(
+        x=[d['stage'] for d in stages_data],
+        y=[d['count'] for d in stages_data],
+        marker=dict(color=[d['color'] for d in stages_data]),
+        text=[f"{d['count']}個<br>平均取得率: {d['avg_acquisition_rate']:.1f}%" for d in stages_data],
+        textposition='auto',
+        hovertext=[
+            f"<b>{d['stage']}</b><br>"
+            f"スキル数: {d['count']}個<br>"
+            f"平均取得率: {d['avg_acquisition_rate']:.1f}%"
+            for d in stages_data
+        ],
+        hoverinfo='text'
+    ))
+
+    fig.update_layout(
+        title=dict(
+            text=f"<b>役職「{role_name}」の成長段階別スキル分布</b>",
+            x=0.5,
+            xanchor='center'
+        ),
+        xaxis=dict(title="成長段階"),
+        yaxis=dict(title="スキル数"),
+        height=400,
+        plot_bgcolor='white',
+        showlegend=False
+    )
+
+    return fig
+
 
 def convert_hybrid_to_recommendation(hybrid_rec) -> Recommendation:
     """
@@ -1240,6 +1418,27 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     st.metric("メンバー数", f"{growth_path.total_members}名")
                                 with col2:
                                     st.metric("分析されたスキル数", f"{len(growth_path.skills_in_order)}個")
+
+                                # 成長パスの可視化を追加
+                                st.markdown("#### 📈 スキル取得シナリオ")
+                                st.info("この役職のメンバーが実際にスキルを習得してきた順序を可視化しています。左から右へ進むほど後期に習得されるスキルです。")
+
+                                # タブで表示
+                                timeline_tab, stages_tab = st.tabs(["🔄 取得順序タイムライン", "📊 段階別分布"])
+
+                                with timeline_tab:
+                                    # タイムライン図を作成
+                                    timeline_fig = create_growth_path_timeline(growth_path, role_name)
+                                    if timeline_fig:
+                                        st.plotly_chart(timeline_fig, use_container_width=True)
+                                        st.caption("💡 各バーの色は成長段階を示します（緑が薄い=初級、濃い=上級）。バーの幅は平均取得順序を示し、バー内の数値は役職内での取得率（%）です。")
+
+                                with stages_tab:
+                                    # 段階別チャートを作成
+                                    stages_fig = create_growth_path_stages_chart(growth_path, role_name)
+                                    if stages_fig:
+                                        st.plotly_chart(stages_fig, use_container_width=True)
+                                        st.caption("💡 成長パス上のスキルを、早期（初級）・中期（中級）・後期（上級）の3段階に分類して表示しています。")
 
                             st.markdown("---")
 
