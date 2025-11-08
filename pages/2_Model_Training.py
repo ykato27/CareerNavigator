@@ -99,7 +99,7 @@ if st.session_state.get("model_trained", False):
 
     # デバッグ情報を表示（学習後も保持）
     if st.session_state.get("show_debug_info", False) and st.session_state.get("debug_messages"):
-        with st.expander("🔍 デバッグ情報（前回の学習）", expanded=True):
+        with st.expander("🔍 デバッグ情報（前回の学習）", expanded=False):
             st.code("\n".join(st.session_state.debug_messages))
 
             # デバッグ情報をクリアするボタン
