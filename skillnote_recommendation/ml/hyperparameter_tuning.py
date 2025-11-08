@@ -788,6 +788,7 @@ def tune_nmf_hyperparameters_from_config(
     custom_timeout: Optional[int] = None,
     custom_search_space: Optional[Dict] = None,
     custom_sampler: Optional[str] = None,
+    custom_random_state: Optional[int] = None,
     progress_callback: Optional[Callable] = None,
 ) -> Tuple:
     """
@@ -802,6 +803,7 @@ def tune_nmf_hyperparameters_from_config(
         custom_timeout: カスタムタイムアウト（Noneの場合はconfigから取得）
         custom_search_space: カスタム探索空間（Noneの場合はconfigから取得）
         custom_sampler: カスタムサンプラー（Noneの場合は"tpe"）
+        custom_random_state: カスタム乱数シード（Noneの場合はconfigから取得）
         progress_callback: 進捗コールバック関数
 
     Returns:
@@ -815,7 +817,7 @@ def tune_nmf_hyperparameters_from_config(
         n_trials=custom_n_trials or optuna_params["n_trials"],
         timeout=custom_timeout or optuna_params["timeout"],
         n_jobs=optuna_params["n_jobs"],
-        random_state=config.MF_PARAMS["random_state"],
+        random_state=custom_random_state or config.MF_PARAMS["random_state"],
         search_space=custom_search_space or optuna_params["search_space"],
         use_cross_validation=optuna_params.get("use_cross_validation", True),
         n_folds=optuna_params.get("n_folds", 3),

@@ -56,6 +56,7 @@ def build_ml_recommender(
     tuning_timeout: int = None,
     tuning_search_space: dict = None,
     tuning_sampler: str = None,
+    tuning_random_state: int = None,
     tuning_progress_callback = None
 ) -> MLRecommender:
     """
@@ -69,6 +70,7 @@ def build_ml_recommender(
         tuning_timeout: チューニングタイムアウト
         tuning_search_space: チューニング探索空間
         tuning_sampler: チューニングサンプラー
+        tuning_random_state: チューニングの乱数シード
         tuning_progress_callback: 進捗コールバック
     """
     recommender = MLRecommender.build(
@@ -81,6 +83,7 @@ def build_ml_recommender(
         tuning_timeout=tuning_timeout,
         tuning_search_space=tuning_search_space,
         tuning_sampler=tuning_sampler,
+        tuning_random_state=tuning_random_state,
         tuning_progress_callback=tuning_progress_callback
     )
     return recommender
@@ -115,6 +118,7 @@ else:
     # 変数の初期化
     sampler_choice = "tpe"
     n_trials = 50
+    random_state = 42
     custom_search_space = None
 
     # 学習オプション
@@ -158,7 +162,7 @@ else:
             st.markdown("### ⚙️ チューニング詳細設定")
 
             # サンプラー選択
-            sampler_col1, sampler_col2 = st.columns(2)
+            sampler_col1, sampler_col2, sampler_col3 = st.columns(3)
             with sampler_col1:
                 sampler_choice = st.selectbox(
                     "探索方法（サンプラー）",
@@ -179,6 +183,16 @@ else:
                     value=50,
                     step=10,
                     help="探索する組み合わせの数。多いほど良い解が見つかる可能性が高まりますが、時間がかかります。"
+                )
+
+            with sampler_col3:
+                random_state = st.number_input(
+                    "乱数シード（Random State）",
+                    min_value=0,
+                    max_value=2147483647,
+                    value=42,
+                    step=1,
+                    help="乱数シードを固定することで、同じ探索過程を再現できます。実験の再現性が必要な場合に使用します。"
                 )
 
             # 探索範囲のデフォルト値を設定
@@ -269,6 +283,7 @@ else:
             if use_tuning:
                 debug_messages.append(f"✅ sampler_choice={sampler_choice}")
                 debug_messages.append(f"✅ n_trials={int(n_trials)} (型: {type(n_trials)})")
+                debug_messages.append(f"✅ random_state={int(random_state)} (型: {type(random_state)})")
                 debug_messages.append(f"✅ custom_search_space={custom_search_space}")
 
             debug_info.code("\n".join(debug_messages))
@@ -379,6 +394,7 @@ else:
                         tuning_timeout=None,
                         tuning_search_space=custom_search_space if use_tuning else None,
                         tuning_sampler=sampler_choice if use_tuning else None,
+                        tuning_random_state=int(random_state) if use_tuning else None,
                         tuning_progress_callback=progress_callback if use_tuning else None
                     )
                 finally:
