@@ -4,6 +4,140 @@
 
 ---
 
+## 💎 コード品質・ドキュメント品質の原則
+
+### コード品質の最優先事項
+#### 1. **可読性（Readability）**
+- **誰が読んでも理解できるコード** を書く
+- 「1年後の自分が理解できるか」を基準に
+- 変数名・関数名は明確で自己説明的に
+
+```python
+# 悪い例：何をしているのか不明確
+result = calculate(x, y, 0.7)
+
+# 良い例：目的が明確
+diversity_adjusted_score = apply_mmr_reranking(
+    relevance_scores=candidate_scores,
+    diversity_threshold=0.7
+)
+```
+
+#### 2. **運用保守性（Maintainability）**
+- **変更が容易** なコード設計
+- 複数箇所に散在する同じロジックを避ける
+- 依存関係を最小化（疎結合）
+
+```python
+# 悪い例：複数箇所で重複したロジック
+# pages/page1.py
+random_state = 42
+# pages/page2.py
+random_state = 42  # 重複！
+
+# 良い例：設定から一元管理
+# config.py
+DEFAULT_RANDOM_STATE = 42
+# pages/page1.py, pages/page2.py
+from config import DEFAULT_RANDOM_STATE
+```
+
+#### 3. **テスト可能性（Testability）**
+- ロジックを小さな単位に分割
+- 依存性注入（DI）で外部依存を注入可能に
+- モック化可能な設計
+
+#### 4. **パフォーマンス**
+- 大量データ処理時のボトルネックを意識
+- 無駄な計算・ループを避ける
+- メモリ効率を考慮
+
+---
+
+### ドキュメント品質の最優先事項
+#### 1. **正確性（Accuracy）**
+- **実装と一致する情報のみ記載**
+- 実装後、ドキュメントを必ず検証
+- 古い情報は削除または「非推奨」と明記
+
+```markdown
+# 悪い例：実装と不一致
+## 乱数シード設定
+UIから乱数シードを設定できます。
+（実装: config.pyでのみ設定可能）
+
+# 良い例：実装を正確に反映
+## 乱数シード設定
+UIの「チューニング詳細設定」から乱数シードを設定できます。
+範囲: 0～2147483647、デフォルト: 42
+
+実装箇所:
+- UI: pages/2_Model_Training.py:186-193
+- 伝搬: skillnote_recommendation/ml/ml_recommender.py:113
+- 使用: skillnote_recommendation/ml/hyperparameter_tuning.py:820
+```
+
+#### 2. **具体性（Concreteness）**
+- 抽象的な説明ではなく、具体的な例・コード例を含める
+- 実装ファイル・行番号を明記
+- 実行コマンド、期待される出力を記載
+
+```markdown
+# 悪い例：曖昧
+テストを実行してください。
+
+# 良い例：具体的
+## テストの実行
+```bash
+# 全テスト実行（カバレッジ付き）
+uv run pytest --cov=skillnote_recommendation
+
+# 特定の機能のテストのみ
+uv run pytest tests/test_hyperparameter_tuning.py -v
+
+# 期待される出力
+# ===================== test session starts ======================
+# collected 50 items
+# tests/test_hyperparameter_tuning.py::test_nxxx PASSED  [  2%]
+```
+
+#### 3. **最新性（Currency）**
+- 古い情報は即座に更新
+- バージョン情報を含める
+- 「最終更新日」を記載（重要なドキュメント）
+
+```markdown
+# 悪い例：時代遅れ
+v1.0 で実装されました。
+
+# 良い例：最新情報を明記
+v1.2.1 (2025-11-09) で実装
+- 乱数シード設定機能を追加
+- テストカバレッジを30% → 47%に改善
+```
+
+#### 4. **トレーサビリティ（Traceability）**
+- 実装箇所を明記（ファイル:行番号）
+- テストケースへのリンク
+- 関連するドキュメントへのリンク
+
+```markdown
+# 実装箇所
+- **UI定義**: pages/2_Model_Training.py:186-193
+- **パラメータ伝搬**: skillnote_recommendation/ml/ml_recommender.py:113
+- **使用実装**: skillnote_recommendation/ml/hyperparameter_tuning.py:820
+
+# テスト
+- tests/test_hyperparameter_tuning.py::test_custom_random_state
+- tests/test_ml_recommender.py::test_build_with_tuning_random_state
+
+# 関連ドキュメント
+- docs/ML_TECHNICAL_DETAILS.md (ハイパーパラメータチューニング)
+- CONTRIBUTING.md (開発ガイド)
+```
+
+---
+
 ## 🚀 開発前チェックリスト
 
 ### 1. **ブランチ戦略**
@@ -484,11 +618,174 @@ if custom_n_trials is None:
 ## 🔍 レビューポイント
 
 ### コードレビュー時に確認すること
+
+#### A. **可読性チェック**
+- [ ] 変数名・関数名は自己説明的か？
+  ```python
+  # 悪い例
+  result = process(data, 0.7)
+
+  # 良い例
+  filtered_recommendations = apply_diversity_reranking(
+      candidate_list=recommendations,
+      diversity_weight=0.7
+  )
+  ```
+- [ ] ネストの深さは3階層以下か？（深すぎると読みづらい）
+- [ ] 1関数は50行以下か？（長すぎると理解困難）
+- [ ] コメントは「なぜ」を説明しているか？（「何を」ではなく）
+
+#### B. **運用保守性チェック**
+- [ ] 同じロジックが複数箇所に存在しないか？
+- [ ] 設定値・定数がConfigから取得されているか？
+- [ ] 外部依存は最小化されているか？（疎結合）
+- [ ] 変更が1箇所で完結するか？（複数箇所修正が必要なら設計を見直す）
+
+#### C. **テスト可能性チェック**
+- [ ] ロジックが小さな単位（関数）に分割されているか？
+- [ ] 外部依存（DB、ネットワーク等）を注入可能か？
+- [ ] 純粋関数（同じ入力で必ず同じ出力）になっているか？
+
+#### D. **ドキュメント正確性チェック**
+- [ ] ドキュメントと実装が一致しているか？
+- [ ] 実装ファイル・行番号は正確か？
+- [ ] 古い情報がないか？（バージョンが古い、非推奨メソッドなど）
+- [ ] 実行結果・期待される出力は記載されているか？
+
+#### E. **その他**
 1. **型アノテーション**: すべての関数に型情報があるか
-2. **テスト**: 新機能に対するテストがあるか
-3. **ドキュメント**: 説明・使い方が明記されているか
-4. **リファクタリング**: 既存コードで対応できないか
-5. **パフォーマンス**: 計算量に問題がないか
+2. **テスト**: 新機能に対するテスト（80%以上カバレッジ）があるか
+3. **パフォーマンス**: 計算量に問題がないか（大量データでボトルネックなし）
+
+---
+
+## 🛠️ 実装時のチェックリスト（完成前の確認）
+
+### コード実装完了時
+```
+□ コードが完成した
+  ↓
+□ 以下の確認を実施
+  □ A. 可読性確認
+    □ 変数名は明確か？
+    □ 関数は1つの責任に絞れているか？
+    □ ネストは深くないか？（3階層以下）
+    □ 複雑な処理にはコメント（「なぜ」）があるか？
+
+  □ B. 運用保守性確認
+    □ 重複したロジックがないか？
+    □ 設定は一元管理されているか？
+    □ 変更が1箇所で完結するか？
+
+  □ C. テスト
+    □ ユニットテストを書いたか？
+    □ 80%以上のカバレッジを達成したか？
+    □ テストは通るか？ (uv run pytest)
+
+  □ D. ドキュメント
+    □ ドキュメントを書いたか？
+    □ 実装箇所（ファイル:行番号）を記載したか？
+    □ 実装と一致しているか？（実装後に再確認）
+    □ 古い情報がないか？
+
+□ 検証を通過した
+  ↓
+□ コミット・PR作成
+```
+
+### チェックリスト実行時の詳細
+
+#### A. 可読性の実装確認
+```python
+# 実装したコード例
+random_state = st.number_input(
+    "乱数シード（Random State）",
+    min_value=0,
+    max_value=2147483647,
+    value=42,
+    step=1,
+    help="乱数シードを固定することで、同じ探索過程を再現できます。実験の再現性が必要な場合に使用します。"
+)
+
+✅ 確認項目
+- 変数名: random_state ← 意味が明確
+- 関数: st.number_input ← 何をしているか明確
+- 入力制約: min_value, max_value, value ← 理由が明確（乱数シード范囲）
+- ヘルプテキスト: 「なぜ」これが必要か説明
+```
+
+#### B. 運用保守性の実装確認
+```python
+# チェック項目
+
+# ❌ 悪い例：複数箇所で定義
+# pages/page1.py
+DEFAULT_RANDOM_STATE = 42
+# skillnote_recommendation/ml/ml_recommender.py
+if custom_random_state is None:
+    custom_random_state = 42  # 重複！
+
+# ✅ 良い例：一元管理
+# config.py
+OPTUNA_PARAMS = {
+    "random_state": 42,
+    ...
+}
+# 使用側
+random_state = custom_random_state or config.OPTUNA_PARAMS["random_state"]
+```
+
+#### C. テスト作成確認
+```bash
+# 実装時のテスト実行チェック
+$ uv run pytest --cov=skillnote_recommendation
+
+# 期待される出力例
+collected 393 items
+tests/test_ml_recommender.py::test_build_with_tuning_random_state PASSED
+tests/test_hyperparameter_tuning.py::test_custom_random_state PASSED
+...
+======================== 393 passed in 12.34s ========================
+============ coverage: 47% ============
+```
+
+#### D. ドキュメント確認
+```markdown
+# 記載すべき内容
+
+## 機能名
+乱数シード（Random State）設定機能
+
+## 説明
+- 何ができるか
+- なぜ必要か
+- どう使うか
+
+## 実装箇所
+- **UI定義**: pages/2_Model_Training.py:186-193
+- **パラメータ伝搬**: skillnote_recommendation/ml/ml_recommender.py:113-122
+- **実装**: skillnote_recommendation/ml/hyperparameter_tuning.py:820
+
+## テスト
+- tests/test_hyperparameter_tuning.py::test_custom_random_state
+- tests/test_ml_recommender.py::test_build_with_tuning_random_state
+
+## 使用例
+```python
+random_state = 42
+recommender = MLRecommender.build(
+    ...,
+    tuning_random_state=random_state,
+    ...
+)
+```
+
+## 検証方法
+✅ ドキュメントを書き終わった直後に実装と照合
+✅ 実装ファイル・行番号は正確か
+✅ コード例は動作するか
+✅ 古い情報がないか
+```
 
 ---
 
