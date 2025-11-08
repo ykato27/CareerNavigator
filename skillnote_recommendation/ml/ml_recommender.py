@@ -51,6 +51,7 @@ class MLRecommender:
         tuning_timeout: Optional[int] = None,
         tuning_search_space: Optional[Dict] = None,
         tuning_sampler: Optional[str] = None,
+        tuning_random_state: Optional[int] = None,
         tuning_progress_callback: Optional[object] = None,
     ):
         """
@@ -68,6 +69,7 @@ class MLRecommender:
             tuning_timeout: チューニングタイムアウト（Noneの場合はデフォルト）
             tuning_search_space: チューニング探索空間（Noneの場合はデフォルト）
             tuning_sampler: チューニングサンプラー（Noneの場合は"tpe"）
+            tuning_random_state: チューニングの乱数シード（Noneの場合はデフォルト）
             tuning_progress_callback: チューニング進捗コールバック
         """
         from skillnote_recommendation.core.config import Config
@@ -117,6 +119,7 @@ class MLRecommender:
                     custom_timeout=tuning_timeout,
                     custom_search_space=tuning_search_space,
                     custom_sampler=tuning_sampler,
+                    custom_random_state=tuning_random_state,
                     progress_callback=tuning_progress_callback,
                 )
                 print(f"\n✅ チューニング完了")
