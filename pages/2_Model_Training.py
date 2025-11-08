@@ -99,7 +99,7 @@ if st.session_state.get("model_trained", False):
 
     # デバッグ情報を表示（学習後も保持）
     if st.session_state.get("show_debug_info", False) and st.session_state.get("debug_messages"):
-        with st.expander("🔍 デバッグ情報（前回の学習）", expanded=True):
+        with st.expander("🔍 デバッグ情報（前回の学習）", expanded=False):
             st.code("\n".join(st.session_state.debug_messages))
 
             # デバッグ情報をクリアするボタン
@@ -559,7 +559,16 @@ if st.session_state.get("model_trained", False):
     with st.expander("📈 潜在因子ごとの代表力量（トップ10）"):
         competence_master = st.session_state.transformed_data["competence_master"]
 
-        n_factors_to_show = min(5, mf_model.n_components)
+        # 表示対象の潜在因子数を選択
+        col_factor_select1, col_factor_select2 = st.columns(2)
+        with col_factor_select1:
+            show_all_factors = st.checkbox(
+                "すべての潜在因子を表示",
+                value=False,
+                help="チェックするとすべての潜在因子を表示します。未チェック時は最初の10個を表示"
+            )
+
+        n_factors_to_show = mf_model.n_components if show_all_factors else min(10, mf_model.n_components)
 
         for factor_idx in range(n_factors_to_show):
             st.markdown(f"#### 潜在因子 {factor_idx + 1}")
