@@ -1056,30 +1056,11 @@ rwr_weight = 0.5  # グラフとNMFを同等に評価
 
 
 # =========================================================
-# SEM分析パラメータ（ボタン外で定義）
+# SEM分析パラメータキーの定義（ボタン外）
 # =========================================================
 
 # スライダーキーをメンバーコードで一意に生成
-# Streamlit の key パラメータが自動的に初期化と保持を行う
 sem_slider_key = f"sem_min_coeff_{selected_member_code}"
-
-# SEM分析用スライダーをボタン前に配置
-st.markdown("---")
-st.markdown("### 📊 SEM分析パラメータ")
-col_sem1, col_sem2 = st.columns([3, 1])
-with col_sem1:
-    # Streamlit に自動管理させる（valueパラメータなし）
-    # keyのみで十分 - Streamlitが自動的に初期化と保持を行う
-    sem_min_coefficient = st.slider(
-        "表示する関係強度（パス係数）の最小値",
-        min_value=0.0,
-        max_value=1.0,
-        step=0.05,
-        help="スライダーを右に移動させると、より強い関係のみが表示されます。",
-        key=sem_slider_key
-    )
-with col_sem2:
-    st.metric("最小値", f"{sem_min_coefficient:.2f}")
 
 
 # =========================================================
@@ -2387,9 +2368,19 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                             if hasattr(recommender, 'skill_dependency_sem_model') and recommender.skill_dependency_sem_model:
                                 st.subheader("📊 スキル依存関係ネットワーク")
 
-                                # session_state から最新のスライダー値を取得
-                                # ボタン外でのスライダー操作に追従する
-                                current_min_coefficient = st.session_state.get(sem_slider_key, 0.0)
+                                # 関係強度フィルタリング用スライダー
+                                col_slider1, col_slider2 = st.columns([3, 1])
+                                with col_slider1:
+                                    current_min_coefficient = st.slider(
+                                        "表示する関係強度（パス係数）の最小値",
+                                        min_value=0.0,
+                                        max_value=1.0,
+                                        step=0.05,
+                                        help="スライダーを右に移動させると、より強い関係のみが表示されます。",
+                                        key=sem_slider_key
+                                    )
+                                with col_slider2:
+                                    st.metric("最小値", f"{current_min_coefficient:.2f}")
 
                                 filtered_pairs_count = len([p for p in recommender.skill_dependency_sem_model.skill_paths
                                                            if abs(p.coefficient) >= current_min_coefficient])
