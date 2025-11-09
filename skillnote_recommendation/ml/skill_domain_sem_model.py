@@ -744,39 +744,92 @@ class SkillDomainSEMModel:
 
     def get_skill_dependency_graph(self, domain_name: str) -> Optional[Dict[str, Any]]:
         """
-        スキル依存関係ネットワークグラフを生成
+        スキル依存関係ネットワークグラフを生成（個別力量レベル）
 
         Args:
             domain_name: 領域名
 
         Returns:
-            ノードとエッジを含むグラフ構造
+            ノードとエッジを含むグラフ構造（個別の力量をノードとして表示）
         """
         domain_struct = self.domain_structures.get(domain_name)
         if not domain_struct:
             return None
 
-        # ノード情報（潜在変数）
+        # ノード情報（個別の力量）
         nodes = []
-        for latent_factor in domain_struct.latent_factors:
-            nodes.append({
-                "id": latent_factor.factor_name,
-                "label": f"{latent_factor.factor_name}",
-                "skills": latent_factor.observed_skills,
-                "num_skills": len(latent_factor.observed_skills),
-            })
+        skill_to_factor = {}  # スキルがどの潜在因子に属するかのマッピング
 
-        # エッジ情報（パス係数）
+        for latent_factor in domain_struct.latent_factors:
+            for skill_code in latent_factor.observed_skills:
+                # 力量マスタから情報を取得
+                skill_info = self.competence_master_df[
+                    self.competence_master_df['力量コード'] == skill_code
+                ]
+
+                if not skill_info.empty:
+                    skill_row = skill_info.iloc[0]
+                    skill_name = skill_row.get('力量名', skill_code)
+                    skill_type = skill_row.get('力量タイプ', 'UNKNOWN')
+
+                    # ファクターローディングを取得
+                    factor_loading = latent_factor.factor_loadings.get(skill_code, 0.0)
+
+                    nodes.append({
+                        "id": skill_code,
+                        "label": skill_name,
+                        "competence_type": skill_type,
+                        "factor_name": latent_factor.factor_name,
+                        "factor_loading": factor_loading,
+                        "level": latent_factor.level,
+                    })
+
+                    skill_to_factor[skill_code] = latent_factor.factor_name
+
+        # エッジ情報（潜在因子間のパス係数に基づく力量間の関係）
         edges = []
         for path_coeff in domain_struct.path_coefficients:
-            edges.append({
-                "from": path_coeff.from_factor,
-                "to": path_coeff.to_factor,
-                "coefficient": path_coeff.coefficient,
-                "p_value": path_coeff.p_value,
-                "is_significant": path_coeff.is_significant,
-                "t_value": path_coeff.t_value,
-            })
+            from_factor = path_coeff.from_factor
+            to_factor = path_coeff.to_factor
+
+            # この2つの潜在因子に属する力量同士の関係を作成
+            from_skills = [
+                lf for lf in domain_struct.latent_factors
+                if lf.factor_name == from_factor
+            ]
+            to_skills = [
+                lf for lf in domain_struct.latent_factors
+                if lf.factor_name == to_factor
+            ]
+
+            if from_skills and to_skills:
+                from_latent = from_skills[0]
+                to_latent = to_skills[0]
+
+                # 各力量ペアに対してエッジを作成
+                # エッジの重みは: パス係数 × from_loading × to_loading
+                for from_skill in from_latent.observed_skills:
+                    from_loading = from_latent.factor_loadings.get(from_skill, 0.5)
+
+                    for to_skill in to_latent.observed_skills:
+                        to_loading = to_latent.factor_loadings.get(to_skill, 0.5)
+
+                        # 複合的な影響度を計算
+                        combined_coefficient = (
+                            path_coeff.coefficient * from_loading * to_loading
+                        )
+
+                        edges.append({
+                            "from": from_skill,
+                            "to": to_skill,
+                            "coefficient": combined_coefficient,
+                            "path_coefficient": path_coeff.coefficient,
+                            "from_loading": from_loading,
+                            "to_loading": to_loading,
+                            "p_value": path_coeff.p_value,
+                            "is_significant": path_coeff.is_significant,
+                            "t_value": path_coeff.t_value,
+                        })
 
         return {
             "domain": domain_name,
@@ -816,7 +869,14 @@ class SkillDomainSEMModel:
 
         # ノードを追加
         for node in graph_data["nodes"]:
-            G.add_node(node["id"], label=node["label"], num_skills=node["num_skills"])
+            G.add_node(
+                node["id"],
+                label=node["label"],
+                competence_type=node["competence_type"],
+                factor_name=node["factor_name"],
+                factor_loading=node["factor_loading"],
+                level=node["level"]
+            )
 
         # エッジを追加（フィルタリング）
         edge_data_list = []
@@ -876,7 +936,10 @@ class SkillDomainSEMModel:
                 mode="lines",
                 line=dict(width=width, color=color),
                 hoverinfo="text",
-                hovertext=f"係数: {edge_data['coefficient']:.3f}<br>"
+                hovertext=f"複合係数: {edge_data['coefficient']:.3f}<br>"
+                         f"パス係数: {edge_data['path_coefficient']:.3f}<br>"
+                         f"From Loading: {edge_data['from_loading']:.3f}<br>"
+                         f"To Loading: {edge_data['to_loading']:.3f}<br>"
                          f"t値: {edge_data['t_value']:.3f}<br>"
                          f"p値: {edge_data['p_value']:.4f}<br>"
                          f"有意: {'Yes' if edge_data['is_significant'] else 'No'}",
@@ -884,45 +947,77 @@ class SkillDomainSEMModel:
             )
             edge_traces.append(edge_trace)
 
-        # ノードを描画（ホバー情報を充実）
+        # ノードを描画（力量タイプごとに色分け）
         node_x, node_y, node_text, node_hover = [], [], [], []
         node_sizes = []
+        node_colors = []
+
+        # 力量タイプごとの色定義
+        type_colors = {
+            'SKILL': '#1f77b4',      # 青
+            'EDUCATION': '#ff7f0e',  # オレンジ
+            'LICENSE': '#2ca02c',    # 緑
+            'UNKNOWN': '#7f7f7f',    # グレー
+        }
 
         for node in G.nodes():
             x, y = pos[node]
             node_x.append(x)
             node_y.append(y)
 
-            # ノード名を短縮
-            short_name = node.replace(f"{domain_name}_", "")
-            node_text.append(short_name)
-
             # ノード情報を取得
             node_info = next((n for n in graph_data["nodes"] if n["id"] == node), None)
-            num_skills = node_info["num_skills"] if node_info else 0
 
-            # ノードサイズをスキル数に応じて調整
-            node_sizes.append(20 + num_skills * 3)
+            if node_info:
+                competence_type = node_info.get("competence_type", "UNKNOWN")
+                factor_loading = node_info.get("factor_loading", 0.5)
+                factor_name = node_info.get("factor_name", "")
+                level_name = ["初級", "中級", "上級"][node_info.get("level", 0)]
 
-            # ホバー情報
-            hover_text = f"<b>{short_name}</b><br>"
-            hover_text += f"スキル数: {num_skills}<br>"
+                # ノードテキスト（力量名）
+                label = node_info["label"]
+                # 長い名前は省略
+                display_label = label if len(label) <= 15 else label[:12] + "..."
+                node_text.append(display_label)
 
-            # 入力・出力エッジの情報
-            in_edges = [e for e in edge_data_list if e["to"] == node]
-            out_edges = [e for e in edge_data_list if e["from"] == node]
+                # ノードサイズをファクターローディングに応じて調整
+                node_sizes.append(15 + factor_loading * 30)
 
-            if in_edges:
-                hover_text += f"<br><b>入力パス:</b><br>"
-                for e in in_edges[:3]:  # 最大3つ表示
-                    hover_text += f"  • {e['coefficient']:.3f} (p={e['p_value']:.3f})<br>"
+                # ノード色を力量タイプに応じて設定
+                node_colors.append(type_colors.get(competence_type, type_colors['UNKNOWN']))
 
-            if out_edges:
-                hover_text += f"<br><b>出力パス:</b><br>"
-                for e in out_edges[:3]:  # 最大3つ表示
-                    hover_text += f"  • {e['coefficient']:.3f} (p={e['p_value']:.3f})<br>"
+                # ホバー情報
+                hover_text = f"<b>{label}</b><br>"
+                hover_text += f"力量タイプ: {competence_type}<br>"
+                hover_text += f"潜在変数: {factor_name}<br>"
+                hover_text += f"レベル: {level_name}<br>"
+                hover_text += f"ファクターローディング: {factor_loading:.3f}<br>"
 
-            node_hover.append(hover_text)
+                # 入力・出力エッジの情報
+                in_edges = [e for e in edge_data_list if e["to"] == node]
+                out_edges = [e for e in edge_data_list if e["from"] == node]
+
+                if in_edges:
+                    hover_text += f"<br><b>入力パス ({len(in_edges)}個):</b><br>"
+                    for e in in_edges[:3]:  # 最大3つ表示
+                        hover_text += f"  • {e['coefficient']:.3f} (p={e['p_value']:.3f})<br>"
+                    if len(in_edges) > 3:
+                        hover_text += f"  ... 他 {len(in_edges) - 3} 個<br>"
+
+                if out_edges:
+                    hover_text += f"<br><b>出力パス ({len(out_edges)}個):</b><br>"
+                    for e in out_edges[:3]:  # 最大3つ表示
+                        hover_text += f"  • {e['coefficient']:.3f} (p={e['p_value']:.3f})<br>"
+                    if len(out_edges) > 3:
+                        hover_text += f"  ... 他 {len(out_edges) - 3} 個<br>"
+
+                node_hover.append(hover_text)
+            else:
+                # フォールバック
+                node_text.append(node)
+                node_sizes.append(20)
+                node_colors.append('#7f7f7f')
+                node_hover.append(f"<b>{node}</b>")
 
         node_trace = go.Scatter(
             x=node_x,
@@ -934,7 +1029,7 @@ class SkillDomainSEMModel:
             hovertext=node_hover,
             marker=dict(
                 size=node_sizes,
-                color="#1f77b4",
+                color=node_colors,
                 line_width=2,
                 line_color="#ffffff",
             ),
@@ -945,10 +1040,10 @@ class SkillDomainSEMModel:
         fig = go.Figure(data=fig_data)
 
         fig.update_layout(
-            title=f"📊 {domain_name} - スキル依存関係ネットワーク（インタラクティブ）",
+            title=f"📊 {domain_name} - 力量依存関係ネットワーク（個別力量レベル）",
             showlegend=False,
             hovermode="closest",
-            margin=dict(b=20, l=5, r=5, t=60),
+            margin=dict(b=40, l=5, r=5, t=80),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             height=700,
@@ -956,9 +1051,20 @@ class SkillDomainSEMModel:
             dragmode='pan',  # パン操作をデフォルトに
         )
 
+        # 力量タイプの凡例を追加
+        fig.add_annotation(
+            text="<b>力量タイプ:</b> 🔵 SKILL（スキル） | 🟠 EDUCATION（教育） | 🟢 LICENSE（資格）",
+            xref="paper", yref="paper",
+            x=0.5, y=1.05,
+            showarrow=False,
+            font=dict(size=11, color="black"),
+            xanchor='center'
+        )
+
         # ズーム・パン機能のヘルプを追加
         fig.add_annotation(
-            text="ヒント: マウスホイールでズーム、ドラッグでパン、ノード/エッジにホバーで詳細表示",
+            text="ヒント: マウスホイールでズーム、ドラッグでパン、ノード/エッジにホバーで詳細表示<br>"
+                 "ノードサイズ = ファクターローディング強度、エッジ太さ = パス係数×ローディング積",
             xref="paper", yref="paper",
             x=0.5, y=-0.05,
             showarrow=False,
