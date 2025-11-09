@@ -99,7 +99,9 @@ evaluator.export_evaluation_results(
 
 ## 評価メトリクス
 
-### Precision@K（適合率）
+### 推薦精度メトリクス
+
+#### Precision@K（適合率）
 
 推薦されたK件のうち、実際に習得した力量の割合。
 
@@ -107,7 +109,7 @@ evaluator.export_evaluation_results(
 - 1.0に近いほど推薦精度が高い
 - 例: Precision@10 = 0.3 → 推薦10件のうち3件が正解
 
-### Recall@K（再現率）
+#### Recall@K（再現率）
 
 実際に習得した力量のうち、推薦に含まれていた割合。
 
@@ -115,7 +117,7 @@ evaluator.export_evaluation_results(
 - 1.0に近いほど推薦の網羅性が高い
 - 例: Recall@10 = 0.5 → 実際に習得した力量の50%を推薦で捕捉
 
-### NDCG@K（正規化割引累積利得）
+#### NDCG@K（正規化割引累積利得）
 
 推薦順位の質を評価（上位にあるほど重要）。
 
@@ -123,13 +125,113 @@ evaluator.export_evaluation_results(
 - 1.0に近いほど推薦ランキングが正確
 - 関連アイテムが上位にランクされるほどスコアが高い
 
-### Hit Rate（ヒット率）
+#### Hit Rate（ヒット率）
 
 少なくとも1つの正解を含む推薦を得たメンバーの割合。
 
 **解釈**:
 - 1.0に近いほど多くのメンバーに有用な推薦を提供
 - 例: Hit Rate = 0.72 → 72%のメンバーに少なくとも1つの有用な推薦
+
+### NMFモデル評価メトリクス
+
+#### 再構成誤差（Frobenius ノルム）
+
+NMFモデルが元のデータを再構成する際の絶対的な誤差。
+
+**計算式**: ||X - WH||_F
+
+**解釈**:
+- 値が小さいほどモデルの再現性が高い
+- データのスケールに依存（異なるデータセット間での比較は困難）
+- 通常は0.1～0.5の範囲が良好
+
+#### 正規化再構成誤差（相対誤差）
+
+データのスケールに依存しない相対的な誤差。異なるデータセット間での比較に有用。
+
+**計算式**: error / ||X||_F
+
+**解釈**:
+- 0～1の範囲の無次元量
+- 0.1以下：非常に良好
+- 0.1～0.2：良好
+- 0.2～0.3：許容範囲内だが改善余地あり
+- 0.3以上：改善が必要
+
+#### モデルスパース性（疎行列性）
+
+W（メンバー因子）行列とH（力量因子）行列における0要素の割合。
+
+**解釈**:
+- スパース性が高い：モデルが解釈しやすく、計算効率が良い
+- スパース性が低い：すべての潜在因子が活用されている
+- 未使用の潜在因子（すべて0）が多い場合：潜在因子数を削減することで効率化可能
+
+**改善方法**:
+```python
+sparsity_info = mf_model.get_model_sparsity()
+print(f"W_sparsity: {sparsity_info['W_sparsity']:.2f}%")
+print(f"H_sparsity: {sparsity_info['H_sparsity']:.2f}%")
+print(sparsity_info['recommendation'])
+```
+
+### 汎化性能メトリクス
+
+#### 訓練 vs テスト誤差（汎化ギャップ）
+
+モデルの過学習（過剰適応）の程度を診断するメトリクス。
+
+**計算式**:
+- 汎化ギャップ = test_error - train_error
+- 差分比 = |汎化ギャップ| / train_error
+
+**解釈**:
+- **ギャップが小さい（<10%）**: 優れた汎化性能
+- **ギャップが中程度（10-30%）**: 軽度の過学習（許容範囲）
+- **ギャップが大きい（>30%）**: 顕著な過学習、改善推奨
+
+**改善方法**:
+1. 正則化強度（alpha_W, alpha_H）を増加させる
+2. 早期停止（Early Stopping）を有効にする
+3. データ前処理を有効にする
+4. より多くの訓練データを用意する
+
+#### メンバーごとの評価
+
+各メンバー個別のPrecision、Recall、F1、NDCGを計算し、推薦精度が低いメンバーを特定。
+
+**用途**:
+- モデルの弱点分析
+- 特定グループへの推薦精度確認
+- メンバー属性と推薦精度の関連性分析
+
+**実装例**:
+```python
+from skillnote_recommendation.core.evaluator import RecommendationEvaluator
+
+evaluator = RecommendationEvaluator()
+
+# メンバーごとの評価を計算
+per_member_df = evaluator.evaluate_per_member(
+    train_data=train_data,
+    test_data=test_data,
+    competence_master=competence_master,
+    top_k=10
+)
+
+# 統計サマリーを取得
+summary = evaluator.get_member_performance_summary(per_member_df, top_k=10)
+
+print(f"高精度メンバー（Precision>=70%）: {summary['high_performers']}名")
+print(f"中程度メンバー（40%<=Precision<70%）: {summary['medium_performers']}名")
+print(f"低精度メンバー（Precision<40%）: {summary['low_performers']}名")
+
+# 低精度メンバーの確認
+low_performers = per_member_df[per_member_df['precision@10'] < 0.4]
+print(f"\n精度が低いメンバー:")
+print(low_performers[['member_code', 'precision@10', 'recall@10']])
+```
 
 ## 時系列クロスバリデーション
 

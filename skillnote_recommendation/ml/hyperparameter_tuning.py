@@ -679,6 +679,54 @@ class NMFHyperparameterTuner:
 
         return test_error
 
+    def evaluate_training_vs_test(self, model: MatrixFactorizationModel) -> Dict[str, float]:
+        """
+        学習データとテストデータでのモデル評価結果を比較
+
+        過学習（過剰適応）の程度を診断するために使用。
+        - 差が小さい：良い汎化性能
+        - 差が大きい：過学習の可能性
+
+        Args:
+            model: 学習済みモデル
+
+        Returns:
+            辞書:
+            - train_error: 学習データでの再構成誤差
+            - test_error: テストデータでの再構成誤差（test_setが存在する場合）
+            - generalization_gap: テストエラー - 訓練エラー（汎化ギャップ）
+            - train_size: 学習データサイズ
+            - test_size: テストデータサイズ
+        """
+        # 訓練データでの誤差
+        train_error = model.get_reconstruction_error()
+
+        result = {
+            "train_error": train_error,
+            "train_size": len(self.skill_matrix),
+            "test_size": 0,
+        }
+
+        # テストデータが存在する場合のみ評価
+        if self.test_matrix is not None:
+            test_error = self.evaluate_on_test_set(model)
+            result["test_error"] = test_error
+            result["test_size"] = len(self.test_matrix)
+            result["generalization_gap"] = test_error - train_error
+
+            # 汎化ギャップの診断
+            gap_ratio = abs(result["generalization_gap"]) / train_error if train_error > 0 else 0.0
+            if gap_ratio < 0.1:  # 10%未満
+                result["diagnosis"] = "✅ 優れた汎化性能（過学習の兆候なし）"
+            elif gap_ratio < 0.3:  # 10-30%
+                result["diagnosis"] = "⚠️ 軽度の過学習が見られる（許容範囲）"
+            else:  # 30%以上
+                result["diagnosis"] = "❌ 顕著な過学習が見られる（モデルの改善推奨）"
+        else:
+            result["diagnosis"] = "テストセットが分離されていないため、汎化性能は不明"
+
+        return result
+
     def get_optimization_history(self) -> pd.DataFrame:
         """
         最適化の履歴を取得

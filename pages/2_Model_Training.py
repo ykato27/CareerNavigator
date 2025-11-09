@@ -790,25 +790,77 @@ if st.session_state.get("model_trained", False):
         st.markdown("### 再構成誤差の詳細")
 
         error = mf_model.get_reconstruction_error()
+        normalized_error = mf_model.get_normalized_reconstruction_error()
 
-        st.metric("再構成誤差（Frobenius ノルム）", f"{error:.6f}")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("再構成誤差（Frobenius ノルム）", f"{error:.6f}")
+        with col2:
+            st.metric("正規化再構成誤差（相対誤差）", f"{normalized_error:.6f}")
+
+        st.info("""
+        **メトリクス解説:**
+        - **再構成誤差（Frobenius ノルム）**: モデルが元のデータを再構成する際の絶対的な誤差
+        - **正規化再構成誤差**: データのスケールに依存しない相対的な誤差（異なるデータセット間での比較に有用）
+        """)
 
         # 評価基準と改善提案
-        if error < 0.1:
+        if normalized_error < 0.1:
             st.success("✅ **非常に良好なモデルです**")
-            st.markdown("再構成誤差が0.1以下で、モデルは元のデータを非常によく再現しています。")
-        elif error < 0.3:
+            st.markdown("正規化再構成誤差が0.1以下で、モデルは元のデータを非常によく再現しています。")
+        elif normalized_error < 0.2:
             st.success("✅ **良好なモデルです**")
-            st.markdown("再構成誤差が0.3以下で、モデルは元のデータをよく再現しています。")
-        elif error < 0.5:
+            st.markdown("正規化再構成誤差が0.2以下で、モデルは元のデータをよく再現しています。")
+        elif normalized_error < 0.3:
             st.warning("⚠️ **許容範囲ですが、改善の余地があります**")
-            st.markdown("再構成誤差が0.5以下で許容範囲内ですが、さらなる改善が可能です。")
+            st.markdown("正規化再構成誤差が0.3以下で許容範囲内ですが、さらなる改善が可能です。")
         else:
             st.error("❌ **改善が必要です**")
-            st.markdown("再構成誤差が0.5以上で、モデルの精度向上が推奨されます。")
+            st.markdown("正規化再構成誤差が0.3以上で、モデルの精度向上が推奨されます。")
 
-        # 改善提案（誤差が0.3以上の場合）
-        if error >= 0.3:
+        # モデルスパース性の分析
+        st.markdown("---")
+        st.markdown("### 📊 モデルスパース性（疎行列性）")
+
+        sparsity_info = mf_model.get_model_sparsity()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("メンバー因子（W）のスパース性", f"{sparsity_info['W_sparsity']:.2f}%")
+        with col2:
+            st.metric("力量因子（H）のスパース性", f"{sparsity_info['H_sparsity']:.2f}%")
+
+        # 診断メッセージ
+        st.markdown(sparsity_info['recommendation'])
+
+        if sparsity_info['unused_factors']:
+            st.warning(f"""
+            **⚠️ 未使用の潜在因子が検出されました**
+
+            未使用の潜在因子インデックス: {sparsity_info['unused_factors']}
+
+            現在の潜在因子数を {mf_model.n_components - len(sparsity_info['unused_factors'])} に削減して再学習することをお勧めします。
+            これにより計算効率が向上し、モデルの解釈性が向上します。
+            """)
+
+        # 追加メトリクス
+        st.markdown("---")
+        st.markdown("### 📈 学習情報")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            n_iter = mf_model.actual_n_iter_ if mf_model.actual_n_iter_ is not None else getattr(mf_model.model, 'n_iter_', 'N/A')
+            st.metric("イテレーション数", n_iter)
+
+        with col2:
+            st.metric("潜在因子数", mf_model.n_components)
+
+        with col3:
+            st.metric("学習データ点数", len(mf_model.member_codes) * len(mf_model.competence_codes))
+
+        # 改善提案
+        if normalized_error >= 0.2:
             st.markdown("---")
             st.markdown("### 💡 改善提案")
 
@@ -830,27 +882,8 @@ if st.session_state.get("model_trained", False):
                - 正則化強度: alpha_W, alpha_H を 0.05〜0.1 に調整
                - 最大イテレーション数: max_iter を 1500〜2000 に増加
 
-            詳細は `docs/NMF_RECONSTRUCTION_ERROR_IMPROVEMENTS.md` を参照してください。
+            詳細は `docs/EVALUATION.md` を参照してください。
             """)
-
-        # 追加メトリクス
-        st.markdown("---")
-        st.markdown("### 📊 追加メトリクス")
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            # actual_n_iter_を使用（Early stopping対応）
-            n_iter = mf_model.actual_n_iter_ if mf_model.actual_n_iter_ is not None else getattr(mf_model.model, 'n_iter_', 'N/A')
-            st.metric("イテレーション数", n_iter)
-
-        with col2:
-            sparsity_W = np.sum(mf_model.W == 0) / mf_model.W.size * 100
-            st.metric("メンバー因子のスパース性", f"{sparsity_W:.2f}%")
-
-        with col3:
-            sparsity_H = np.sum(mf_model.H == 0) / mf_model.H.size * 100
-            st.metric("力量因子のスパース性", f"{sparsity_H:.2f}%")
 
     # ハイパーパラメータチューニング結果の表示
     if recommender.tuning_results is not None:
@@ -1024,6 +1057,67 @@ if st.session_state.get("model_trained", False):
 
                 except Exception as e:
                     st.warning(f"試行結果の表示中にエラーが発生しました: {e}")
+
+    # 訓練 vs テスト誤差の評価
+    if recommender.tuning_results is not None and hasattr(recommender.tuning_results.get('tuner'), 'evaluate_training_vs_test'):
+        tuner = recommender.tuning_results.get('tuner')
+        if hasattr(tuner, 'test_matrix') and tuner.test_matrix is not None:
+            with st.expander("📊 訓練 vs テスト誤差の分析（汎化性能診断）"):
+                st.markdown("### モデルの汎化性能を診断します")
+
+                try:
+                    # 訓練 vs テスト誤差を計算
+                    eval_results = tuner.evaluate_training_vs_test(mf_model)
+
+                    # 結果を表示
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        st.metric("訓練データ誤差", f"{eval_results['train_error']:.6f}")
+                        st.text(f"サイズ: {eval_results['train_size']}")
+
+                    with col2:
+                        if 'test_error' in eval_results:
+                            st.metric("テストデータ誤差", f"{eval_results['test_error']:.6f}")
+                            st.text(f"サイズ: {eval_results['test_size']}")
+                        else:
+                            st.metric("テストデータ誤差", "N/A")
+
+                    with col3:
+                        if 'generalization_gap' in eval_results:
+                            gap = eval_results['generalization_gap']
+                            st.metric("汎化ギャップ", f"{gap:.6f}")
+                            st.text(f"差分比: {(gap/eval_results['train_error']*100):.1f}%")
+
+                    st.markdown("---")
+                    st.markdown("### 診断結果")
+
+                    # 診断メッセージを表示
+                    diagnosis = eval_results.get('diagnosis', '')
+                    if '優れた' in diagnosis or '✅' in diagnosis:
+                        st.success(diagnosis)
+                    elif '軽度' in diagnosis or '⚠️' in diagnosis:
+                        st.warning(diagnosis)
+                    else:
+                        st.error(diagnosis)
+
+                    # 詳細説明
+                    st.info("""
+                    **汎化ギャップの解釈:**
+                    - **ギャップが小さい（<10%）**: モデルの汎化性能が優れている
+                    - **ギャップが中程度（10-30%）**: 軽度の過学習が見られるが許容範囲
+                    - **ギャップが大きい（>30%）**: 顕著な過学習の可能性、モデルの改善推奨
+
+                    **改善方法:**
+                    1. 正則化強度（alpha_W, alpha_H）を増加させる
+                    2. 早期停止（Early Stopping）を有効にする
+                    3. データ前処理を有効にする
+                    4. より多くの訓練データを用意する
+                    """)
+
+                except Exception as e:
+                    st.warning(f"汎化性能の診断中にエラーが発生しました: {e}")
+                    st.info("テストセットが分離されていないか、診断が利用できません。")
 
     st.markdown("---")
     st.success("✅ 学習結果の分析が完了しました。")
