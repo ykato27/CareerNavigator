@@ -76,7 +76,7 @@ class MatrixFactorizationModel:
         self.is_fitted = False
         self.actual_n_iter_ = None  # 実際のイテレーション数（Early stopping時）
 
-    def fit(self, skill_matrix: pd.DataFrame) -> "MatrixFactorizationModel":
+    def fit(self, skill_matrix: pd.DataFrame, validation_matrix: Optional[pd.DataFrame] = None) -> "MatrixFactorizationModel":
         """
         モデルを学習
 
@@ -84,9 +84,11 @@ class MatrixFactorizationModel:
         - confidence weightingにより、高レベルのスキルをより重視
         - 暗黙的フィードバック（有無のみ）と明示的フィードバック（レベル）の両方に対応
         - Early stoppingによる効率的な学習
+        - 検証セット監視による過学習防止
 
         Args:
             skill_matrix: メンバー×力量マトリクス (index=メンバーコード, columns=力量コード)
+            validation_matrix: 検証用マトリクス（Early stopping時に使用）
 
         Returns:
             self
@@ -111,9 +113,15 @@ class MatrixFactorizationModel:
         else:
             training_matrix = skill_matrix.values
 
+        # 検証用マトリクスを準備
+        if validation_matrix is not None:
+            validation_matrix_values = validation_matrix.values
+        else:
+            validation_matrix_values = None
+
         # Early stoppingの有無で分岐
         if self.early_stopping:
-            self._fit_with_early_stopping(training_matrix)
+            self._fit_with_early_stopping(training_matrix, validation_matrix_values)
         else:
             self._fit_normal(training_matrix)
 
@@ -127,21 +135,27 @@ class MatrixFactorizationModel:
         self.H = self.model.components_
         self.actual_n_iter_ = self.model.n_iter_
 
-    def _fit_with_early_stopping(self, X: np.ndarray) -> None:
+    def _fit_with_early_stopping(self, X: np.ndarray, X_val: Optional[np.ndarray] = None) -> None:
         """
         Early stoppingを使用した学習
 
         段階的にmax_iterを増やしながら学習し、
-        改善が止まったら早期終了する
+        検証セットの誤差が増加し始めたら早期終了する
+
+        Args:
+            X: 訓練用マトリクス
+            X_val: 検証用マトリクス（Noneの場合は訓練誤差で判定）
         """
         max_iter_total = self.model.max_iter
         batch_size = self.early_stopping_batch_size
 
         best_error = float("inf")
+        best_val_error = float("inf")
         patience_counter = 0
         best_W = None
         best_H = None
         best_iter = 0
+        generalization_gap_history = []  # 汎化ギャップの履歴
 
         for current_max_iter in range(batch_size, max_iter_total + 1, batch_size):
             # NMFモデルを再作成（max_iterを更新）
@@ -158,31 +172,67 @@ class MatrixFactorizationModel:
             W = temp_model.fit_transform(X)
             H = temp_model.components_
 
-            # 再構成誤差を計算
+            # 訓練誤差を計算
             reconstructed = W @ H
-            error = np.linalg.norm(X - reconstructed, "fro")
+            train_error = np.linalg.norm(X - reconstructed, "fro")
+
+            # 検証誤差を計算（検証セットが提供されている場合）
+            if X_val is not None:
+                reconstructed_val = (W @ H)[:X_val.shape[0], :] if W.shape[0] >= X_val.shape[0] else (W @ H)
+                # マトリクスサイズが異なる場合は、共通部分のみで計算
+                min_rows = min(X_val.shape[0], reconstructed_val.shape[0])
+                val_error = np.linalg.norm(X_val[:min_rows] - reconstructed_val[:min_rows], "fro")
+                generalization_gap = val_error - train_error
+            else:
+                val_error = train_error
+                generalization_gap = 0.0
 
             # Early stopping判定
-            improvement = best_error - error
+            # 検証セットがある場合は検証誤差で判定、ない場合は訓練誤差で判定
+            current_error = val_error if X_val is not None else train_error
+            improvement = best_error - current_error
+
             if improvement > self.early_stopping_min_delta:
-                best_error = error
+                best_error = current_error
+                best_val_error = val_error if X_val is not None else train_error
                 best_W = W.copy()
                 best_H = H.copy()
                 best_iter = current_max_iter
                 patience_counter = 0
-                print(
-                    f"[Early Stopping] Iter {current_max_iter}: error={error:.6f} (improved by {improvement:.6f})"
-                )
+                generalization_gap_history.append(generalization_gap)
+
+                if X_val is not None:
+                    print(
+                        f"[Early Stopping] Iter {current_max_iter}: "
+                        f"train_error={train_error:.6f}, val_error={val_error:.6f}, "
+                        f"gap={generalization_gap:.6f} (improved by {improvement:.6f})"
+                    )
+                else:
+                    print(
+                        f"[Early Stopping] Iter {current_max_iter}: error={train_error:.6f} (improved by {improvement:.6f})"
+                    )
             else:
                 patience_counter += 1
-                print(
-                    f"[Early Stopping] Iter {current_max_iter}: error={error:.6f} (no improvement, patience={patience_counter}/{self.early_stopping_patience})"
-                )
+                generalization_gap_history.append(generalization_gap)
+
+                if X_val is not None:
+                    print(
+                        f"[Early Stopping] Iter {current_max_iter}: "
+                        f"train_error={train_error:.6f}, val_error={val_error:.6f}, "
+                        f"gap={generalization_gap:.6f} (no improvement, patience={patience_counter}/{self.early_stopping_patience})"
+                    )
+                else:
+                    print(
+                        f"[Early Stopping] Iter {current_max_iter}: error={train_error:.6f} (no improvement, patience={patience_counter}/{self.early_stopping_patience})"
+                    )
 
                 if patience_counter >= self.early_stopping_patience:
                     print(
                         f"[Early Stopping] Stopped at iteration {best_iter} (best error: {best_error:.6f})"
                     )
+                    if X_val is not None:
+                        avg_gap = np.mean(generalization_gap_history[-self.early_stopping_patience:])
+                        print(f"[Early Stopping] Average generalization gap: {avg_gap:.6f}")
                     break
 
         # ベストモデルを設定

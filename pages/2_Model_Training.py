@@ -911,6 +911,7 @@ if st.session_state.get("model_trained", False):
                 - **alpha_W**: メンバー因子の正則化強度（0.001-0.5、対数スケール）
                 - **alpha_H**: 力量因子の正則化強度（0.001-0.5、対数スケール）
                 - **l1_ratio**: L1正則化の割合（0.0-1.0）
+                - **n_init**: 初期化試行回数（1-5、複数初期値から最良を選択）
 
                 **自動設定パラメータ:**
                 - **max_iter**: データ特性から自動計算（{tuner.max_iter}）
@@ -918,6 +919,10 @@ if st.session_state.get("model_trained", False):
 
                 **固定パラメータ:**
                 - init=nndsvda, solver=cd, tol=1e-5
+
+                **改善機能:**
+                - Early Stoppingが検証セットの誤差を監視（過学習防止）
+                - 訓練誤差と検証誤差の乖離を記録（汎化ギャップ監視）
                 """
             )
 
@@ -930,7 +935,7 @@ if st.session_state.get("model_trained", False):
                 st.markdown("#### デフォルトパラメータ")
                 default_params = tuning_results['default_params']
                 for key, value in default_params.items():
-                    if key in ['n_components', 'max_iter', 'alpha_W', 'alpha_H', 'l1_ratio']:
+                    if key in ['n_components', 'max_iter', 'alpha_W', 'alpha_H', 'l1_ratio', 'n_init']:
                         st.text(f"{key}: {value}")
 
             with col2:

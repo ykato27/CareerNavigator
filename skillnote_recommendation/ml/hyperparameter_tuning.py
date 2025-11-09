@@ -127,6 +127,7 @@ class NMFHyperparameterTuner:
             "alpha_W": (0.001, 0.5),  # メンバー因子の正則化強度
             "alpha_H": (0.001, 0.5),  # 力量因子の正則化強度
             "l1_ratio": (0.0, 1.0),  # L1正則化の割合
+            "n_init": (1, 5),  # 初期化試行回数（複数の初期値から最良を選択）
         }
 
         # max_iterは自動計算（データサイズと行列密度に基づく）
@@ -237,6 +238,10 @@ class NMFHyperparameterTuner:
                     train_matrix, val_mask = self._create_skill_based_split(fold_idx)
 
                     # モデルを学習（random_stateは固定、Early stopping有効）
+                    # スキルベース分割では val_mask から検証マトリクスを生成
+                    val_matrix = val_mask.copy()
+                    val_matrix[val_matrix == 0] = 0  # マスク部分は0で統一（Early stopping判定用）
+
                     model = MatrixFactorizationModel(
                         **params,
                         random_state=self.random_state,
@@ -245,7 +250,8 @@ class NMFHyperparameterTuner:
                         early_stopping_min_delta=1e-5,
                         early_stopping_batch_size=self.early_stopping_batch_size,
                     )
-                    model.fit(train_matrix)
+                    # 検証セットを渡して学習（Early Stopping で検証誤差を監視）
+                    model.fit(train_matrix, validation_matrix=val_matrix)
 
                     # 検証データで評価（マスクされたスキルのみ）
                     val_error = self._calculate_skill_based_validation_error(model, val_mask)
@@ -504,6 +510,13 @@ class NMFHyperparameterTuner:
         if "l1_ratio" in self.search_space:
             min_val, max_val = self.search_space["l1_ratio"]
             params["l1_ratio"] = trial.suggest_float("l1_ratio", min_val, max_val)
+
+        # n_init: 初期化試行回数（整数型、1～5）
+        if "n_init" in self.search_space:
+            min_val, max_val = self.search_space["n_init"]
+            params["n_init"] = trial.suggest_int("n_init", min_val, max_val)
+        else:
+            params["n_init"] = 1  # デフォルト値
 
         # max_iter: 自動計算値を使用（探索対象外）
         params["max_iter"] = self.max_iter
@@ -857,7 +870,7 @@ class NMFHyperparameterTuner:
 
     def plot_param_importances(self) -> "plotly.graph_objects.Figure":
         """
-        パラメータの重要度をプロット
+        パラメータの重要度をプロット（重要度の高い順に表示）
 
         Returns:
             Plotly figure
@@ -871,15 +884,29 @@ class NMFHyperparameterTuner:
             # パラメータの重要度を計算
             importances = optuna.importance.get_param_importances(self.study)
 
+            # 重要度を降順（高い順）にソート
+            sorted_importances = dict(sorted(importances.items(), key=lambda x: x[1], reverse=True))
+
             fig = go.Figure(
-                go.Bar(x=list(importances.values()), y=list(importances.keys()), orientation="h")
+                go.Bar(
+                    x=list(sorted_importances.values()),
+                    y=list(sorted_importances.keys()),
+                    orientation="h",
+                    marker=dict(
+                        color=list(sorted_importances.values()),
+                        colorscale="Viridis",
+                        showscale=True,
+                        colorbar=dict(title="重要度")
+                    )
+                )
             )
 
             fig.update_layout(
-                title="パラメータの重要度",
+                title="パラメータの重要度（重要度の高い順）",
                 xaxis_title="重要度",
                 yaxis_title="パラメータ",
                 height=400,
+                yaxis=dict(autorange="reversed"),  # 上から順に表示
             )
 
             return fig
