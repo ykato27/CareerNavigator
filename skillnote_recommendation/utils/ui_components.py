@@ -25,44 +25,44 @@ def apply_rich_ui_styles():
 
     /* サイドバースタイル */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+        background: #ffffff;
     }
 
     [data-testid="stSidebar"] > div:first-child {
-        background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+        background: #ffffff;
     }
 
     /* サイドバーテキストの色 */
     [data-testid="stSidebar"] label {
-        color: white !important;
+        color: #333333 !important;
         font-weight: 600;
         font-size: 0.95rem;
     }
 
     [data-testid="stSidebar"] .stMarkdown {
-        color: white;
+        color: #333333;
     }
 
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3 {
-        color: white !important;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        color: #333333 !important;
+        text-shadow: none;
     }
 
     /* サイドバーの入力要素 */
     [data-testid="stSidebar"] .stSelectbox > div > div,
     [data-testid="stSidebar"] .stMultiSelect > div > div {
-        background: rgba(255, 255, 255, 0.95);
+        background: #f8f9fa;
         border-radius: 10px;
-        border: 2px solid rgba(255, 255, 255, 0.3);
+        border: 2px solid #e0e0e0;
         transition: all 0.3s ease;
     }
 
     [data-testid="stSidebar"] .stSelectbox > div > div:hover,
     [data-testid="stSidebar"] .stMultiSelect > div > div:hover {
-        border-color: rgba(255, 255, 255, 0.8);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        border-color: #667eea;
+        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.2);
     }
 
     /* スライダー */
@@ -71,37 +71,40 @@ def apply_rich_ui_styles():
     }
 
     [data-testid="stSidebar"] .stSlider > div > div > div {
-        background: rgba(255, 255, 255, 0.3);
+        background: #e0e0e0;
         border-radius: 10px;
     }
 
     [data-testid="stSidebar"] .stSlider > div > div > div > div {
-        background: white;
-        border: 2px solid rgba(255, 255, 255, 0.5);
+        background: #667eea;
+        border: 2px solid #667eea;
     }
 
     /* チェックボックス */
     [data-testid="stSidebar"] .stCheckbox {
-        background: rgba(255, 255, 255, 0.1);
+        background: #f8f9fa;
         padding: 0.75rem;
         border-radius: 10px;
         margin: 0.5rem 0;
         transition: all 0.3s ease;
+        border: 1px solid #e0e0e0;
     }
 
     [data-testid="stSidebar"] .stCheckbox:hover {
-        background: rgba(255, 255, 255, 0.2);
+        background: #f0f2f5;
+        border-color: #667eea;
     }
 
     [data-testid="stSidebar"] .stCheckbox label {
         font-size: 0.9rem;
+        color: #333333;
     }
 
     /* サイドバー内のinfo/warning/error */
     [data-testid="stSidebar"] .stAlert {
-        background: rgba(255, 255, 255, 0.95);
+        background: #f8f9fa;
         border-radius: 10px;
-        border-left: 4px solid #ffc107;
+        border-left: 4px solid #667eea;
         margin: 1rem 0;
     }
 
@@ -109,32 +112,32 @@ def apply_rich_ui_styles():
     [data-testid="stSidebar"] hr {
         border: none;
         height: 2px;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+        background: linear-gradient(90deg, transparent, #e0e0e0, transparent);
         margin: 1.5rem 0;
     }
 
     /* サイドバー内のボタン */
     [data-testid="stSidebar"] .stButton > button {
-        background: white;
-        color: #667eea;
+        background: #667eea;
+        color: white;
         border: none;
         border-radius: 10px;
         font-weight: bold;
         padding: 0.5rem 1rem;
         width: 100%;
         transition: all 0.3s ease;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
     }
 
     [data-testid="stSidebar"] .stButton > button:hover {
-        background: #f0f0f0;
+        background: #764ba2;
         transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
     }
 
     /* サイドバーキャプション */
     [data-testid="stSidebar"] .stCaption {
-        color: rgba(255, 255, 255, 0.8) !important;
+        color: #666666 !important;
         font-size: 0.85rem;
     }
 
