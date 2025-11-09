@@ -50,6 +50,45 @@ render_gradient_header(
     description="構造方程式モデリング（SEM）を使用して、力量の習得構造を分析し、次に取るべき力量を推薦します"
 )
 
+# 重要な説明
+st.success("""
+✨ **このページはNMFモデル学習なしで独立して使用できます！**
+
+データ読み込みページでCSVファイルをアップロードすれば、
+直接SEM分析を実行できます。モデル学習ページをスキップしてOKです。
+""")
+
+# 使い方ガイド
+with st.expander("📖 使い方ガイド", expanded=False):
+    st.markdown("""
+    ### 🚀 SEM分析の使い方
+
+    **1. データの準備**
+    - データ読み込みページでCSVファイルをアップロード
+    - ✅ NMFモデル学習は不要です！
+
+    **2. メンバーを選択**
+    - 分析したいメンバーを選択します
+
+    **3. タブで分析**
+    - **📊 領域別プロファイル**: メンバーの習得状況を可視化
+    - **✅❌ 力量ギャップ**: 持っている/持っていない力量を確認
+    - **🎯 SEM推薦**: 統計的根拠に基づく推薦を取得
+    - **🕸️ ネットワーク**: 力量間の依存関係を可視化
+
+    ### 💡 SEMとは？
+
+    **構造方程式モデリング (Structural Equation Modeling)** は、
+    観測データから潜在的な因果関係を推定する統計手法です。
+
+    - **測定モデル**: 力量 → 潜在変数（初級/中級/上級）
+    - **構造モデル**: 潜在変数間の因果効果（初級→中級→上級）
+    - **統計的検定**: パス係数の有意性（p < 0.05）
+
+    このシステムでは、メンバーの習得構造をSEMで分析し、
+    統計的根拠に基づいた推薦を提供します。
+    """)
+
 # =========================================================
 # 前提条件チェック
 # =========================================================
@@ -169,11 +208,12 @@ acquired_competences = member_profile['acquired_competences']
 # タブで表示
 # =========================================================
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 領域別プロファイル",
     "✅ 持っている力量 / ❌ 持っていない力量",
     "🎯 SEM推薦",
-    "🕸️ 領域別ネットワーク"
+    "🕸️ 領域別ネットワーク",
+    "👥 メンバー比較"
 ])
 
 # =========================================================
@@ -502,6 +542,146 @@ with tab4:
 
             except Exception as e:
                 display_error_details(e, "ネットワーク可視化")
+
+# =========================================================
+# タブ5: メンバー比較
+# =========================================================
+
+with tab5:
+    st.markdown("### 👥 複数メンバーの領域プロファイル比較")
+
+    st.info(
+        "複数のメンバーを選択して、領域別の習得度を比較できます。"
+        "チームの傾向や個々のメンバーの強み・弱みを把握するのに役立ちます。"
+    )
+
+    # メンバー選択
+    st.markdown("#### 📝 比較するメンバーを選択")
+
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        selected_members_for_comparison = st.multiselect(
+            "比較するメンバーを選択（最大5名まで）",
+            options=member_codes,
+            default=[selected_member] if selected_member else [],
+            max_selections=5,
+            help="最大5名まで選択可能"
+        )
+
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        compare_btn = st.button("📊 比較を実行", type="primary", use_container_width=True, key='compare_btn')
+
+    if compare_btn and selected_members_for_comparison:
+        with st.spinner("メンバープロファイルを比較中..."):
+            try:
+                # 各メンバーのプロファイルを取得
+                comparison_data = []
+
+                for member_code in selected_members_for_comparison:
+                    profile = sem_recommender.get_member_profile(member_code)
+                    member_info = members_clean[members_clean['メンバーコード'] == member_code]
+                    member_name = member_info.iloc[0].get('メンバー名', member_code) if not member_info.empty else member_code
+
+                    comparison_data.append({
+                        'member_code': member_code,
+                        'member_name': member_name,
+                        'domain_scores': profile['overall_scores'],
+                        'total_competences': profile['total_competences_count']
+                    })
+
+                # レーダーチャートで比較
+                st.markdown("---")
+                st.markdown("#### 📊 領域別習得度の比較（レーダーチャート）")
+
+                fig = go.Figure()
+
+                colors = px.colors.qualitative.Plotly
+
+                for i, data in enumerate(comparison_data):
+                    domains = list(data['domain_scores'].keys())
+                    scores = [data['domain_scores'][d] * 100 for d in domains]
+
+                    fig.add_trace(go.Scatterpolar(
+                        r=scores,
+                        theta=domains,
+                        fill='toself',
+                        name=data['member_name'],
+                        marker=dict(color=colors[i % len(colors)]),
+                        line=dict(color=colors[i % len(colors)], width=2),
+                        opacity=0.7,
+                    ))
+
+                fig.update_layout(
+                    polar=dict(
+                        radialaxis=dict(
+                            visible=True,
+                            range=[0, 100],
+                            ticksuffix='%',
+                        )
+                    ),
+                    showlegend=True,
+                    title="メンバー別領域習得度",
+                    height=600,
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+                # 数値表で比較
+                st.markdown("---")
+                st.markdown("#### 📈 領域別習得度（数値表）")
+
+                # 領域ごとにメンバーのスコアを集計
+                all_domains_for_comparison = list(comparison_data[0]['domain_scores'].keys())
+
+                comparison_table = []
+                for domain in all_domains_for_comparison:
+                    row = {'領域': domain}
+                    for data in comparison_data:
+                        score = data['domain_scores'].get(domain, 0.0)
+                        row[data['member_name']] = f"{score*100:.1f}%"
+                    comparison_table.append(row)
+
+                comparison_df = pd.DataFrame(comparison_table)
+                st.dataframe(comparison_df, hide_index=True, use_container_width=True)
+
+                # メンバーサマリー
+                st.markdown("---")
+                st.markdown("#### 📋 メンバーサマリー")
+
+                summary_cols = st.columns(len(comparison_data))
+
+                for i, data in enumerate(comparison_data):
+                    with summary_cols[i]:
+                        st.markdown(f"**{data['member_name']}**")
+                        st.metric("習得力量数", data['total_competences'])
+
+                        # 最も得意な領域
+                        best_domain = max(data['domain_scores'].items(), key=lambda x: x[1])
+                        st.metric("得意領域", best_domain[0])
+                        st.caption(f"習得度: {best_domain[1]*100:.1f}%")
+
+                        # 最も弱い領域
+                        worst_domain = min(data['domain_scores'].items(), key=lambda x: x[1])
+                        st.metric("成長領域", worst_domain[0])
+                        st.caption(f"習得度: {worst_domain[1]*100:.1f}%")
+
+                # CSV ダウンロード
+                st.markdown("---")
+                csv_comparison = comparison_df.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    label="📥 比較結果をCSVでダウンロード",
+                    data=csv_comparison,
+                    file_name=f'member_comparison_{len(selected_members_for_comparison)}members.csv',
+                    mime='text/csv',
+                )
+
+            except Exception as e:
+                display_error_details(e, "メンバー比較")
+
+    elif not selected_members_for_comparison:
+        st.warning("比較するメンバーを選択してください")
 
 # =========================================================
 # フッター
