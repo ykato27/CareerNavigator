@@ -2349,85 +2349,98 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     with st.expander("📊 SEM分析（スキル依存性分析）", expanded=False):
                         st.info("""
                         **SEM（構造方程式モデリング）分析**は、スキル間の段階的な依存関係を分析します。
-                        - 各領域の習得度プロフィール
+                        - スキル領域の依存関係ネットワーク
                         - スキル間の因果効果（パス係数）
-                        - 段階的学習パスの推奨
+                        - 各スキルの習得度プロフィール
                         """)
 
                         # メンバープロファイルを取得
                         try:
                             member_profile = recommender.sem_model.get_member_domain_profile(selected_member_code)
+                            domains = recommender.sem_model.get_all_domains()
 
-                            if member_profile:
-                                # 領域別習得度をタブで表示
-                                st.write("### 📈 領域別習得度プロフィール")
+                            if member_profile and domains:
+                                # タブで領域別に表示
+                                tab_cols = st.tabs([f"📌 {domain}" for domain in domains] + ["📈 全領域プロフィール"])
 
-                                # 領域を列として表示
-                                profile_data = []
-                                for domain_name, domain_scores in member_profile.items():
-                                    # 各領域の潜在変数スコアを集計
-                                    if domain_scores:
-                                        avg_score = sum(domain_scores.values()) / len(domain_scores)
-                                        level_stages = list(domain_scores.items())
-                                        profile_data.append({
-                                            '領域': domain_name,
-                                            '初級': domain_scores.get(f"{domain_name}_初級", 0.0),
-                                            '中級': domain_scores.get(f"{domain_name}_中級", 0.0),
-                                            '上級': domain_scores.get(f"{domain_name}_上級", 0.0),
-                                            '総合習得度': avg_score
-                                        })
+                                for idx, domain in enumerate(domains):
+                                    with tab_cols[idx]:
+                                        st.subheader(f"{domain} - スキル依存関係")
 
-                                if profile_data:
-                                    profile_df = pd.DataFrame(profile_data)
-                                    st.dataframe(
-                                        profile_df.style.format({
-                                            '初級': '{:.2f}',
-                                            '中級': '{:.2f}',
-                                            '上級': '{:.2f}',
-                                            '総合習得度': '{:.2f}'
-                                        }),
-                                        use_container_width=True
-                                    )
+                                        # ネットワーク可視化を表示
+                                        try:
+                                            network_fig = recommender.sem_model.visualize_domain_network(domain)
+                                            if network_fig:
+                                                st.plotly_chart(network_fig, use_container_width=True)
+                                            else:
+                                                st.info(f"{domain}領域のネットワークグラフはデータ不足のため表示できません")
+                                        except Exception as viz_error:
+                                            st.warning(f"⚠️ ネットワーク可視化の表示に失敗しました: {str(viz_error)[:100]}")
 
-                                    # 領域情報を表示
-                                    st.write("### 📊 スキル依存関係（パス係数）")
-
-                                    domains = recommender.sem_model.get_all_domains()
-                                    for domain in domains:
+                                        # パス係数情報を表示
                                         domain_info = recommender.sem_model.get_domain_info(domain)
                                         if domain_info and domain_info.get('path_coefficients'):
-                                            with st.expander(f"📌 {domain} 領域", expanded=False):
-                                                path_data = []
-                                                for path in domain_info['path_coefficients']:
-                                                    path_data.append({
-                                                        'から': path.get('from', '').replace(f'{domain}_', ''),
-                                                        'へ': path.get('to', '').replace(f'{domain}_', ''),
-                                                        'パス係数': path.get('coefficient', 0),
-                                                        'p値': path.get('p_value', 1.0),
-                                                        '有意': '✓' if path.get('is_significant', False) else '×',
-                                                        '信頼区間': f"[{path['ci'][0]:.2f}, {path['ci'][1]:.2f}]"
-                                                    })
+                                            st.write("### 📊 スキル依存関係（パス係数）")
 
-                                                if path_data:
-                                                    path_df = pd.DataFrame(path_data)
-                                                    st.dataframe(
-                                                        path_df.style.format({
-                                                            'パス係数': '{:.3f}',
-                                                            'p値': '{:.4f}'
-                                                        }),
-                                                        use_container_width=True
+                                            path_data = []
+                                            for path in domain_info['path_coefficients']:
+                                                path_data.append({
+                                                    'から': path.get('from', ''),
+                                                    'へ': path.get('to', ''),
+                                                    'パス係数': path.get('coefficient', 0),
+                                                    'p値': path.get('p_value', 1.0),
+                                                    '有意': '✓' if path.get('is_significant', False) else '×',
+                                                    '信頼区間': f"[{path['ci'][0]:.2f}, {path['ci'][1]:.2f}]"
+                                                })
+
+                                            if path_data:
+                                                path_df = pd.DataFrame(path_data)
+                                                st.dataframe(
+                                                    path_df.style.format({
+                                                        'パス係数': '{:.3f}',
+                                                        'p値': '{:.4f}'
+                                                    }),
+                                                    use_container_width=True
+                                                )
+
+                                                st.markdown("**解釈:**")
+                                                for i, row in path_df.iterrows():
+                                                    significance = "統計的に有意" if row['有意'] == '✓' else "有意でない"
+                                                    st.caption(
+                                                        f"- {row['から']} → {row['へ']}: パス係数 {row['パス係数']:.3f} "
+                                                        f"({significance}, p={row['p値']:.4f})"
                                                     )
 
-                                                    st.markdown("**解釈:**")
-                                                    for idx, row in path_df.iterrows():
-                                                        significance = "統計的に有意" if row['有意'] == '✓' else "有意でない"
-                                                        st.caption(
-                                                            f"- {row['から']} → {row['へ']}: パス係数 {row['パス係数']:.3f} "
-                                                            f"({significance}, p={row['p値']:.4f})"
-                                                        )
+                                        # メンバーの該当領域プロフィール
+                                        if domain in member_profile:
+                                            st.write("### 📈 習得度プロフィール")
+                                            profile_scores = member_profile[domain]
+                                            if profile_scores:
+                                                profile_items = list(profile_scores.items())
+                                                profile_df = pd.DataFrame({
+                                                    'スキル段階': [item[0] for item in profile_items],
+                                                    '習得度スコア': [f"{item[1]:.2f}" for item in profile_items]
+                                                })
+                                                st.dataframe(profile_df, use_container_width=True)
+
+                                # 全領域プロフィール
+                                with tab_cols[-1]:
+                                    st.subheader("全領域の習得度プロフィール")
+                                    profile_data = []
+                                    for domain_name, domain_scores in member_profile.items():
+                                        if domain_scores:
+                                            avg_score = np.mean(list(domain_scores.values()))
+                                            profile_data.append({
+                                                '領域': domain_name,
+                                                '総合習得度': f"{avg_score:.2f}"
+                                            })
+
+                                    if profile_data:
+                                        profile_df = pd.DataFrame(profile_data)
+                                        st.dataframe(profile_df, use_container_width=True)
 
                         except Exception as sem_error:
-                            st.warning(f"⚠️ SEM分析の表示に失敗しました: {sem_error}")
+                            st.warning(f"⚠️ SEM分析の表示に失敗しました: {str(sem_error)[:200]}")
 
         except Exception as e:
             # エラー処理
