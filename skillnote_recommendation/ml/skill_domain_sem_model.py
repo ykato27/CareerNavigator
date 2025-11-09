@@ -791,7 +791,8 @@ class SkillDomainSEMModel:
         # レイアウトを計算
         try:
             pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
-        except:
+        except Exception as e:
+            logger.warning(f"Spring layout failed: {e}, using circular layout")
             pos = nx.circular_layout(G)
 
         # エッジを描画
