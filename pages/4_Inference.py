@@ -1056,6 +1056,44 @@ rwr_weight = 0.5  # グラフとNMFを同等に評価
 
 
 # =========================================================
+# SEM分析パラメータ（ボタン外で定義）
+# =========================================================
+
+# セッション状態の初期化
+sem_slider_key = f"sem_min_coeff_{selected_member_code}"
+sem_previous_member_key = "sem_previous_member"
+
+# メンバーが変更された場合はスライダーをリセット
+if sem_previous_member_key not in st.session_state:
+    st.session_state[sem_previous_member_key] = selected_member_code
+    st.session_state[sem_slider_key] = 0.0
+elif st.session_state[sem_previous_member_key] != selected_member_code:
+    st.session_state[sem_previous_member_key] = selected_member_code
+    st.session_state[sem_slider_key] = 0.0
+
+# スライダーキーの初期化
+if sem_slider_key not in st.session_state:
+    st.session_state[sem_slider_key] = 0.0
+
+# SEM分析用スライダーをボタン前に配置
+st.markdown("---")
+st.markdown("### 📊 SEM分析パラメータ")
+col_sem1, col_sem2 = st.columns([3, 1])
+with col_sem1:
+    sem_min_coefficient = st.slider(
+        "表示する関係強度（パス係数）の最小値",
+        min_value=0.0,
+        max_value=1.0,
+        value=st.session_state[sem_slider_key],
+        step=0.05,
+        help="スライダーを右に移動させると、より強い関係のみが表示されます。",
+        key=sem_slider_key
+    )
+with col_sem2:
+    st.metric("最小値", f"{st.session_state[sem_slider_key]:.2f}")
+
+
+# =========================================================
 # 推薦実行
 # =========================================================
 
@@ -2360,52 +2398,15 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                             if hasattr(recommender, 'skill_dependency_sem_model') and recommender.skill_dependency_sem_model:
                                 st.subheader("📊 スキル依存関係ネットワーク")
 
-                                # セッション状態にスライダー値を保存（メンバー変更時のリセット対応）
-                                slider_key = f"sem_min_coeff_{selected_member_code}"
-                                previous_member_key = "previous_sem_member"
-
-                                # メンバーが変更された場合はスライダーをリセット
-                                if previous_member_key not in st.session_state:
-                                    st.session_state[previous_member_key] = selected_member_code
-                                    st.session_state[slider_key] = 0.0
-                                elif st.session_state[previous_member_key] != selected_member_code:
-                                    st.session_state[previous_member_key] = selected_member_code
-                                    # 古いメンバーのスライダー値を削除して新しいメンバーで初期化
-                                    st.session_state[slider_key] = 0.0
-
-                                # スライダーキーが存在しない場合のみ初期化
-                                if slider_key not in st.session_state:
-                                    st.session_state[slider_key] = 0.0
-
-                                # スライダー値更新用のコールバック関数
-                                def update_slider_value():
-                                    st.session_state[slider_key] = st.session_state[f"{slider_key}_temp"]
-
-                                # 関係強度フィルタリング用のスライダー
-                                col1, col2 = st.columns([3, 1])
-                                with col1:
-                                    st.slider(
-                                        "表示する関係強度（パス係数）の最小値",
-                                        min_value=0.0,
-                                        max_value=1.0,
-                                        value=st.session_state.get(slider_key, 0.0),
-                                        step=0.05,
-                                        help="スライダーを右に移動させると、より強い関係のみが表示されます。",
-                                        key=f"{slider_key}_temp",
-                                        on_change=update_slider_value
-                                    )
-                                    min_coefficient = st.session_state.get(slider_key, 0.0)
-                                with col2:
-                                    st.metric(
-                                        "表示ペア数",
-                                        len([p for p in recommender.skill_dependency_sem_model.skill_paths
-                                             if abs(p.coefficient) >= min_coefficient])
-                                    )
+                                # ボタン前で定義されたスライダー値を使用
+                                filtered_pairs_count = len([p for p in recommender.skill_dependency_sem_model.skill_paths
+                                                           if abs(p.coefficient) >= sem_min_coefficient])
+                                st.info(f"📊 表示中の関係: **{filtered_pairs_count}** ペア（フィルタ値: {sem_min_coefficient:.2f}）")
 
                                 # ネットワーク可視化を表示
                                 try:
                                     network_fig = recommender.skill_dependency_sem_model.visualize_skill_network(
-                                        min_coefficient=min_coefficient
+                                        min_coefficient=sem_min_coefficient
                                     )
                                     if network_fig:
                                         st.plotly_chart(network_fig, use_container_width=True)
@@ -2420,7 +2421,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                 path_data = []
                                 for path in recommender.skill_dependency_sem_model.skill_paths:
                                     # スライダーの値でフィルタリング
-                                    if abs(path.coefficient) >= min_coefficient:
+                                    if abs(path.coefficient) >= sem_min_coefficient:
                                         path_data.append({
                                             'から': path.from_skill_name,
                                             'へ': path.to_skill_name,
