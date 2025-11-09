@@ -121,18 +121,80 @@ class NMFHyperparameterTuner:
         self.early_stopping_batch_size = early_stopping_batch_size
 
         # 最適化された探索空間（より狭い範囲で効率的に探索）
+        # max_iterは探索対象外：データ特性から自動計算
         self.search_space = search_space or {
-            "n_components": (10, 30),  # 40 -> 30に縮小（計算効率改善）
-            "alpha_W": (0.001, 0.5),  # 1.0 -> 0.5に縮小（過度な正則化を避ける）
-            "alpha_H": (0.001, 0.5),  # 1.0 -> 0.5に縮小
-            "l1_ratio": (0.0, 1.0),
-            "max_iter": (500, 1500),  # 2000 -> 1500に縮小（計算効率改善）
+            "n_components": (10, 30),  # 潜在因子数
+            "alpha_W": (0.001, 0.5),  # メンバー因子の正則化強度
+            "alpha_H": (0.001, 0.5),  # 力量因子の正則化強度
+            "l1_ratio": (0.0, 1.0),  # L1正則化の割合
         }
+
+        # max_iterは自動計算（データサイズと行列密度に基づく）
+        self.max_iter = self._calculate_max_iter()
 
         self.best_params = None
         self.best_value = None
         self.study = None
         self.test_score = None  # Test setでの最終評価スコア
+        self.objective_description = "目的関数: 交差検証による正規化再構成誤差の最小化"  # 目的関数説明
+
+    def _calculate_max_iter(self) -> int:
+        """
+        データ特性に基づいてmax_iterを自動計算
+
+        計算ロジック:
+        - データサイズ（行×列）が大きいほど、より多くのイテレーションが必要
+        - 行列の密度が低いほど（スパースなほど）、より多くのイテレーションが必要
+        - Early Stoppingが有効な場合は多めに設定（収束手前で止まる）
+
+        Returns:
+            計算されたmax_iter値（500-2000の範囲）
+        """
+        n_members = len(self.skill_matrix.index)
+        n_competences = len(self.skill_matrix.columns)
+        matrix_size = n_members * n_competences
+
+        # 行列の非ゼロ要素の割合（密度）を計算
+        import numpy as np
+        non_zero_count = np.count_nonzero(self.skill_matrix.values)
+        matrix_density = non_zero_count / matrix_size if matrix_size > 0 else 0.0
+
+        # 計算ロジック
+        # 基本値: 1000
+        # データサイズによる調整: サイズが大きいと+200
+        # スパース性による調整: 密度が低いほど+300（最大）
+        base_max_iter = 1000
+
+        # データサイズ調整（大きいデータは収束に時間がかかる）
+        size_factor = 200 if matrix_size > 1000 else 0
+
+        # スパース性調整（密度が低いほど収束に時間がかかる）
+        # 密度 > 0.5 → +0, 密度 0.2-0.5 → +100, 密度 < 0.2 → +200
+        if matrix_density < 0.2:
+            sparsity_factor = 200
+        elif matrix_density < 0.5:
+            sparsity_factor = 100
+        else:
+            sparsity_factor = 0
+
+        # Early Stoppingが有効な場合は追加（収束前に停止するため多めに）
+        early_stopping_factor = 100 if self.enable_early_stopping else 0
+
+        max_iter = base_max_iter + size_factor + sparsity_factor + early_stopping_factor
+
+        # 500-2000の範囲にクリップ
+        max_iter = max(500, min(2000, max_iter))
+
+        logger.info(
+            f"max_iter自動計算: {max_iter} "
+            f"(サイズ: {n_members}×{n_competences}, 密度: {matrix_density:.1%})"
+        )
+        print(
+            f"[INFO] max_iter automatically set to {max_iter} "
+            f"(matrix size: {n_members}x{n_competences}, density: {matrix_density:.1%})"
+        )
+
+        return max_iter
 
     def objective(self, trial: "optuna.Trial") -> float:
         """
@@ -405,6 +467,8 @@ class NMFHyperparameterTuner:
         """
         探索空間からハイパーパラメータをサンプリング
 
+        注意: max_iterは探索対象外（データ特性から自動計算）
+
         Args:
             trial: Optunaのtrialオブジェクト
 
@@ -413,17 +477,12 @@ class NMFHyperparameterTuner:
         """
         params = {}
 
-        # n_components: 整数型
+        # n_components: 整数型（潜在因子数）
         if "n_components" in self.search_space:
             min_val, max_val = self.search_space["n_components"]
             params["n_components"] = trial.suggest_int("n_components", min_val, max_val)
 
-        # max_iter: 整数型
-        if "max_iter" in self.search_space:
-            min_val, max_val = self.search_space["max_iter"]
-            params["max_iter"] = trial.suggest_int("max_iter", min_val, max_val, step=100)
-
-        # alpha_W: 対数スケールで探索（0に近い値も探索しやすくする）
+        # alpha_W: 対数スケールで探索（メンバー因子の正則化強度）
         if "alpha_W" in self.search_space:
             min_val, max_val = self.search_space["alpha_W"]
             params["alpha_W"] = (
@@ -432,7 +491,7 @@ class NMFHyperparameterTuner:
                 else trial.suggest_float("alpha_W", min_val, max_val)
             )
 
-        # alpha_H: 対数スケールで探索
+        # alpha_H: 対数スケールで探索（力量因子の正則化強度）
         if "alpha_H" in self.search_space:
             min_val, max_val = self.search_space["alpha_H"]
             params["alpha_H"] = (
@@ -441,10 +500,13 @@ class NMFHyperparameterTuner:
                 else trial.suggest_float("alpha_H", min_val, max_val)
             )
 
-        # l1_ratio: 線形スケールで探索
+        # l1_ratio: 線形スケールで探索（L1正則化の割合）
         if "l1_ratio" in self.search_space:
             min_val, max_val = self.search_space["l1_ratio"]
             params["l1_ratio"] = trial.suggest_float("l1_ratio", min_val, max_val)
+
+        # max_iter: 自動計算値を使用（探索対象外）
+        params["max_iter"] = self.max_iter
 
         # 固定パラメータ
         params["init"] = "nndsvda"
