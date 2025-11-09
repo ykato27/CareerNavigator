@@ -10,6 +10,7 @@ import pandas as pd
 from typing import List, Optional, Dict, Any
 from skillnote_recommendation.ml.ml_recommender import MLRecommender
 from skillnote_recommendation.ml.skill_domain_sem_model import SkillDomainSEMModel
+from skillnote_recommendation.ml.skill_dependency_sem_model import SkillDependencySEMModel
 from skillnote_recommendation.core.models import Recommendation
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class MLSEMRecommender(MLRecommender):
 
         self.sem_weight = sem_weight
         self.sem_model = sem_model or self._initialize_sem_model()
+        self.skill_dependency_sem_model = self._initialize_skill_dependency_sem_model()
 
         logger.info(f"MLSEMRecommender initialized with SEM weight={sem_weight}")
 
@@ -80,6 +82,26 @@ class MLSEMRecommender(MLRecommender):
         )
         logger.info(f"SEMModel initialized with {len(sem_model.get_all_domains())} domains")
         return sem_model
+
+    def _initialize_skill_dependency_sem_model(self) -> Optional[SkillDependencySEMModel]:
+        """
+        スキル依存関係SEMモデルを初期化
+
+        Returns:
+            SkillDependencySEMModel: 初期化されたスキル依存SEMモデル
+        """
+        try:
+            logger.info("Initializing SkillDependencySEMModel...")
+            skill_sem_model = SkillDependencySEMModel(
+                member_competence_df=self.member_competence,
+                competence_master_df=self.competence_master,
+                min_members=3,
+            )
+            logger.info(f"SkillDependencySEMModel initialized with {len(skill_sem_model.skill_paths)} path coefficients")
+            return skill_sem_model
+        except Exception as e:
+            logger.warning(f"Failed to initialize SkillDependencySEMModel: {e}")
+            return None
 
     @classmethod
     def build(
