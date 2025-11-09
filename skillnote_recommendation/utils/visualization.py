@@ -152,6 +152,12 @@ def create_positioning_plot(
         ... )
         >>> st.plotly_chart(fig)
     """
+    # Validate that required columns exist
+    if x_col not in position_df.columns:
+        raise KeyError(f"Column '{x_col}' not found in position_df. Available columns: {list(position_df.columns)}")
+    if y_col not in position_df.columns:
+        raise KeyError(f"Column '{y_col}' not found in position_df. Available columns: {list(position_df.columns)}")
+
     # Classify member types
     df = position_df.copy()
     df["メンバータイプ"] = "その他"
@@ -258,6 +264,12 @@ def create_positioning_plot_with_patterns(
     Returns:
         Plotly Figure object with the scatter plot
     """
+    # Validate that required columns exist
+    if x_col not in position_df.columns:
+        raise KeyError(f"Column '{x_col}' not found in position_df. Available columns: {list(position_df.columns)}")
+    if y_col not in position_df.columns:
+        raise KeyError(f"Column '{y_col}' not found in position_df. Available columns: {list(position_df.columns)}")
+
     # Classify member types
     df = position_df.copy()
     df["メンバータイプ"] = "その他"
