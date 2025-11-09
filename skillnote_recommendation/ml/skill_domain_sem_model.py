@@ -19,6 +19,13 @@ from dataclasses import dataclass, field
 from collections import defaultdict
 import scipy.stats as stats
 
+try:
+    import networkx as nx
+    import plotly.graph_objects as go
+    HAS_VISUALIZATION = True
+except ImportError:
+    HAS_VISUALIZATION = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -702,3 +709,141 @@ class SkillDomainSEMModel:
                 else 0.0
             ),
         }
+
+    def get_skill_dependency_graph(self, domain_name: str) -> Optional[Dict[str, Any]]:
+        """
+        スキル依存関係ネットワークグラフを生成
+
+        Args:
+            domain_name: 領域名
+
+        Returns:
+            ノードとエッジを含むグラフ構造
+        """
+        domain_struct = self.domain_structures.get(domain_name)
+        if not domain_struct:
+            return None
+
+        # ノード情報（潜在変数）
+        nodes = []
+        for latent_factor in domain_struct.latent_factors:
+            nodes.append({
+                "id": latent_factor.factor_name,
+                "label": f"{latent_factor.factor_name}",
+                "skills": latent_factor.observed_skills,
+                "num_skills": len(latent_factor.observed_skills),
+            })
+
+        # エッジ情報（パス係数）
+        edges = []
+        for path_coeff in domain_struct.path_coefficients:
+            edges.append({
+                "from": path_coeff.from_factor,
+                "to": path_coeff.to_factor,
+                "coefficient": path_coeff.coefficient,
+                "p_value": path_coeff.p_value,
+                "is_significant": path_coeff.is_significant,
+                "t_value": path_coeff.t_value,
+            })
+
+        return {
+            "domain": domain_name,
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+    def visualize_domain_network(self, domain_name: str) -> Optional[go.Figure]:
+        """
+        領域のスキル依存関係をプロット
+
+        Args:
+            domain_name: 領域名
+
+        Returns:
+            Plotly Figure（グラフがない場合はNone）
+        """
+        if not HAS_VISUALIZATION:
+            logger.warning("networkx and plotly are required for visualization")
+            return None
+
+        graph_data = self.get_skill_dependency_graph(domain_name)
+        if not graph_data or not graph_data["edges"]:
+            return None
+
+        # ネットワークグラフを作成
+        G = nx.DiGraph()
+
+        # ノードを追加
+        for node in graph_data["nodes"]:
+            G.add_node(node["id"], label=node["label"], num_skills=node["num_skills"])
+
+        # エッジを追加（有意なパスのみ）
+        for edge in graph_data["edges"]:
+            if edge["is_significant"]:
+                G.add_edge(
+                    edge["from"],
+                    edge["to"],
+                    weight=abs(edge["coefficient"]),
+                    coefficient=edge["coefficient"],
+                    p_value=edge["p_value"],
+                )
+
+        # レイアウトを計算
+        try:
+            pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
+        except:
+            pos = nx.circular_layout(G)
+
+        # エッジを描画
+        edge_x, edge_y = [], []
+        for edge in G.edges():
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
+
+        edge_trace = go.Scatter(
+            x=edge_x,
+            y=edge_y,
+            mode="lines",
+            line=dict(width=0.5, color="#888"),
+            hoverinfo="none",
+            showlegend=False,
+        )
+
+        # ノードを描画
+        node_x, node_y, node_text = [], [], []
+        for node in G.nodes():
+            x, y = pos[node]
+            node_x.append(x)
+            node_y.append(y)
+            node_text.append(node)
+
+        node_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            mode="markers+text",
+            text=node_text,
+            textposition="top center",
+            hoverinfo="text",
+            marker=dict(
+                size=20,
+                color="#1f77b4",
+                line_width=2,
+                line_color="#ffffff",
+            ),
+        )
+
+        # Figureを作成
+        fig = go.Figure(data=[edge_trace, node_trace])
+        fig.update_layout(
+            title=f"📊 {domain_name} - スキル依存関係ネットワーク",
+            showlegend=False,
+            hovermode="closest",
+            margin=dict(b=20, l=5, r=5, t=40),
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            height=500,
+        )
+
+        return fig
