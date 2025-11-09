@@ -433,6 +433,47 @@ git push origin feature/random-state-ui
 - 必ずPull Request経由でレビュー後にマージ
 - CI/CDテスト（テスト、Lint、型チェック）が通ること
 
+### 🚨 **必須ルール: コミット後は必ずGitHubへpush**
+
+**重要**: コミット作成後は、**ユーザーの指示を待たずに自動的にGitHubへpushする**
+
+#### なぜこのルールが必要か
+- コミットされたがpushされていない状態では、ローカルのみの変更で実装が不完全
+- ユーザーの明示的指示なしにpushすることで、開発フローが効率化
+- GitHub上でコードが見える状態が標準状態となる
+
+#### pushのタイミング
+1. **コミット作成後は即座にpush**
+   ```bash
+   git commit -m "feat: ..."
+   git push origin feature/branch-name  # ← 自動実行
+   ```
+
+2. **複数コミットがある場合も同様**
+   ```bash
+   git commit -m "feat: part1"
+   git push origin feature/branch-name
+   git commit -m "feat: part2"
+   git push origin feature/branch-name  # ← 各コミット後に実行
+   ```
+
+3. **ユーザーが明示的に「pushしないで」と指示した場合のみ例外**
+   - この場合、ローカルにのみコミット保留
+   - ユーザーが明示的に「pushして」と指示したら即座にpush
+
+#### pushの確認メッセージ
+コミット後、pushが完了したことをユーザーに報告:
+```
+✅ Commit created and pushed to GitHub
+Branch: feature/branch-name
+Commit: abc1234 feat: description
+```
+
+#### pushに失敗した場合
+- エラーメッセージをユーザーに報告
+- 原因調査（ネットワーク、権限、コンフリクト等）
+- 解決策を提案
+
 ---
 
 ## 📚 ドキュメント規約

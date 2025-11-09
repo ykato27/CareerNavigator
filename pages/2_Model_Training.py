@@ -200,7 +200,6 @@ else:
             alpha_w_min, alpha_w_max = 0.001, 0.5
             alpha_h_min, alpha_h_max = 0.001, 0.5
             l1_min, l1_max = 0.0, 1.0
-            iter_min, iter_max = 500, 1500
 
             # 探索範囲の設定
             with st.expander("🔍 探索範囲の詳細設定", expanded=False):
@@ -226,20 +225,12 @@ else:
                     l1_min = st.number_input("最小値", min_value=0.0, max_value=1.0, value=l1_min, format="%.2f", key="l1_min")
                     l1_max = st.number_input("最大値", min_value=0.0, max_value=1.0, value=l1_max, format="%.2f", key="l1_max")
 
-                st.markdown("**最大イテレーション数 (max_iter)**")
-                iter_col1, iter_col2 = st.columns(2)
-                with iter_col1:
-                    iter_min = st.number_input("最小値", min_value=100, max_value=3000, value=iter_min, step=100, key="iter_min")
-                with iter_col2:
-                    iter_max = st.number_input("最大値", min_value=100, max_value=3000, value=iter_max, step=100, key="iter_max")
-
             # 探索空間を構築（expanderの外で）
             custom_search_space = {
                 'n_components': (int(n_comp_min), int(n_comp_max)),
                 'alpha_W': (float(alpha_w_min), float(alpha_w_max)),
                 'alpha_H': (float(alpha_h_min), float(alpha_h_max)),
-                'l1_ratio': (float(l1_min), float(l1_max)),
-                'max_iter': (int(iter_min), int(iter_max))
+                'l1_ratio': (float(l1_min), float(l1_max))
             }
 
             st.info(f"""
@@ -530,6 +521,24 @@ if st.session_state.get("model_trained", False):
 
     recommender = st.session_state.ml_recommender
     mf_model = recommender.mf_model
+
+    # 目的関数の明確な表示（ハイパーパラメータチューニング時）
+    if recommender.tuning_results is not None:
+        tuner = recommender.tuning_results['tuner']
+        st.markdown("---")
+        st.markdown("### 🎯 最適化の目的関数")
+        st.success(
+            f"""
+            ## {tuner.objective_description}
+
+            **説明：** NMFモデルは、複数の異なるランダム初期値から開始した学習を、K-fold交差検証により評価し、
+            最も再構成誤差が低い（＝データをより正確に復元できる）パラメータセットを自動的に見つけます。
+
+            **正規化再構成誤差とは：** 学習データに対する復元精度を、データスケール非依存な相対的な誤差として計算したもので、
+            値が小さいほどモデルがメンバー×力量マトリクスをより正確に分解・復元できていることを示します。
+            """
+        )
+        st.markdown("---")
 
     # 基本統計
     col1, col2, col3, col4 = st.columns(4)
