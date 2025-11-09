@@ -2360,8 +2360,20 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                             if hasattr(recommender, 'skill_dependency_sem_model') and recommender.skill_dependency_sem_model:
                                 st.subheader("📊 スキル依存関係ネットワーク")
 
-                                # セッション状態にスライダー値を保存
+                                # セッション状態にスライダー値を保存（メンバー変更時のリセット対応）
                                 slider_key = f"sem_min_coeff_{selected_member_code}"
+                                previous_member_key = "previous_sem_member"
+
+                                # メンバーが変更された場合はスライダーをリセット
+                                if previous_member_key not in st.session_state:
+                                    st.session_state[previous_member_key] = selected_member_code
+                                    st.session_state[slider_key] = 0.0
+                                elif st.session_state[previous_member_key] != selected_member_code:
+                                    st.session_state[previous_member_key] = selected_member_code
+                                    # 古いメンバーのスライダー値を削除して新しいメンバーで初期化
+                                    st.session_state[slider_key] = 0.0
+
+                                # スライダーキーが存在しない場合のみ初期化
                                 if slider_key not in st.session_state:
                                     st.session_state[slider_key] = 0.0
 
@@ -2372,7 +2384,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                         "表示する関係強度（パス係数）の最小値",
                                         min_value=0.0,
                                         max_value=1.0,
-                                        value=st.session_state[slider_key],
+                                        value=st.session_state.get(slider_key, 0.0),
                                         step=0.05,
                                         help="スライダーを右に移動させると、より強い関係のみが表示されます。",
                                         key=slider_key
