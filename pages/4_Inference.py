@@ -2422,7 +2422,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                                     for idx, row in path_df.iterrows():
                                                         significance = "統計的に有意" if row['有意'] == '✓' else "有意でない"
                                                         st.caption(
-                                                            f"- {row['から']} → {row['へ']: パス係数 {row['パス係数']:.3f} "
+                                                            f"- {row['から']} → {row['へ']}: パス係数 {row['パス係数']:.3f} "
                                                             f"({significance}, p={row['p値']:.4f})"
                                                         )
 
