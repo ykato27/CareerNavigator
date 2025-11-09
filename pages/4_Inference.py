@@ -2360,13 +2360,33 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                             if hasattr(recommender, 'skill_dependency_sem_model') and recommender.skill_dependency_sem_model:
                                 st.subheader("📊 スキル依存関係ネットワーク")
 
+                                # 関係強度フィルタリング用のスライダー
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    min_coefficient = st.slider(
+                                        "表示する関係強度（パス係数）の最小値",
+                                        min_value=0.0,
+                                        max_value=1.0,
+                                        value=0.0,
+                                        step=0.05,
+                                        help="スライダーを右に移動させると、より強い関係のみが表示されます。"
+                                    )
+                                with col2:
+                                    st.metric(
+                                        "表示ペア数",
+                                        len([p for p in recommender.skill_dependency_sem_model.skill_paths
+                                             if abs(p.coefficient) >= min_coefficient])
+                                    )
+
                                 # ネットワーク可視化を表示
                                 try:
-                                    network_fig = recommender.skill_dependency_sem_model.visualize_skill_network()
+                                    network_fig = recommender.skill_dependency_sem_model.visualize_skill_network(
+                                        min_coefficient=min_coefficient
+                                    )
                                     if network_fig:
                                         st.plotly_chart(network_fig, use_container_width=True)
                                     else:
-                                        st.info("スキル依存関係が不足しているため、ネットワークグラフが表示できません")
+                                        st.info("選択した関係強度でのスキル依存関係が見つかりません。スライダーを左に移動させてください。")
                                 except Exception as viz_error:
                                     st.warning(f"⚠️ ネットワーク可視化の表示に失敗しました: {str(viz_error)[:100]}")
 
@@ -2375,14 +2395,16 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                                 path_data = []
                                 for path in recommender.skill_dependency_sem_model.skill_paths:
-                                    path_data.append({
-                                        'から': path.from_skill_name,
-                                        'へ': path.to_skill_name,
-                                        'パス係数': f"{path.coefficient:.3f}",
-                                        'p値': f"{path.p_value:.4f}",
-                                        '有意': '✓' if path.is_significant else '×',
-                                        '信頼区間': f"[{path.ci_lower:.2f}, {path.ci_upper:.2f}]"
-                                    })
+                                    # スライダーの値でフィルタリング
+                                    if abs(path.coefficient) >= min_coefficient:
+                                        path_data.append({
+                                            'から': path.from_skill_name,
+                                            'へ': path.to_skill_name,
+                                            'パス係数': f"{path.coefficient:.3f}",
+                                            'p値': f"{path.p_value:.4f}",
+                                            '有意': '✓' if path.is_significant else '×',
+                                            '信頼区間': f"[{path.ci_lower:.2f}, {path.ci_upper:.2f}]"
+                                        })
 
                                 if path_data:
                                     path_df = pd.DataFrame(path_data)

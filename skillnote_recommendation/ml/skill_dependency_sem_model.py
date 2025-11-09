@@ -284,22 +284,26 @@ class SkillDependencySEMModel:
 
         return min(1.0, total_score / total_weight)
 
-    def get_skill_network_graph(self) -> Dict[str, Any]:
-        """スキルネットワークグラフを取得"""
-        nodes = []
+    def get_skill_network_graph(self, min_coefficient: float = 0.0) -> Dict[str, Any]:
+        """
+        スキルネットワークグラフを取得
+
+        Args:
+            min_coefficient: 表示するパス係数の最小値（0.0～1.0）
+        """
+        # フィルタリング：min_coefficient 以上のパスのみを対象
+        filtered_paths = [
+            p for p in self.skill_paths
+            if abs(p.coefficient) >= min_coefficient
+        ]
+
+        # 使用されているスキルを抽出
+        used_skills = set()
         edges = []
 
-        # ノード情報
-        for skill_code, skill_info in self.skill_info.items():
-            nodes.append({
-                'id': skill_code,
-                'label': skill_info['name'],
-                'type': skill_info['type'],
-                'category': skill_info['category'],
-            })
-
-        # エッジ情報
-        for path in self.skill_paths:
+        for path in filtered_paths:
+            used_skills.add(path.from_skill)
+            used_skills.add(path.to_skill)
             edges.append({
                 'from': path.from_skill,
                 'to': path.to_skill,
@@ -308,18 +312,35 @@ class SkillDependencySEMModel:
                 'is_significant': path.is_significant,
             })
 
+        # 使用されているスキルのノード情報のみを作成
+        nodes = []
+        for skill_code in used_skills:
+            if skill_code in self.skill_info:
+                skill_info = self.skill_info[skill_code]
+                nodes.append({
+                    'id': skill_code,
+                    'label': skill_info['name'],
+                    'type': skill_info['type'],
+                    'category': skill_info['category'],
+                })
+
         return {
             'nodes': nodes,
             'edges': edges,
         }
 
-    def visualize_skill_network(self) -> Optional[go.Figure]:
-        """スキル依存関係ネットワークを可視化"""
+    def visualize_skill_network(self, min_coefficient: float = 0.0) -> Optional[go.Figure]:
+        """
+        スキル依存関係ネットワークを可視化
+
+        Args:
+            min_coefficient: 表示するパス係数の最小値（0.0～1.0）
+        """
         if not HAS_VISUALIZATION:
             logger.warning("networkx and plotly are required for visualization")
             return None
 
-        graph_data = self.get_skill_network_graph()
+        graph_data = self.get_skill_network_graph(min_coefficient=min_coefficient)
 
         if not graph_data['edges']:
             return None
