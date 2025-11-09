@@ -642,7 +642,8 @@ def display_positioning_maps(
     reference_codes: List[str] = None,
     similar_career_codes: List[str] = None,
     different_career1_codes: List[str] = None,
-    different_career2_codes: List[str] = None
+    different_career2_codes: List[str] = None,
+    mf_model=None
 ):
     """
     メンバーポジショニングマップを複数のタブで表示する。
@@ -654,6 +655,7 @@ def display_positioning_maps(
         similar_career_codes: 類似キャリアの参考人物コード（キャリアパターン別）
         different_career1_codes: 異なるキャリア1の参考人物コード
         different_career2_codes: 異なるキャリア2の参考人物コード
+        mf_model: NMFモデル（潜在因子数の取得用）
     """
     # キャリアパターン別推薦かどうかを判定
     use_pattern_based = (similar_career_codes is not None or
@@ -762,7 +764,10 @@ def display_positioning_maps(
         )
 
         # 潜在因子の最大数を取得
-        n_factors = mf_model.n_components if hasattr(mf_model, 'n_components') else 20
+        if mf_model is not None and hasattr(mf_model, 'n_components'):
+            n_factors = mf_model.n_components
+        else:
+            n_factors = 20
         factor_options = [f"潜在因子{i+1}" for i in range(n_factors)]
 
         # 軸選択UI
@@ -2428,7 +2433,8 @@ if st.session_state.get("last_recommendations_df") is not None:
                 st.session_state.last_target_member_code,
                 similar_career_codes=similar_codes,
                 different_career1_codes=different1_codes,
-                different_career2_codes=different2_codes
+                different_career2_codes=different2_codes,
+                mf_model=mf_model
             )
         else:
             # 従来の参考人物ベースのポジショニングマップを表示
@@ -2438,7 +2444,8 @@ if st.session_state.get("last_recommendations_df") is not None:
             display_positioning_maps(
                 position_df,
                 st.session_state.last_target_member_code,
-                reference_codes=reference_codes
+                reference_codes=reference_codes,
+                mf_model=mf_model
             )
 
         # キャリアパス推薦
