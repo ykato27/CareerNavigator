@@ -2504,53 +2504,68 @@ if st.session_state.get("last_recommendations_df") is not None:
             if sem_slider_key not in st.session_state:
                 st.session_state[sem_slider_key] = 0.0
 
-            # 関係強度フィルタリング用スライダー
+            # 表示ペア数スライダー
+            total_pairs = len(recommender.skill_dependency_sem_model.skill_paths)
+
             col_slider1, col_slider2 = st.columns([3, 1])
             with col_slider1:
-                sem_min_coefficient = st.slider(
-                    "表示する関係強度（パス係数）の最小値",
-                    min_value=0.0,
-                    max_value=1.0,
-                    step=0.05,
-                    value=st.session_state[sem_slider_key],
-                    help="スライダーを右に移動させると、より強い関係のみが表示されます。",
+                # 表示ペア数を選択（強い順から）
+                display_pair_count = st.slider(
+                    "表示するペア数（関係強度が強い順）",
+                    min_value=1,
+                    max_value=max(total_pairs, 1),
+                    step=1,
+                    value=min(st.session_state.get(sem_slider_key, int(total_pairs * 0.3)), total_pairs),
+                    help="スライダーを右に移動させると、より多くの関係を表示します。",
                     key=f"{sem_slider_key}_display"
                 )
                 # 値を session_state に保存
-                st.session_state[sem_slider_key] = sem_min_coefficient
+                st.session_state[sem_slider_key] = display_pair_count
             with col_slider2:
-                st.metric("最小値", f"{sem_min_coefficient:.2f}")
+                percentage = (display_pair_count / total_pairs * 100) if total_pairs > 0 else 0
+                st.metric("表示割合", f"{percentage:.1f}%")
 
-            filtered_pairs_count = len([p for p in recommender.skill_dependency_sem_model.skill_paths
-                                       if abs(p.coefficient) >= sem_min_coefficient])
-            st.info(f"📊 表示中の関係: **{filtered_pairs_count}** ペア（フィルタ値: {sem_min_coefficient:.2f}）")
+            # パス係数でソートして上位を取得（強い順）
+            sorted_paths = sorted(
+                recommender.skill_dependency_sem_model.skill_paths,
+                key=lambda p: abs(p.coefficient),
+                reverse=True
+            )
+            displayed_paths = sorted_paths[:display_pair_count]
+
+            st.info(f"📊 表示中の関係: **{len(displayed_paths)}** ペア / **{total_pairs}** ペア（{percentage:.1f}%）")
 
             # ネットワーク可視化を表示
             try:
+                # 表示するパスのパス係数の最小値を計算
+                if displayed_paths:
+                    min_coefficient_for_viz = min(abs(p.coefficient) for p in displayed_paths)
+                else:
+                    min_coefficient_for_viz = 0.0
+
                 network_fig = recommender.skill_dependency_sem_model.visualize_skill_network(
-                    min_coefficient=sem_min_coefficient
+                    min_coefficient=min_coefficient_for_viz * 0.99  # わずかに下げて該当パスをすべて含める
                 )
                 if network_fig:
                     st.plotly_chart(network_fig, use_container_width=True)
                 else:
-                    st.info("選択した関係強度でのスキル依存関係が見つかりません。スライダーを左に移動させてください。")
+                    st.info("スキル依存関係が見つかりません。")
             except Exception as viz_error:
                 st.warning(f"⚠️ ネットワーク可視化の表示に失敗しました: {str(viz_error)[:100]}")
 
             # パス係数情報をテーブルで表示
-            st.write("### 📋 スキル間の依存関係（パス係数）")
+            st.write("### 📋 スキル間の依存関係（パス係数：上位順）")
 
             path_data = []
-            for path in recommender.skill_dependency_sem_model.skill_paths:
-                if abs(path.coefficient) >= sem_min_coefficient:
-                    path_data.append({
-                        'から': path.from_skill_name,
-                        'へ': path.to_skill_name,
-                        'パス係数': f"{path.coefficient:.3f}",
-                        'p値': f"{path.p_value:.4f}",
-                        '有意': '✓' if path.is_significant else '×',
-                        '信頼区間': f"[{path.ci_lower:.2f}, {path.ci_upper:.2f}]"
-                    })
+            for path in displayed_paths:
+                path_data.append({
+                    'から': path.from_skill_name,
+                    'へ': path.to_skill_name,
+                    'パス係数': f"{path.coefficient:.3f}",
+                    'p値': f"{path.p_value:.4f}",
+                    '有意': '✓' if path.is_significant else '×',
+                    '信頼区間': f"[{path.ci_lower:.2f}, {path.ci_upper:.2f}]"
+                })
 
             if path_data:
                 path_df = pd.DataFrame(path_data)
