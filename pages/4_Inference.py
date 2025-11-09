@@ -1059,38 +1059,27 @@ rwr_weight = 0.5  # グラフとNMFを同等に評価
 # SEM分析パラメータ（ボタン外で定義）
 # =========================================================
 
-# セッション状態の初期化
+# スライダーキーをメンバーコードで一意に生成
+# Streamlit の key パラメータが自動的に初期化と保持を行う
 sem_slider_key = f"sem_min_coeff_{selected_member_code}"
-sem_previous_member_key = "sem_previous_member"
-
-# メンバーが変更された場合はスライダーをリセット
-if sem_previous_member_key not in st.session_state:
-    st.session_state[sem_previous_member_key] = selected_member_code
-    st.session_state[sem_slider_key] = 0.0
-elif st.session_state[sem_previous_member_key] != selected_member_code:
-    st.session_state[sem_previous_member_key] = selected_member_code
-    st.session_state[sem_slider_key] = 0.0
-
-# スライダーキーの初期化
-if sem_slider_key not in st.session_state:
-    st.session_state[sem_slider_key] = 0.0
 
 # SEM分析用スライダーをボタン前に配置
 st.markdown("---")
 st.markdown("### 📊 SEM分析パラメータ")
 col_sem1, col_sem2 = st.columns([3, 1])
 with col_sem1:
+    # Streamlit に自動管理させる（valueパラメータなし）
+    # keyのみで十分 - Streamlitが自動的に初期化と保持を行う
     sem_min_coefficient = st.slider(
         "表示する関係強度（パス係数）の最小値",
         min_value=0.0,
         max_value=1.0,
-        value=st.session_state[sem_slider_key],
         step=0.05,
         help="スライダーを右に移動させると、より強い関係のみが表示されます。",
         key=sem_slider_key
     )
 with col_sem2:
-    st.metric("最小値", f"{st.session_state[sem_slider_key]:.2f}")
+    st.metric("最小値", f"{sem_min_coefficient:.2f}")
 
 
 # =========================================================
