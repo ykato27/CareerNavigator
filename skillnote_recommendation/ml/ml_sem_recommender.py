@@ -257,7 +257,12 @@ class MLSEMRecommender(MLRecommender):
             updated_rec = Recommendation(
                 competence_code=rec.competence_code,
                 competence_name=rec.competence_name,
+                competence_type=rec.competence_type,
+                category=rec.category,
                 priority_score=adjusted_score,
+                category_importance=rec.category_importance,
+                acquisition_ease=rec.acquisition_ease,
+                popularity=rec.popularity,
                 reason=explanation,
                 reference_persons=rec.reference_persons,
             )
