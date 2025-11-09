@@ -2500,12 +2500,12 @@ if st.session_state.get("last_recommendations_df") is not None:
             st.markdown("---")
             st.markdown("### 📊 スキル依存関係ネットワーク分析")
 
-            # セッション状態を初期化
-            if sem_slider_key not in st.session_state:
-                st.session_state[sem_slider_key] = 0.0
-
             # 表示ペア数スライダー
             total_pairs = len(recommender.skill_dependency_sem_model.skill_paths)
+
+            # セッション状態を初期化（整数型で初期化）
+            if sem_slider_key not in st.session_state:
+                st.session_state[sem_slider_key] = int(total_pairs * 0.3) if total_pairs > 0 else 1
 
             col_slider1, col_slider2 = st.columns([3, 1])
             with col_slider1:
