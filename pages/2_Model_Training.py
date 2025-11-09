@@ -602,28 +602,29 @@ if st.session_state.get("model_trained", False):
                 else:
                     top_competence_names.append(comp_code)
 
-            # データフレームで表示
+            # データフレームで表示（重みが大きい順に上から表示するため、降順でソート）
             df_factor = pd.DataFrame({
                 "力量名": top_competence_names,
                 "重み": top_weights
-            })
+            }).sort_values("重み", ascending=False).reset_index(drop=True)
 
             col1, col2 = st.columns([2, 1])
 
             with col1:
-                # 棒グラフ
+                # 棒グラフ（重みが大きい順に上から表示）
                 fig = px.bar(
                     df_factor,
                     x="重み",
                     y="力量名",
                     orientation="h",
-                    title=f"潜在因子 {factor_idx + 1} の代表力量"
+                    title=f"潜在因子 {factor_idx + 1} の代表力量（上ほど重みが大きい）"
                 )
-                fig.update_layout(height=400)
+                # y軸の順序を逆にして、重みが大きいものが上に来るようにする
+                fig.update_layout(height=400, yaxis={'categoryorder': 'total ascending'})
                 st.plotly_chart(fig, use_container_width=True)
 
             with col2:
-                # テーブル
+                # テーブル（重みが大きい順に表示）
                 st.dataframe(df_factor, use_container_width=True, height=400)
 
     # メンバーの潜在因子分布
