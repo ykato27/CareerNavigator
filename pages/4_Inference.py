@@ -1920,60 +1920,121 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     pattern_recs = st.session_state.get('pattern_recommendations', {})
 
                     if pattern_recs:
-                        # 3つのパターンそれぞれを表示
-                        for pattern_name in ['similar', 'different1', 'different2']:
-                            if pattern_name not in pattern_recs:
-                                continue
+                        # タブを作成：「推薦結果」と「メンバー分類」
+                        tab1, tab2 = st.tabs(["📋 推薦結果", "👥 メンバー分類"])
 
-                            pattern_rec = pattern_recs[pattern_name]
+                        with tab1:
+                            # 3つのパターンそれぞれを表示
+                            for pattern_name in ['similar', 'different1', 'different2']:
+                                if pattern_name not in pattern_recs:
+                                    continue
 
-                            # セクション区切り
-                            st.markdown("---")
-                            st.markdown(f"## {pattern_rec.pattern_label}")
+                                pattern_rec = pattern_recs[pattern_name]
 
-                            # メッセージがある場合（参考人物が少ないなど）
-                            if pattern_rec.message:
-                                st.warning(pattern_rec.message)
-                                continue
+                                # セクション区切り
+                                st.markdown("---")
+                                st.markdown(f"## {pattern_rec.pattern_label}")
 
-                            # 参考人物を表示
-                            if pattern_rec.reference_persons:
-                                st.markdown("### 👥 参考人物（あなたより総合スキルレベルが高いメンバー）")
+                                # メッセージがある場合（参考人物が少ないなど）
+                                if pattern_rec.message:
+                                    st.warning(pattern_rec.message)
+                                    continue
 
-                                # フィルタリング情報を表示
-                                if pattern_rec.filtered_count > 0 and pattern_rec.total_count > 0:
-                                    st.info(
-                                        f"このパターンの全{pattern_rec.total_count}名のうち、"
-                                        f"あなたより総合スキルレベルが高い{pattern_rec.filtered_count}名を参考人物として選定しています。"
-                                    )
+                                # 参考人物を表示
+                                if pattern_rec.reference_persons:
+                                    st.markdown("### 👥 参考人物（あなたより総合スキルレベルが高いメンバー）")
 
-                                ref_person_names = []
-                                for ref_person in pattern_rec.reference_persons:
-                                    name_with_sim = f"{ref_person['name']} (類似度: {ref_person['similarity']})"
-                                    ref_person_names.append(name_with_sim)
+                                    # フィルタリング情報を表示
+                                    if pattern_rec.filtered_count > 0 and pattern_rec.total_count > 0:
+                                        st.info(
+                                            f"このパターンの全{pattern_rec.total_count}名のうち、"
+                                            f"あなたより総合スキルレベルが高い{pattern_rec.filtered_count}名を参考人物として選定しています。"
+                                        )
 
-                                st.markdown("、".join(ref_person_names))
-                                st.markdown("")  # 空行
+                                    ref_person_names = []
+                                    for ref_person in pattern_rec.reference_persons:
+                                        name_with_sim = f"{ref_person['name']} (類似度: {ref_person['similarity']})"
+                                        ref_person_names.append(name_with_sim)
 
-                            # 推薦力量を表示
-                            if pattern_rec.recommendations:
-                                st.markdown("### 📋 推薦力量")
+                                    st.markdown("、".join(ref_person_names))
+                                    st.markdown("")  # 空行
 
-                                for idx, rec in enumerate(pattern_rec.recommendations, 1):
-                                    with st.expander(f"**推薦 {idx}**: {rec.competence_name} (スコア: {rec.priority_score:.2f})"):
-                                        # 力量情報
-                                        col1, col2 = st.columns(2)
-                                        with col1:
-                                            st.markdown(f"**力量タイプ**: {rec.competence_type}")
-                                        with col2:
-                                            st.markdown(f"**カテゴリ**: {rec.category}")
+                                # 推薦力量を表示
+                                if pattern_rec.recommendations:
+                                    st.markdown("### 📋 推薦力量")
 
-                                        # 推薦理由
-                                        st.markdown("---")
-                                        st.markdown("**推薦理由**")
-                                        st.markdown(rec.reason)
-                            else:
-                                st.info("このパターンからの推薦はありません。")
+                                    for idx, rec in enumerate(pattern_rec.recommendations, 1):
+                                        with st.expander(f"**推薦 {idx}**: {rec.competence_name} (スコア: {rec.priority_score:.2f})"):
+                                            # 力量情報
+                                            col1, col2 = st.columns(2)
+                                            with col1:
+                                                st.markdown(f"**力量タイプ**: {rec.competence_type}")
+                                            with col2:
+                                                st.markdown(f"**カテゴリ**: {rec.category}")
+
+                                            # 推薦理由
+                                            st.markdown("---")
+                                            st.markdown("**推薦理由**")
+                                            st.markdown(rec.reason)
+                                else:
+                                    st.info("このパターンからの推薦はありません。")
+
+                        with tab2:
+                            st.markdown("## 👥 メンバーの分類結果")
+                            st.markdown("対象メンバーとのキャリア類似度に基づいて、全メンバーを以下3つのパターンに分類しています。")
+
+                            # 各パターンについて詳細情報を表示
+                            for pattern_name in ['similar', 'different1', 'different2']:
+                                if pattern_name not in pattern_recs:
+                                    continue
+
+                                pattern_rec = pattern_recs[pattern_name]
+                                st.markdown("---")
+                                st.markdown(f"## {pattern_rec.pattern_label}")
+
+                                if pattern_rec.message:
+                                    st.warning(pattern_rec.message)
+                                    continue
+
+                                # 分類されたメンバーの総数
+                                total_members = pattern_rec.total_count if hasattr(pattern_rec, 'total_count') else len(pattern_rec.member_codes)
+                                st.markdown(f"**分類されたメンバー数: {total_members}名**")
+
+                                # 参考人物（優秀な人）を強調表示
+                                if pattern_rec.reference_persons:
+                                    st.markdown("### ⭐ 参考人物（スキルレベルが高いメンバー）")
+
+                                    ref_df_data = []
+                                    for ref_person in pattern_rec.reference_persons:
+                                        ref_df_data.append({
+                                            'メンバー名': ref_person['name'],
+                                            '類似度': f"{ref_person['similarity']:.3f}",
+                                            'スキル数': ref_person.get('skill_count', 'N/A')
+                                        })
+
+                                    if ref_df_data:
+                                        ref_df = pd.DataFrame(ref_df_data)
+                                        st.dataframe(ref_df, use_container_width=True, hide_index=True)
+
+                                # すべてのメンバーをリスト表示
+                                st.markdown("### 📌 この分類に属するすべてのメンバー")
+
+                                if pattern_rec.member_codes and pattern_rec.member_names:
+                                    members_data = []
+                                    for code, name in zip(pattern_rec.member_codes, pattern_rec.member_names):
+                                        # 参考人物かどうかチェック
+                                        is_reference = any(ref['name'] == name for ref in (pattern_rec.reference_persons or []))
+
+                                        members_data.append({
+                                            'メンバーコード': code,
+                                            'メンバー名': f"⭐ {name}" if is_reference else name,
+                                            '類似度': f"{next((sim for c, sim in zip(pattern_rec.member_codes, pattern_rec.similarities) if c == code), 0):.3f}"
+                                        })
+
+                                    members_df = pd.DataFrame(members_data)
+                                    st.dataframe(members_df, use_container_width=True, hide_index=True)
+                                else:
+                                    st.info("このパターンに分類されたメンバーがいません")
 
                     else:
                         st.error("キャリアパターン別推薦の結果が見つかりません。")
