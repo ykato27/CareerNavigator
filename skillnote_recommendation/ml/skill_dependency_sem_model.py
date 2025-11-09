@@ -74,6 +74,7 @@ class SkillDependencySEMModel:
         # スキル依存関係を分析
         self.skill_paths: List[SkillPathCoefficient] = []
         self.skill_network: Dict[str, List[str]] = {}
+        self.skill_levels_matrix = None  # キャッシュ用
         self._analyze_skill_dependencies()
 
         logger.info(
@@ -93,30 +94,62 @@ class SkillDependencySEMModel:
             }
 
     def _analyze_skill_dependencies(self):
-        """スキル依存関係を分析"""
-        # スキル間の相関行列を計算
-        skill_correlation_matrix = self._compute_skill_correlation_matrix()
+        """スキル依存関係を分析（高速化版）"""
+        # スキルレベルマトリックスを事前計算（ピボット）
+        skill_levels = self.member_competence_df.pivot_table(
+            index='メンバーコード',
+            columns='力量コード',
+            values='正規化レベル',
+            fill_value=0
+        )
 
-        if skill_correlation_matrix is None or skill_correlation_matrix.empty:
+        if skill_levels.empty or len(skill_levels) < self.min_members:
             logger.warning("Insufficient data to compute skill correlations")
             return
 
-        # 相関のあるスキルペアを見つけ、パス係数を推定
-        skills = skill_correlation_matrix.columns.tolist()
+        # キャッシュに保存
+        self.skill_levels_matrix = skill_levels
 
+        # 相関行列を計算
+        correlation_matrix = skill_levels.corr(method='pearson')
+        skills = skill_levels.columns.tolist()
+
+        # 相関の強いペアのみをフィルタリング（高速化）
+        strong_correlations = []
         for i, from_skill in enumerate(skills):
-            self.skill_network[from_skill] = []
-
             for j, to_skill in enumerate(skills):
                 if i != j:
-                    # 単方向の因果関係を推定（from_skill → to_skill）
-                    path_coeff = self._estimate_path_coefficient(
-                        from_skill, to_skill, skill_correlation_matrix
-                    )
+                    corr_value = abs(correlation_matrix.loc[from_skill, to_skill])
+                    # 相関が0.3以上のペアのみをパス係数計算対象に
+                    if corr_value > 0.3:
+                        strong_correlations.append((from_skill, to_skill))
 
-                    if path_coeff and path_coeff.is_significant:
-                        self.skill_paths.append(path_coeff)
-                        self.skill_network[from_skill].append(to_skill)
+        logger.info(f"Found {len(strong_correlations)} skill pairs with correlation > 0.3")
+
+        # パス係数を推定（相関の強いペアのみ）
+        for from_skill, to_skill in strong_correlations:
+            self.skill_network.setdefault(from_skill, [])
+
+            # 最適化：skill_levelsを直接使用
+            from_levels = skill_levels[from_skill].values
+            to_levels = skill_levels[to_skill].values
+
+            # ゼロでないデータのみを使用
+            valid_mask = (from_levels > 0) & (to_levels > 0)
+            if valid_mask.sum() < self.min_members:
+                continue
+
+            from_levels_valid = from_levels[valid_mask]
+            to_levels_valid = to_levels[valid_mask]
+
+            # パス係数を推定
+            path_coeff = self._estimate_path_coefficient_fast(
+                from_skill, to_skill, from_levels_valid, to_levels_valid
+            )
+
+            if path_coeff and path_coeff.is_significant:
+                self.skill_paths.append(path_coeff)
+                self.skill_network[from_skill].append(to_skill)
 
     def _compute_skill_correlation_matrix(self) -> Optional[pd.DataFrame]:
         """スキル間の相関行列を計算"""
@@ -136,43 +169,25 @@ class SkillDependencySEMModel:
 
         return correlation_matrix
 
-    def _estimate_path_coefficient(
+    def _estimate_path_coefficient_fast(
         self,
         from_skill: str,
         to_skill: str,
-        correlation_matrix: pd.DataFrame,
+        from_levels: np.ndarray,
+        to_levels: np.ndarray,
     ) -> Optional[SkillPathCoefficient]:
         """
-        パス係数を推定（偏回帰係数）
+        パス係数を推定（高速版・データ前処理済み）
 
         from_skill → to_skill の因果関係を推定
         """
         try:
-            # メンバーのスキルレベル取得
-            from_data = self.member_competence_df[
-                self.member_competence_df['力量コード'] == from_skill
-            ][['メンバーコード', '正規化レベル']].rename(
-                columns={'正規化レベル': from_skill}
-            ).set_index('メンバーコード')
-
-            to_data = self.member_competence_df[
-                self.member_competence_df['力量コード'] == to_skill
-            ][['メンバーコード', '正規化レベル']].rename(
-                columns={'正規化レベル': to_skill}
-            ).set_index('メンバーコード')
-
-            # 共通メンバーでマージ
-            merged = pd.concat([from_data, to_data], axis=1).dropna()
-
-            if len(merged) < self.min_members:
+            n = len(from_levels)
+            if n < self.min_members:
                 return None
-
-            from_levels = merged[from_skill].values
-            to_levels = merged[to_skill].values
 
             # 単回帰でパス係数を推定
             # Y = a + b*X
-            n = len(from_levels)
             mean_x = np.mean(from_levels)
             mean_y = np.mean(to_levels)
 
