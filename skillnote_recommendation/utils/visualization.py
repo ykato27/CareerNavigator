@@ -89,26 +89,25 @@ def create_member_positioning_data(
         avg_level = member_comp["正規化レベル"].mean()
 
         # Get latent factors from NMF model
-        latent_factor_1 = 0
-        latent_factor_2 = 0
+        row_data = {
+            "メンバーコード": member_code,
+            "メンバー名": member_name,
+            "総合スキルレベル": total_level,
+            "保有力量数": competence_count,
+            "平均レベル": avg_level,
+        }
+
+        # すべての潜在因子を取得
         if member_code in mf_model.member_index:
             member_idx = mf_model.member_index[member_code]
-            if mf_model.n_components > 0:
-                latent_factor_1 = mf_model.W[member_idx, 0]
-            if mf_model.n_components > 1:
-                latent_factor_2 = mf_model.W[member_idx, 1]
+            for factor_idx in range(mf_model.n_components):
+                row_data[f"潜在因子{factor_idx + 1}"] = mf_model.W[member_idx, factor_idx]
+        else:
+            # モデルに含まれていないメンバーのための潜在因子初期化
+            for factor_idx in range(mf_model.n_components):
+                row_data[f"潜在因子{factor_idx + 1}"] = 0
 
-        data.append(
-            {
-                "メンバーコード": member_code,
-                "メンバー名": member_name,
-                "総合スキルレベル": total_level,
-                "保有力量数": competence_count,
-                "平均レベル": avg_level,
-                "潜在因子1": latent_factor_1,
-                "潜在因子2": latent_factor_2,
-            }
-        )
+        data.append(row_data)
 
     return pd.DataFrame(data)
 
