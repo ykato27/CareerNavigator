@@ -94,7 +94,7 @@ class SkillDependencySEMModel:
             }
 
     def _analyze_skill_dependencies(self):
-        """スキル依存関係を分析（高速化版）"""
+        """スキル依存関係を分析"""
         # スキルレベルマトリックスを事前計算（ピボット）
         skill_levels = self.member_competence_df.pivot_table(
             index='メンバーコード',
@@ -109,47 +109,37 @@ class SkillDependencySEMModel:
 
         # キャッシュに保存
         self.skill_levels_matrix = skill_levels
-
-        # 相関行列を計算
-        correlation_matrix = skill_levels.corr(method='pearson')
         skills = skill_levels.columns.tolist()
 
-        # 相関の強いペアのみをフィルタリング（高速化）
-        strong_correlations = []
+        logger.info(f"Analyzing {len(skills)} skills, {len(skills) * (len(skills) - 1)} potential paths")
+
+        # すべてのスキルペアを分析（因果関係を完全に把握）
         for i, from_skill in enumerate(skills):
-            for j, to_skill in enumerate(skills):
-                if i != j:
-                    corr_value = abs(correlation_matrix.loc[from_skill, to_skill])
-                    # 相関が0.3以上のペアのみをパス係数計算対象に
-                    if corr_value > 0.3:
-                        strong_correlations.append((from_skill, to_skill))
-
-        logger.info(f"Found {len(strong_correlations)} skill pairs with correlation > 0.3")
-
-        # パス係数を推定（相関の強いペアのみ）
-        for from_skill, to_skill in strong_correlations:
             self.skill_network.setdefault(from_skill, [])
 
-            # 最適化：skill_levelsを直接使用
-            from_levels = skill_levels[from_skill].values
-            to_levels = skill_levels[to_skill].values
+            for j, to_skill in enumerate(skills):
+                if i != j:
+                    # 最適化：skill_levelsを直接使用
+                    from_levels = skill_levels[from_skill].values
+                    to_levels = skill_levels[to_skill].values
 
-            # ゼロでないデータのみを使用
-            valid_mask = (from_levels > 0) & (to_levels > 0)
-            if valid_mask.sum() < self.min_members:
-                continue
+                    # ゼロでないデータのみを使用
+                    valid_mask = (from_levels > 0) & (to_levels > 0)
+                    if valid_mask.sum() < self.min_members:
+                        continue
 
-            from_levels_valid = from_levels[valid_mask]
-            to_levels_valid = to_levels[valid_mask]
+                    from_levels_valid = from_levels[valid_mask]
+                    to_levels_valid = to_levels[valid_mask]
 
-            # パス係数を推定
-            path_coeff = self._estimate_path_coefficient_fast(
-                from_skill, to_skill, from_levels_valid, to_levels_valid
-            )
+                    # パス係数を推定
+                    path_coeff = self._estimate_path_coefficient_fast(
+                        from_skill, to_skill, from_levels_valid, to_levels_valid
+                    )
 
-            if path_coeff and path_coeff.is_significant:
-                self.skill_paths.append(path_coeff)
-                self.skill_network[from_skill].append(to_skill)
+                    # 統計的に有意な因果関係のみを保持（p < 0.05）
+                    if path_coeff and path_coeff.is_significant:
+                        self.skill_paths.append(path_coeff)
+                        self.skill_network[from_skill].append(to_skill)
 
     def _compute_skill_correlation_matrix(self) -> Optional[pd.DataFrame]:
         """スキル間の相関行列を計算"""
@@ -217,8 +207,9 @@ class SkillDependencySEMModel:
             ci_lower = coefficient - t_critical * se_coefficient
             ci_upper = coefficient + t_critical * se_coefficient
 
-            # 有意性判定（p < 0.05）
-            is_significant = p_value < 0.05 and abs(coefficient) > 0.1
+            # 有意性判定（p < 0.05 のみ）
+            # 係数の大きさは判定基準にしない（小さい効果でも統計的に有意なら採用）
+            is_significant = p_value < 0.05
 
             return SkillPathCoefficient(
                 from_skill=from_skill,
