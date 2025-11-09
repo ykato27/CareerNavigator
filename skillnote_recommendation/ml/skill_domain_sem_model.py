@@ -109,12 +109,14 @@ class SkillDomainSEMModel:
         # データ検証
         self._validate_data()
 
+        # メンバーの潜在変数スコアをキャッシュ（先に初期化）
+        self.member_latent_scores: Dict[str, Dict[str, float]] = {}
+
         # スキル領域を分類
         self.domain_structures: Dict[str, DomainStructure] = {}
         self._build_domain_structures()
 
-        # メンバーの潜在変数スコアをキャッシュ
-        self.member_latent_scores: Dict[str, Dict[str, float]] = {}
+        # メンバーの潜在変数スコアを推定
         self._estimate_member_latent_scores()
 
         logger.info(
