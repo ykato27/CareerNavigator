@@ -889,7 +889,30 @@ if st.session_state.get("model_trained", False):
     if recommender.tuning_results is not None:
         with st.expander("🎯 ハイパーパラメータチューニング結果", expanded=True):
             tuning_results = recommender.tuning_results
+            tuner = tuning_results['tuner']
 
+            # 目的関数の説明
+            st.markdown("### 🎯 最適化の目的")
+            st.info(
+                f"""
+                **{tuner.objective_description}**
+
+                **探索対象パラメータ:**
+                - **n_components**: 潜在因子数（10-30の範囲）
+                - **alpha_W**: メンバー因子の正則化強度（0.001-0.5、対数スケール）
+                - **alpha_H**: 力量因子の正則化強度（0.001-0.5、対数スケール）
+                - **l1_ratio**: L1正則化の割合（0.0-1.0）
+
+                **自動設定パラメータ:**
+                - **max_iter**: データ特性から自動計算（{tuner.max_iter}）
+                  - データサイズ、スパース性、Early Stopping設定に基づいて決定
+
+                **固定パラメータ:**
+                - init=nndsvda, solver=cd, tol=1e-5
+                """
+            )
+
+            st.markdown("---")
             st.markdown("### 📊 チューニングサマリー")
 
             col1, col2 = st.columns(2)
@@ -946,9 +969,10 @@ if st.session_state.get("model_trained", False):
                 trials_df = tuner.get_optimization_history()
 
                 # 各パラメータの統計情報を計算
+                # max_iterは自動計算されるため除外
                 param_stats = {}
                 param_cols = ['params_n_components', 'params_alpha_W', 'params_alpha_H',
-                             'params_l1_ratio', 'params_max_iter']
+                             'params_l1_ratio']
 
                 stats_data = []
                 for col in param_cols:
