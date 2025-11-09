@@ -2387,15 +2387,18 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                             if hasattr(recommender, 'skill_dependency_sem_model') and recommender.skill_dependency_sem_model:
                                 st.subheader("📊 スキル依存関係ネットワーク")
 
-                                # ボタン前で定義されたスライダー値を使用
+                                # session_state から最新のスライダー値を取得
+                                # ボタン外でのスライダー操作に追従する
+                                current_min_coefficient = st.session_state.get(sem_slider_key, 0.0)
+
                                 filtered_pairs_count = len([p for p in recommender.skill_dependency_sem_model.skill_paths
-                                                           if abs(p.coefficient) >= sem_min_coefficient])
-                                st.info(f"📊 表示中の関係: **{filtered_pairs_count}** ペア（フィルタ値: {sem_min_coefficient:.2f}）")
+                                                           if abs(p.coefficient) >= current_min_coefficient])
+                                st.info(f"📊 表示中の関係: **{filtered_pairs_count}** ペア（フィルタ値: {current_min_coefficient:.2f}）")
 
                                 # ネットワーク可視化を表示
                                 try:
                                     network_fig = recommender.skill_dependency_sem_model.visualize_skill_network(
-                                        min_coefficient=sem_min_coefficient
+                                        min_coefficient=current_min_coefficient
                                     )
                                     if network_fig:
                                         st.plotly_chart(network_fig, use_container_width=True)
@@ -2410,7 +2413,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                 path_data = []
                                 for path in recommender.skill_dependency_sem_model.skill_paths:
                                     # スライダーの値でフィルタリング
-                                    if abs(path.coefficient) >= sem_min_coefficient:
+                                    if abs(path.coefficient) >= current_min_coefficient:
                                         path_data.append({
                                             'から': path.from_skill_name,
                                             'へ': path.to_skill_name,
