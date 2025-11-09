@@ -757,26 +757,66 @@ def display_positioning_maps(
     with tab3:
         st.markdown("### 潜在因子マップ（NMF空間）")
         st.markdown(
-            "**X軸**: 潜在因子1（第1スキルパターン）\n\n"
-            "**Y軸**: 潜在因子2（第2スキルパターン）\n\n"
             "NMFモデルが学習したスキルパターンの空間で、メンバーを配置します。\n"
             "近くにいる人は似たスキルパターンを持っています。"
         )
+
+        # 潜在因子の最大数を取得
+        n_factors = mf_model.n_components if hasattr(mf_model, 'n_components') else 20
+        factor_options = [f"潜在因子{i+1}" for i in range(n_factors)]
+
+        # 軸選択UI
+        col_x, col_y = st.columns(2)
+        with col_x:
+            selected_x_factor = st.selectbox(
+                "X軸に設定する潜在因子",
+                options=factor_options,
+                index=0,
+                help="X軸に表示する潜在因子を選択してください"
+            )
+
+        with col_y:
+            selected_y_factor = st.selectbox(
+                "Y軸に設定する潜在因子",
+                options=factor_options,
+                index=1 if n_factors > 1 else 0,
+                help="Y軸に表示する潜在因子を選択してください"
+            )
+
+        st.markdown(f"**X軸**: {selected_x_factor} | **Y軸**: {selected_y_factor}")
+
+        # マップを表示
         if use_pattern_based:
             from skillnote_recommendation.utils.visualization import create_positioning_plot_with_patterns
             fig3 = create_positioning_plot_with_patterns(
                 position_df, target_code,
                 similar_career_codes, different_career1_codes, different_career2_codes,
-                "潜在因子1", "潜在因子2",
-                "潜在因子空間でのメンバー分布"
+                selected_x_factor, selected_y_factor,
+                f"{selected_x_factor} vs {selected_y_factor}"
             )
         else:
             fig3 = create_positioning_plot(
                 position_df, target_code, reference_codes,
-                "潜在因子1", "潜在因子2",
-                "潜在因子空間でのメンバー分布"
+                selected_x_factor, selected_y_factor,
+                f"{selected_x_factor} vs {selected_y_factor}"
             )
         st.plotly_chart(fig3, use_container_width=True)
+
+        # 潜在因子についての説明
+        st.markdown("---")
+        with st.expander("📚 潜在因子について"):
+            st.markdown(f"""
+            **潜在因子とは**: NMFが学習したスキルの潜在的なパターンです。
+
+            **全{n_factors}個の潜在因子**:
+            - 各潜在因子は異なるスキルパターンを表現します
+            - 組み合わせることで、複雑なスキル構成を少数の要素で表現できます
+
+            **軸の組み合わせの意味**:
+            - 異なる潜在因子の組み合わせを見ることで、様々な角度からメンバーの特性を分析できます
+            - 例: 「潜在因子1 vs 潜在因子3」で見ると、別の視点でのメンバー分布が見えます
+            """)
+
 
     with tab4:
         st.markdown("### 全メンバーのデータ")
