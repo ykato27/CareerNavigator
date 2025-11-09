@@ -870,7 +870,7 @@ class NMFHyperparameterTuner:
 
     def plot_param_importances(self) -> "plotly.graph_objects.Figure":
         """
-        パラメータの重要度をプロット
+        パラメータの重要度をプロット（重要度の高い順に表示）
 
         Returns:
             Plotly figure
@@ -884,15 +884,29 @@ class NMFHyperparameterTuner:
             # パラメータの重要度を計算
             importances = optuna.importance.get_param_importances(self.study)
 
+            # 重要度を降順（高い順）にソート
+            sorted_importances = dict(sorted(importances.items(), key=lambda x: x[1], reverse=True))
+
             fig = go.Figure(
-                go.Bar(x=list(importances.values()), y=list(importances.keys()), orientation="h")
+                go.Bar(
+                    x=list(sorted_importances.values()),
+                    y=list(sorted_importances.keys()),
+                    orientation="h",
+                    marker=dict(
+                        color=list(sorted_importances.values()),
+                        colorscale="Viridis",
+                        showscale=True,
+                        colorbar=dict(title="重要度")
+                    )
+                )
             )
 
             fig.update_layout(
-                title="パラメータの重要度",
+                title="パラメータの重要度（重要度の高い順）",
                 xaxis_title="重要度",
                 yaxis_title="パラメータ",
                 height=400,
+                yaxis=dict(autorange="reversed"),  # 上から順に表示
             )
 
             return fig
