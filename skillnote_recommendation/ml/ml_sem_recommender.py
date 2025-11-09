@@ -166,8 +166,10 @@ class MLSEMRecommender(MLRecommender):
         self,
         member_code: str,
         top_n: int = 10,
-        exclude_categories: Optional[List[str]] = None,
-        exclude_types: Optional[List[str]] = None,
+        competence_type: Optional[List[str]] = None,
+        category_filter: Optional[str] = None,
+        use_diversity: bool = True,
+        diversity_strategy: str = "hybrid",
         use_sem: bool = True,
         return_explanation: bool = False,
     ) -> List[Recommendation]:
@@ -177,8 +179,10 @@ class MLSEMRecommender(MLRecommender):
         Args:
             member_code: メンバーコード
             top_n: 上位N件を返す
-            exclude_categories: 除外するカテゴリーリスト
-            exclude_types: 除外する力量タイプリスト（SKILL, EDUCATION, LICENSE）
+            competence_type: 力量タイプフィルタ（SKILL, EDUCATION, LICENSE）
+            category_filter: カテゴリーフィルタ
+            use_diversity: 多様性を考慮するか
+            diversity_strategy: 多様性戦略（hybrid, coverage, balance）
             use_sem: SEMスコアを使用
             return_explanation: 説明情報を含める
 
@@ -189,8 +193,10 @@ class MLSEMRecommender(MLRecommender):
         base_recommendations = super().recommend(
             member_code=member_code,
             top_n=top_n,
-            exclude_categories=exclude_categories,
-            exclude_types=exclude_types,
+            competence_type=competence_type,
+            category_filter=category_filter,
+            use_diversity=use_diversity,
+            diversity_strategy=diversity_strategy,
         )
 
         if not use_sem or not self.sem_model:
