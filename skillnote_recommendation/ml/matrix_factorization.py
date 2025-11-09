@@ -323,6 +323,74 @@ class MatrixFactorizationModel:
             reconstruction_error = np.linalg.norm(self.X - X_reconstructed, "fro")
             return reconstruction_error
 
+    def get_normalized_reconstruction_error(self) -> float:
+        """
+        正規化再構成誤差を取得（相対誤差）
+
+        元のデータのスケールに依存しない相対的な誤差を計算。
+        異なるスケールのデータセット間での比較が可能。
+
+        計算式: error / ||X||_F
+
+        Returns:
+            正規化再構成誤差 [0, 1]に正規化されることが多い
+            値が小さいほどモデルの品質が高い
+        """
+        if not self.is_fitted:
+            raise ValueError("モデルが学習されていません。")
+
+        reconstruction_error = self.get_reconstruction_error()
+        X_frobenius = np.linalg.norm(self.X, "fro")
+
+        if X_frobenius == 0:
+            return 0.0  # 元のデータがすべて0の場合
+
+        return reconstruction_error / X_frobenius
+
+    def get_model_sparsity(self) -> dict:
+        """
+        W, H行列のスパース性（疎行列性）を計算
+
+        スパース性が高い（値が大きい）ほど、モデルが解釈しやすく効率的。
+        ただし、スパース性が高すぎる場合は潜在因子数（n_components）が
+        多すぎる可能性を示唆する。
+
+        Returns:
+            dict: スパース性と診断結果
+                - W_sparsity: メンバー因子行列のスパース性（%）
+                - H_sparsity: 力量因子行列のスパース性（%）
+                - unused_factors: 完全に0の潜在因子のインデックスリスト
+                - recommendation: 診断結果の文字列
+        """
+        if not self.is_fitted:
+            raise ValueError("モデルが学習されていません。")
+
+        # スパース性を計算（0の要素の割合）
+        sparsity_W = np.sum(self.W == 0) / self.W.size * 100
+        sparsity_H = np.sum(self.H == 0) / self.H.size * 100
+
+        # 完全に0の潜在因子を検出（すべての力量に対して重みが0）
+        unused_factors = []
+        for factor_idx in range(self.H.shape[0]):
+            if np.allclose(self.H[factor_idx, :], 0, atol=1e-10):
+                unused_factors.append(factor_idx)
+
+        # 診断メッセージを生成
+        if unused_factors:
+            recommendation = (
+                f"⚠️ {len(unused_factors)}個の不使用潜在因子が検出されました（インデックス: {unused_factors}）。\n"
+                f"n_components を {self.n_components - len(unused_factors)} に削減して再学習することをお勧めします。"
+            )
+        else:
+            recommendation = "✅ すべての潜在因子が使用されています。"
+
+        return {
+            "W_sparsity": sparsity_W,
+            "H_sparsity": sparsity_H,
+            "unused_factors": unused_factors,
+            "recommendation": recommendation,
+        }
+
     def save(self, filepath: str):
         """
         モデルを保存

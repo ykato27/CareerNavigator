@@ -664,3 +664,273 @@ class TestDiversityMetrics:
         assert "avg_category_diversity" in metrics
         assert "avg_type_diversity" in metrics
         assert "catalog_coverage" in metrics
+
+
+# ==================== メンバーごとの評価テスト ====================
+
+
+class TestPerMemberEvaluation:
+    """メンバーごとの評価メトリクスのテスト"""
+
+    def test_evaluate_per_member_basic(self, temporal_member_competence, sample_competence_master):
+        """メンバーごとの評価が機能する"""
+        evaluator = RecommendationEvaluator()
+
+        train_data, test_data = evaluator.temporal_train_test_split(
+            temporal_member_competence, train_ratio=0.7
+        )
+
+        # テストデータにデータが含まれているかチェック
+        if len(test_data) == 0:
+            pytest.skip("テストデータが空です")
+
+        per_member_df = evaluator.evaluate_per_member(
+            train_data=train_data,
+            test_data=test_data,
+            competence_master=sample_competence_master,
+            top_k=10,
+        )
+
+        # 結果がDataFrameであることを確認
+        assert isinstance(per_member_df, pd.DataFrame)
+
+        # 必要なカラムが含まれている
+        if len(per_member_df) > 0:
+            assert "member_code" in per_member_df.columns
+            assert "precision@10" in per_member_df.columns
+            assert "recall@10" in per_member_df.columns
+            assert "f1@10" in per_member_df.columns
+            assert "ndcg@10" in per_member_df.columns
+            assert "hit" in per_member_df.columns
+
+    def test_evaluate_per_member_metrics_range(self, temporal_member_competence, sample_competence_master):
+        """メンバーごとのメトリクスが有効な範囲内である"""
+        evaluator = RecommendationEvaluator()
+
+        train_data, test_data = evaluator.temporal_train_test_split(
+            temporal_member_competence, train_ratio=0.7
+        )
+
+        if len(test_data) == 0:
+            pytest.skip("テストデータが空です")
+
+        per_member_df = evaluator.evaluate_per_member(
+            train_data=train_data,
+            test_data=test_data,
+            competence_master=sample_competence_master,
+            top_k=10,
+        )
+
+        if len(per_member_df) > 0:
+            # すべてのメトリクスが0～1の範囲
+            assert (per_member_df["precision@10"] >= 0).all()
+            assert (per_member_df["precision@10"] <= 1).all()
+            assert (per_member_df["recall@10"] >= 0).all()
+            assert (per_member_df["recall@10"] <= 1).all()
+            assert (per_member_df["ndcg@10"] >= 0).all()
+            assert (per_member_df["ndcg@10"] <= 1).all()
+
+            # hitは0または1
+            assert per_member_df["hit"].isin([0, 1]).all()
+
+    def test_get_member_performance_summary(self, temporal_member_competence, sample_competence_master):
+        """メンバーパフォーマンスサマリーが機能する"""
+        evaluator = RecommendationEvaluator()
+
+        train_data, test_data = evaluator.temporal_train_test_split(
+            temporal_member_competence, train_ratio=0.7
+        )
+
+        if len(test_data) == 0:
+            pytest.skip("テストデータが空です")
+
+        per_member_df = evaluator.evaluate_per_member(
+            train_data=train_data,
+            test_data=test_data,
+            competence_master=sample_competence_master,
+            top_k=10,
+        )
+
+        if len(per_member_df) > 0:
+            summary = evaluator.get_member_performance_summary(per_member_df, top_k=10)
+
+            # サマリーキーが存在
+            assert "total_members" in summary
+            assert "high_performers" in summary
+            assert "medium_performers" in summary
+            assert "low_performers" in summary
+            assert "avg_precision" in summary
+            assert "avg_recall" in summary
+            assert "avg_f1" in summary
+
+            # メンバー数の合計が一致
+            total = summary["high_performers"] + summary["medium_performers"] + summary["low_performers"]
+            assert total == summary["total_members"]
+
+    def test_per_member_empty_test_data(self, sample_competence_master):
+        """テストデータが空の場合"""
+        evaluator = RecommendationEvaluator()
+
+        train_data = pd.DataFrame({
+            "メンバーコード": ["m001", "m002"],
+            "力量コード": ["s001", "s002"],
+            "力量タイプ": ["SKILL", "SKILL"],
+            "正規化レベル": [3, 3],
+            "力量カテゴリー名": ["Cat1", "Cat2"],
+        })
+
+        test_data = pd.DataFrame({
+            "メンバーコード": [],
+            "力量コード": [],
+            "力量タイプ": [],
+            "正規化レベル": [],
+            "力量カテゴリー名": [],
+        })
+
+        per_member_df = evaluator.evaluate_per_member(
+            train_data=train_data,
+            test_data=test_data,
+            competence_master=sample_competence_master,
+            top_k=10,
+        )
+
+        # 空のDataFrameが返される
+        assert isinstance(per_member_df, pd.DataFrame)
+        assert len(per_member_df) == 0
+
+
+# ==================== モデル評価メトリクステスト ====================
+
+
+class TestMatrixFactorizationMetrics:
+    """マトリックスファクタリゼーションモデルの評価メトリクステスト"""
+
+    def test_normalized_reconstruction_error(self, sample_skill_matrix):
+        """正規化再構成誤差が計算できる"""
+        from skillnote_recommendation.ml.matrix_factorization import MatrixFactorizationModel
+
+        model = MatrixFactorizationModel(n_components=5)
+        model.fit(sample_skill_matrix)
+
+        normalized_error = model.get_normalized_reconstruction_error()
+
+        # 正規化誤差は0～1の範囲（理論的には無限大も可能だが、通常は0～1）
+        assert isinstance(normalized_error, float)
+        assert normalized_error >= 0
+
+    def test_model_sparsity(self, sample_skill_matrix):
+        """モデルスパース性が計算できる"""
+        from skillnote_recommendation.ml.matrix_factorization import MatrixFactorizationModel
+
+        model = MatrixFactorizationModel(n_components=5)
+        model.fit(sample_skill_matrix)
+
+        sparsity_info = model.get_model_sparsity()
+
+        # スパース性情報の存在
+        assert "W_sparsity" in sparsity_info
+        assert "H_sparsity" in sparsity_info
+        assert "unused_factors" in sparsity_info
+        assert "recommendation" in sparsity_info
+
+        # スパース性は0～100%の範囲
+        assert 0 <= sparsity_info["W_sparsity"] <= 100
+        assert 0 <= sparsity_info["H_sparsity"] <= 100
+
+        # 未使用因子はリスト
+        assert isinstance(sparsity_info["unused_factors"], list)
+
+    def test_model_sparsity_with_unused_factors(self):
+        """未使用潜在因子がある場合"""
+        from skillnote_recommendation.ml.matrix_factorization import MatrixFactorizationModel
+
+        # スパースなデータを作成（低ランク構造）
+        sparse_data = pd.DataFrame(
+            np.array([
+                [1, 0, 2],
+                [0, 3, 0],
+                [4, 0, 5],
+            ]),
+            index=["m1", "m2", "m3"],
+            columns=["s1", "s2", "s3"],
+        )
+
+        # 潜在因子数を大きく設定（未使用因子が生まれやすい）
+        model = MatrixFactorizationModel(n_components=10, random_state=42)
+        model.fit(sparse_data)
+
+        sparsity_info = model.get_model_sparsity()
+
+        # 診断メッセージが生成されている
+        assert isinstance(sparsity_info["recommendation"], str)
+        assert len(sparsity_info["recommendation"]) > 0
+
+
+# ==================== 汎化性能テスト ====================
+
+
+class TestGeneralizationMetrics:
+    """汎化性能メトリクスのテスト"""
+
+    def test_evaluate_training_vs_test(self, sample_skill_matrix):
+        """訓練 vs テスト誤差が計算できる"""
+        from skillnote_recommendation.ml.hyperparameter_tuning import NMFHyperparameterTuner
+
+        tuner = NMFHyperparameterTuner(
+            skill_matrix=sample_skill_matrix,
+            n_trials=1,
+            random_state=42,
+            test_size=0.2,  # テストセットを分離
+        )
+
+        # 最適化を実行
+        best_params, best_value = tuner.optimize()
+
+        # 最良モデルを取得
+        model = tuner.get_best_model()
+
+        # 訓練 vs テスト誤差を評価
+        eval_results = tuner.evaluate_training_vs_test(model)
+
+        # 必要なキーが存在
+        assert "train_error" in eval_results
+        assert "train_size" in eval_results
+        assert "test_size" in eval_results
+        assert "diagnosis" in eval_results
+
+        # テストセットが存在する場合
+        if eval_results["test_size"] > 0:
+            assert "test_error" in eval_results
+            assert "generalization_gap" in eval_results
+
+            # テスト誤差と訓練誤差は正の値
+            assert eval_results["test_error"] >= 0
+            assert eval_results["train_error"] >= 0
+
+    def test_generalization_gap_interpretation(self, sample_skill_matrix):
+        """汎化ギャップの診断が正確である"""
+        from skillnote_recommendation.ml.hyperparameter_tuning import NMFHyperparameterTuner
+
+        tuner = NMFHyperparameterTuner(
+            skill_matrix=sample_skill_matrix,
+            n_trials=1,
+            random_state=42,
+            test_size=0.2,
+        )
+
+        best_params, best_value = tuner.optimize()
+        model = tuner.get_best_model()
+
+        eval_results = tuner.evaluate_training_vs_test(model)
+
+        if eval_results["test_size"] > 0:
+            diagnosis = eval_results["diagnosis"]
+
+            # 診断メッセージが含まれている
+            assert isinstance(diagnosis, str)
+            assert len(diagnosis) > 0
+
+            # 診断メッセージが有効な内容を含む
+            valid_keywords = ["優れた", "過学習", "テストセット", "汎化"]
+            has_valid_keyword = any(keyword in diagnosis for keyword in valid_keywords)
+            assert has_valid_keyword or "診断" in diagnosis

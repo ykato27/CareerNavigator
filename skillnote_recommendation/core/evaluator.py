@@ -979,3 +979,188 @@ class RecommendationEvaluator:
         avg_metrics["total_splits"] = len(splits)
 
         return avg_metrics
+
+    def evaluate_per_member(
+        self,
+        train_data: pd.DataFrame,
+        test_data: pd.DataFrame,
+        competence_master: pd.DataFrame,
+        top_k: int = 10,
+        member_sample: Optional[List[str]] = None,
+    ) -> pd.DataFrame:
+        """
+        メンバーごとの評価メトリクスを計算
+
+        各メンバー個別の精度を分析し、推薦精度が低いメンバーを特定。
+        モデルの弱点分析に有用。
+
+        Args:
+            train_data: 学習データ（過去の習得力量）
+            test_data: 評価データ（将来の習得力量）
+            competence_master: 力量マスタ
+            top_k: 推薦する上位K件
+            member_sample: 評価対象メンバーリスト（Noneの場合は全メンバー）
+
+        Returns:
+            メンバーごとのメトリクスを含むDataFrame
+            カラム: member_code, precision@k, recall@k, f1@k, ndcg@k, hit, acquired_count, recommended_count
+        """
+        # 評価対象メンバーの決定
+        if member_sample is None:
+            member_sample = test_data["メンバーコード"].unique().tolist()
+
+        # MLレコメンダーの準備
+        if self.recommender is None:
+            from skillnote_recommendation.ml.ml_recommender import MLRecommender
+
+            # メンバーマスタの準備
+            member_codes = train_data["メンバーコード"].unique()
+            members_data = pd.DataFrame(
+                {
+                    "メンバーコード": member_codes,
+                    "メンバー名": [f"メンバー{code}" for code in member_codes],  # テスト用の仮名
+                    "役職": ["未設定"] * len(member_codes),
+                    "職能等級": ["未設定"] * len(member_codes),
+                }
+            )
+
+            # マトリクスサイズを計算してn_componentsを決定
+            n_members = len(train_data["メンバーコード"].unique())
+            n_competences = len(train_data["力量コード"].unique())
+            safe_n_components = min(20, n_members, n_competences)
+
+            # MLモデルを学習
+            recommender = MLRecommender.build(
+                member_competence=train_data,
+                competence_master=competence_master,
+                member_master=members_data,
+                use_preprocessing=False,
+                use_tuning=False,
+                n_components=safe_n_components,
+            )
+        else:
+            recommender = self.recommender
+
+        # メンバーごとのメトリクスを収集
+        results = []
+
+        for member_code in member_sample:
+            # テストデータでの習得力量（正解データ）
+            actual_acquired = (
+                test_data[test_data["メンバーコード"] == member_code]["力量コード"]
+                .unique()
+                .tolist()
+            )
+
+            if len(actual_acquired) == 0:
+                continue
+
+            # 学習データを使って推薦を生成
+            try:
+                recommendations = recommender.recommend(
+                    member_code=member_code, top_n=top_k, use_diversity=False
+                )
+            except Exception:
+                # コールドスタート等のエラーの場合はスキップ
+                continue
+
+            # 推薦された力量コード
+            recommended_codes = [rec.competence_code for rec in recommendations]
+
+            # メトリクスを計算
+            hits = len(set(recommended_codes) & set(actual_acquired))
+            precision = hits / len(recommended_codes) if len(recommended_codes) > 0 else 0.0
+            recall = hits / len(actual_acquired) if len(actual_acquired) > 0 else 0.0
+
+            # F1スコア
+            if precision + recall > 0:
+                f1 = 2 * (precision * recall) / (precision + recall)
+            else:
+                f1 = 0.0
+
+            # NDCG
+            ndcg = self._calculate_ndcg(recommended_codes, actual_acquired, top_k)
+
+            # ヒット判定
+            hit = 1 if hits > 0 else 0
+
+            results.append(
+                {
+                    "member_code": member_code,
+                    f"precision@{top_k}": precision,
+                    f"recall@{top_k}": recall,
+                    f"f1@{top_k}": f1,
+                    f"ndcg@{top_k}": ndcg,
+                    "hit": hit,
+                    "acquired_count": len(actual_acquired),
+                    "recommended_count": len(recommended_codes),
+                }
+            )
+
+        if not results:
+            return pd.DataFrame()
+
+        df_results = pd.DataFrame(results)
+        return df_results
+
+    def get_member_performance_summary(
+        self,
+        per_member_df: pd.DataFrame,
+        top_k: int = 10,
+    ) -> Dict[str, any]:
+        """
+        メンバーごとの評価結果から統計サマリーを生成
+
+        メンバーを精度グループに分類し、推薦の課題を分析。
+
+        Args:
+            per_member_df: evaluate_per_memberから得られたDataFrame
+            top_k: 推薦する上位K件
+
+        Returns:
+            統計サマリーの辞書
+        """
+        if per_member_df.empty:
+            return {
+                "total_members": 0,
+                "high_performers": 0,
+                "medium_performers": 0,
+                "low_performers": 0,
+                "precision_by_group": {},
+                "recall_by_group": {},
+            }
+
+        precision_col = f"precision@{top_k}"
+        recall_col = f"recall@{top_k}"
+        f1_col = f"f1@{top_k}"
+
+        # パフォーマンスグループに分類（精度に基づく）
+        high = per_member_df[per_member_df[precision_col] >= 0.7]  # Precision >= 70%
+        medium = per_member_df[
+            (per_member_df[precision_col] >= 0.4) & (per_member_df[precision_col] < 0.7)
+        ]  # 40-70%
+        low = per_member_df[per_member_df[precision_col] < 0.4]  # < 40%
+
+        summary = {
+            "total_members": len(per_member_df),
+            "high_performers": len(high),  # Precision >= 70%
+            "medium_performers": len(medium),  # 40% <= Precision < 70%
+            "low_performers": len(low),  # Precision < 40%
+            "avg_precision": per_member_df[precision_col].mean(),
+            "avg_recall": per_member_df[recall_col].mean(),
+            "avg_f1": per_member_df[f1_col].mean(),
+            "precision_std": per_member_df[precision_col].std(),
+            "recall_std": per_member_df[recall_col].std(),
+            "precision_by_group": {
+                "high": high[precision_col].mean() if len(high) > 0 else 0.0,
+                "medium": medium[precision_col].mean() if len(medium) > 0 else 0.0,
+                "low": low[precision_col].mean() if len(low) > 0 else 0.0,
+            },
+            "recall_by_group": {
+                "high": high[recall_col].mean() if len(high) > 0 else 0.0,
+                "medium": medium[recall_col].mean() if len(medium) > 0 else 0.0,
+                "low": low[recall_col].mean() if len(low) > 0 else 0.0,
+            },
+        }
+
+        return summary
