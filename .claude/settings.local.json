@@ -9,7 +9,10 @@
       "Bash(uv run python:*)",
       "Bash(gh pr create:*)",
       "Bash(cd:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(cat:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []
