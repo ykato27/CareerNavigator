@@ -127,12 +127,19 @@ class SEMOnlyRecommender:
 
         # 力量タイプでフィルタリング
         if competence_type:
+            before_filter = len(unacquired_competences)
             unacquired_competences = unacquired_competences[
                 unacquired_competences['力量タイプ'].isin(competence_type)
             ]
+            after_filter = len(unacquired_competences)
+            logger.info(f"力量タイプフィルタ: {before_filter}件 → {after_filter}件（タイプ: {competence_type}）")
+
+        logger.info(f"未習得力量数（フィルタ後）: {len(unacquired_competences)}件")
 
         # 各未習得力量に対してSEMスコアを計算
         recommendations = []
+        skipped_by_significance = 0
+        skipped_by_domain = 0
 
         for _, comp_row in unacquired_competences.iterrows():
             competence_code = comp_row['力量コード']
@@ -148,6 +155,7 @@ class SEMOnlyRecommender:
 
             # 領域フィルタ
             if domain_filter and domain != domain_filter:
+                skipped_by_domain += 1
                 continue
 
             # メンバーの現在のレベルを取得
@@ -169,6 +177,7 @@ class SEMOnlyRecommender:
 
             # 有意性フィルタ
             if min_significance and path_info and not path_info.get('is_significant', False):
+                skipped_by_significance += 1
                 continue
 
             recommendation = SEMRecommendation(
@@ -187,10 +196,20 @@ class SEMOnlyRecommender:
 
             recommendations.append(recommendation)
 
+        logger.info(f"推薦候補数（フィルタ後）: {len(recommendations)}件")
+        if skipped_by_domain > 0:
+            logger.info(f"  - 領域フィルタでスキップ: {skipped_by_domain}件")
+        if skipped_by_significance > 0:
+            logger.info(f"  - 有意性フィルタでスキップ: {skipped_by_significance}件（min_significance={min_significance}）")
+
         # SEMスコアでソート（降順）
         recommendations.sort(key=lambda x: x.sem_score, reverse=True)
 
-        return recommendations[:top_n]
+        # 上位N件を返す
+        final_recommendations = recommendations[:top_n]
+        logger.info(f"最終推薦数: {len(final_recommendations)}件（top_n={top_n}）")
+
+        return final_recommendations
 
     def get_member_profile(self, member_code: str) -> Dict[str, Any]:
         """
