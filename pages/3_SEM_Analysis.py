@@ -392,8 +392,8 @@ with tab3:
     with col4:
         min_significance = st.checkbox(
             "統計的に有意なもののみ",
-            value=True,
-            help="p < 0.05のパス係数を持つ推薦のみを表示"
+            value=False,
+            help="p < 0.05のパス係数を持つ推薦のみを表示（チェックを入れると推薦数が減る可能性があります）"
         )
 
     # 推薦を実行
@@ -413,7 +413,32 @@ with tab3:
                 if recommendations:
                     st.success(f"✅ {len(recommendations)}件の推薦を生成しました")
                 else:
-                    st.warning("推薦できる力量が見つかりませんでした")
+                    st.warning("⚠️ 推薦できる力量が見つかりませんでした")
+
+                    # 診断情報を表示
+                    st.info("""
+                    **推薦が空になった可能性のある原因:**
+
+                    1. **力量タイプフィルタが厳しすぎる**
+                       - 現在の設定: {}
+                       - 提案: すべてのタイプ（SKILL, EDUCATION, LICENSE）を選択してみてください
+
+                    2. **「統計的に有意なもののみ」フィルタが有効**
+                       - 現在の設定: {}
+                       - 提案: チェックを外してみてください
+
+                    3. **領域フィルタで絞り込みすぎている**
+                       - 現在の設定: {}
+                       - 提案: 「全領域」を選択してみてください
+
+                    4. **既に多くの力量を習得済み**
+                       - 未習得の力量が少ない可能性があります
+                       - 提案: 推薦数を増やしてみてください
+                    """.format(
+                        competence_types_sem if competence_types_sem else "全て",
+                        "有効" if min_significance else "無効",
+                        domain_filter_sem
+                    ))
 
             except Exception as e:
                 display_error_details(e, "SEM推薦")
