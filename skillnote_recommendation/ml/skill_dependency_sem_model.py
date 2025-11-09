@@ -94,7 +94,7 @@ class SkillDependencySEMModel:
             }
 
     def _analyze_skill_dependencies(self):
-        """スキル依存関係を分析"""
+        """スキル依存関係を分析（最適化版）"""
         # スキルレベルマトリックスを事前計算（ピボット）
         skill_levels = self.member_competence_df.pivot_table(
             index='メンバーコード',
@@ -111,21 +111,30 @@ class SkillDependencySEMModel:
         self.skill_levels_matrix = skill_levels
         skills = skill_levels.columns.tolist()
 
-        logger.info(f"Analyzing {len(skills)} skills, {len(skills) * (len(skills) - 1)} potential paths")
+        # 軽い事前フィルタリング：各スキルのデータ量をチェック
+        skill_data_counts = (skill_levels > 0).sum()
+        skills_with_data = [s for s in skills if skill_data_counts[s] >= self.min_members]
+
+        logger.info(
+            f"Analyzing {len(skills_with_data)} skills with sufficient data, "
+            f"total paths to check: {len(skills_with_data) * (len(skills_with_data) - 1)}"
+        )
 
         # すべてのスキルペアを分析（因果関係を完全に把握）
-        for i, from_skill in enumerate(skills):
+        for i, from_skill in enumerate(skills_with_data):
             self.skill_network.setdefault(from_skill, [])
 
-            for j, to_skill in enumerate(skills):
+            for j, to_skill in enumerate(skills_with_data):
                 if i != j:
                     # 最適化：skill_levelsを直接使用
                     from_levels = skill_levels[from_skill].values
                     to_levels = skill_levels[to_skill].values
 
-                    # ゼロでないデータのみを使用
+                    # ゼロでないデータのみを使用（numpy配列は高速）
                     valid_mask = (from_levels > 0) & (to_levels > 0)
-                    if valid_mask.sum() < self.min_members:
+                    valid_count = valid_mask.sum()
+
+                    if valid_count < self.min_members:
                         continue
 
                     from_levels_valid = from_levels[valid_mask]
@@ -176,40 +185,50 @@ class SkillDependencySEMModel:
             if n < self.min_members:
                 return None
 
-            # 単回帰でパス係数を推定
+            # 単回帰でパス係数を推定（numpy 高速計算）
             # Y = a + b*X
-            mean_x = np.mean(from_levels)
-            mean_y = np.mean(to_levels)
+            from_levels_f = from_levels.astype(np.float64)
+            to_levels_f = to_levels.astype(np.float64)
 
-            numerator = np.sum((from_levels - mean_x) * (to_levels - mean_y))
-            denominator = np.sum((from_levels - mean_x) ** 2)
+            mean_x = np.mean(from_levels_f)
+            mean_y = np.mean(to_levels_f)
+
+            # 差分を事前計算（再利用）
+            x_diff = from_levels_f - mean_x
+            y_diff = to_levels_f - mean_y
+
+            numerator = np.dot(x_diff, y_diff)  # np.sum より高速
+            denominator = np.dot(x_diff, x_diff)
 
             if denominator == 0:
                 return None
 
             coefficient = numerator / denominator
-            intercept = mean_y - coefficient * mean_x
 
-            # 予測値と残差を計算
-            y_pred = intercept + coefficient * from_levels
-            residuals = to_levels - y_pred
+            # 残差を計算（予測値を明示的に計算しない）
+            residuals = y_diff - coefficient * x_diff
 
             # 標準誤差とt値を計算
-            mse = np.sum(residuals ** 2) / (n - 2)
+            ss_residual = np.dot(residuals, residuals)  # 高速
+            mse = ss_residual / (n - 2)
             se_coefficient = np.sqrt(mse / denominator)
-            t_value = coefficient / se_coefficient if se_coefficient > 0 else 0
 
-            # p値を計算
-            p_value = 2 * (1 - stats.t.cdf(abs(t_value), n - 2))
+            if se_coefficient > 0:
+                t_value = coefficient / se_coefficient
+            else:
+                return None
 
-            # 信頼区間を計算
+            # p値を計算（統計的有意性のみ判定）
+            if n > 2 and abs(t_value) > 0.01:  # t値がほぼ0は早期リターン
+                p_value = 2 * (1 - stats.t.cdf(abs(t_value), n - 2))
+                is_significant = p_value < 0.05
+            else:
+                return None  # 統計的に明らかに有意でない
+
+            # 信頼区間を計算（有意なペアのみ）
             t_critical = stats.t.ppf((1 + self.confidence_level) / 2, n - 2)
             ci_lower = coefficient - t_critical * se_coefficient
             ci_upper = coefficient + t_critical * se_coefficient
-
-            # 有意性判定（p < 0.05 のみ）
-            # 係数の大きさは判定基準にしない（小さい効果でも統計的に有意なら採用）
-            is_significant = p_value < 0.05
 
             return SkillPathCoefficient(
                 from_skill=from_skill,
