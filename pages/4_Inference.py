@@ -2349,96 +2349,67 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                 if hasattr(recommender, 'sem_model') and recommender.sem_model:
                     with st.expander("📊 SEM分析（スキル依存性分析）", expanded=False):
                         st.info("""
-                        **SEM（構造方程式モデリング）分析**は、スキル間の段階的な依存関係を分析します。
-                        - スキル領域の依存関係ネットワーク
+                        **SEM（構造方程式モデリング）分析**は、実際のスキル（力量）間の因果関係を分析します。
+                        - スキル依存関係ネットワーク（視覚化）
                         - スキル間の因果効果（パス係数）
-                        - 各スキルの習得度プロフィール
+                        - 習得経路の推奨
                         """)
 
-                        # メンバープロファイルを取得
+                        # スキル依存関係SEMを表示（新しいモデル）
                         try:
-                            member_profile = recommender.sem_model.get_member_domain_profile(selected_member_code)
-                            domains = recommender.sem_model.get_all_domains()
+                            if hasattr(recommender, 'skill_dependency_sem_model') and recommender.skill_dependency_sem_model:
+                                st.subheader("📊 スキル依存関係ネットワーク")
 
-                            if member_profile and domains:
-                                # タブで領域別に表示
-                                tab_cols = st.tabs([f"📌 {domain}" for domain in domains] + ["📈 全領域プロフィール"])
+                                # ネットワーク可視化を表示
+                                try:
+                                    network_fig = recommender.skill_dependency_sem_model.visualize_skill_network()
+                                    if network_fig:
+                                        st.plotly_chart(network_fig, use_container_width=True)
+                                    else:
+                                        st.info("スキル依存関係が不足しているため、ネットワークグラフが表示できません")
+                                except Exception as viz_error:
+                                    st.warning(f"⚠️ ネットワーク可視化の表示に失敗しました: {str(viz_error)[:100]}")
 
-                                for idx, domain in enumerate(domains):
-                                    with tab_cols[idx]:
-                                        st.subheader(f"{domain} - スキル依存関係")
+                                # パス係数情報をテーブルで表示
+                                st.write("### 📋 スキル間の依存関係（パス係数）")
 
-                                        # ネットワーク可視化を表示
-                                        try:
-                                            network_fig = recommender.sem_model.visualize_domain_network(domain)
-                                            if network_fig:
-                                                st.plotly_chart(network_fig, use_container_width=True)
-                                            else:
-                                                st.info(f"{domain}領域のネットワークグラフはデータ不足のため表示できません")
-                                        except Exception as viz_error:
-                                            st.warning(f"⚠️ ネットワーク可視化の表示に失敗しました: {str(viz_error)[:100]}")
+                                path_data = []
+                                for path in recommender.skill_dependency_sem_model.skill_paths:
+                                    path_data.append({
+                                        'から': path.from_skill_name,
+                                        'へ': path.to_skill_name,
+                                        'パス係数': f"{path.coefficient:.3f}",
+                                        'p値': f"{path.p_value:.4f}",
+                                        '有意': '✓' if path.is_significant else '×',
+                                        '信頼区間': f"[{path.ci_lower:.2f}, {path.ci_upper:.2f}]"
+                                    })
 
-                                        # パス係数情報を表示
-                                        domain_info = recommender.sem_model.get_domain_info(domain)
-                                        if domain_info and domain_info.get('path_coefficients'):
-                                            st.write("### 📊 スキル依存関係（パス係数）")
+                                if path_data:
+                                    path_df = pd.DataFrame(path_data)
+                                    st.dataframe(path_df, use_container_width=True)
 
-                                            path_data = []
-                                            for path in domain_info['path_coefficients']:
-                                                path_data.append({
-                                                    'から': path.get('from', ''),
-                                                    'へ': path.get('to', ''),
-                                                    'パス係数': path.get('coefficient', 0),
-                                                    'p値': path.get('p_value', 1.0),
-                                                    '有意': '✓' if path.get('is_significant', False) else '×',
-                                                    '信頼区間': f"[{path['ci'][0]:.2f}, {path['ci'][1]:.2f}]"
-                                                })
+                                    st.markdown("**統計的有意性の解釈：**")
+                                    st.caption("✓ = p < 0.05 で統計的に有意（因果関係の確率が高い）")
+                                    st.caption("× = p ≥ 0.05 で有意でない（偶然の可能性が高い）")
 
-                                            if path_data:
-                                                path_df = pd.DataFrame(path_data)
-                                                st.dataframe(
-                                                    path_df.style.format({
-                                                        'パス係数': '{:.3f}',
-                                                        'p値': '{:.4f}'
-                                                    }),
-                                                    use_container_width=True
-                                                )
+                                    # メンバーの推奨スキルに対するSEMスコアを表示
+                                    st.write("### 🎯 推奨スキルのSEM依存スコア")
+                                    rec_sem_scores = []
+                                    for rec in recs[:5]:  # 上位5件の推奨
+                                        sem_score = recommender.skill_dependency_sem_model.calculate_sem_score(
+                                            selected_member_code, rec.competence_code
+                                        )
+                                        rec_sem_scores.append({
+                                            'スキル': rec.competence_name,
+                                            'SEM依存スコア': f"{sem_score:.2f}",
+                                            '説明': 'このスキルへの依存関係の強度'
+                                        })
 
-                                                st.markdown("**解釈:**")
-                                                for i, row in path_df.iterrows():
-                                                    significance = "統計的に有意" if row['有意'] == '✓' else "有意でない"
-                                                    st.caption(
-                                                        f"- {row['から']} → {row['へ']}: パス係数 {row['パス係数']:.3f} "
-                                                        f"({significance}, p={row['p値']:.4f})"
-                                                    )
-
-                                        # メンバーの該当領域プロフィール
-                                        if domain in member_profile:
-                                            st.write("### 📈 習得度プロフィール")
-                                            profile_scores = member_profile[domain]
-                                            if profile_scores:
-                                                profile_items = list(profile_scores.items())
-                                                profile_df = pd.DataFrame({
-                                                    'スキル段階': [item[0] for item in profile_items],
-                                                    '習得度スコア': [f"{item[1]:.2f}" for item in profile_items]
-                                                })
-                                                st.dataframe(profile_df, use_container_width=True)
-
-                                # 全領域プロフィール
-                                with tab_cols[-1]:
-                                    st.subheader("全領域の習得度プロフィール")
-                                    profile_data = []
-                                    for domain_name, domain_scores in member_profile.items():
-                                        if domain_scores:
-                                            avg_score = np.mean(list(domain_scores.values()))
-                                            profile_data.append({
-                                                '領域': domain_name,
-                                                '総合習得度': f"{avg_score:.2f}"
-                                            })
-
-                                    if profile_data:
-                                        profile_df = pd.DataFrame(profile_data)
-                                        st.dataframe(profile_df, use_container_width=True)
+                                    if rec_sem_scores:
+                                        sem_score_df = pd.DataFrame(rec_sem_scores)
+                                        st.dataframe(sem_score_df, use_container_width=True)
+                            else:
+                                st.info("スキル依存関係SEM分析のデータが不足しています")
 
                         except Exception as sem_error:
                             st.warning(f"⚠️ SEM分析の表示に失敗しました: {str(sem_error)[:200]}")
