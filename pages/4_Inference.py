@@ -2377,18 +2377,24 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                 if slider_key not in st.session_state:
                                     st.session_state[slider_key] = 0.0
 
+                                # スライダー値更新用のコールバック関数
+                                def update_slider_value():
+                                    st.session_state[slider_key] = st.session_state[f"{slider_key}_temp"]
+
                                 # 関係強度フィルタリング用のスライダー
                                 col1, col2 = st.columns([3, 1])
                                 with col1:
-                                    min_coefficient = st.slider(
+                                    st.slider(
                                         "表示する関係強度（パス係数）の最小値",
                                         min_value=0.0,
                                         max_value=1.0,
                                         value=st.session_state.get(slider_key, 0.0),
                                         step=0.05,
                                         help="スライダーを右に移動させると、より強い関係のみが表示されます。",
-                                        key=slider_key
+                                        key=f"{slider_key}_temp",
+                                        on_change=update_slider_value
                                     )
+                                    min_coefficient = st.session_state.get(slider_key, 0.0)
                                 with col2:
                                     st.metric(
                                         "表示ペア数",
