@@ -94,7 +94,7 @@ class SkillDependencySEMModel:
             }
 
     def _analyze_skill_dependencies(self):
-        """スキル依存関係を分析（高速化版）"""
+        """スキル依存関係を分析（最適化版）"""
         # スキルレベルマトリックスを事前計算（ピボット）
         skill_levels = self.member_competence_df.pivot_table(
             index='メンバーコード',
@@ -109,47 +109,46 @@ class SkillDependencySEMModel:
 
         # キャッシュに保存
         self.skill_levels_matrix = skill_levels
-
-        # 相関行列を計算
-        correlation_matrix = skill_levels.corr(method='pearson')
         skills = skill_levels.columns.tolist()
 
-        # 相関の強いペアのみをフィルタリング（高速化）
-        strong_correlations = []
-        for i, from_skill in enumerate(skills):
-            for j, to_skill in enumerate(skills):
-                if i != j:
-                    corr_value = abs(correlation_matrix.loc[from_skill, to_skill])
-                    # 相関が0.3以上のペアのみをパス係数計算対象に
-                    if corr_value > 0.3:
-                        strong_correlations.append((from_skill, to_skill))
+        # 軽い事前フィルタリング：各スキルのデータ量をチェック
+        skill_data_counts = (skill_levels > 0).sum()
+        skills_with_data = [s for s in skills if skill_data_counts[s] >= self.min_members]
 
-        logger.info(f"Found {len(strong_correlations)} skill pairs with correlation > 0.3")
+        logger.info(
+            f"Analyzing {len(skills_with_data)} skills with sufficient data, "
+            f"total paths to check: {len(skills_with_data) * (len(skills_with_data) - 1)}"
+        )
 
-        # パス係数を推定（相関の強いペアのみ）
-        for from_skill, to_skill in strong_correlations:
+        # すべてのスキルペアを分析（因果関係を完全に把握）
+        for i, from_skill in enumerate(skills_with_data):
             self.skill_network.setdefault(from_skill, [])
 
-            # 最適化：skill_levelsを直接使用
-            from_levels = skill_levels[from_skill].values
-            to_levels = skill_levels[to_skill].values
+            for j, to_skill in enumerate(skills_with_data):
+                if i != j:
+                    # 最適化：skill_levelsを直接使用
+                    from_levels = skill_levels[from_skill].values
+                    to_levels = skill_levels[to_skill].values
 
-            # ゼロでないデータのみを使用
-            valid_mask = (from_levels > 0) & (to_levels > 0)
-            if valid_mask.sum() < self.min_members:
-                continue
+                    # ゼロでないデータのみを使用（numpy配列は高速）
+                    valid_mask = (from_levels > 0) & (to_levels > 0)
+                    valid_count = valid_mask.sum()
 
-            from_levels_valid = from_levels[valid_mask]
-            to_levels_valid = to_levels[valid_mask]
+                    if valid_count < self.min_members:
+                        continue
 
-            # パス係数を推定
-            path_coeff = self._estimate_path_coefficient_fast(
-                from_skill, to_skill, from_levels_valid, to_levels_valid
-            )
+                    from_levels_valid = from_levels[valid_mask]
+                    to_levels_valid = to_levels[valid_mask]
 
-            if path_coeff and path_coeff.is_significant:
-                self.skill_paths.append(path_coeff)
-                self.skill_network[from_skill].append(to_skill)
+                    # パス係数を推定
+                    path_coeff = self._estimate_path_coefficient_fast(
+                        from_skill, to_skill, from_levels_valid, to_levels_valid
+                    )
+
+                    # 統計的に有意な因果関係のみを保持（p < 0.05）
+                    if path_coeff and path_coeff.is_significant:
+                        self.skill_paths.append(path_coeff)
+                        self.skill_network[from_skill].append(to_skill)
 
     def _compute_skill_correlation_matrix(self) -> Optional[pd.DataFrame]:
         """スキル間の相関行列を計算"""
@@ -186,39 +185,50 @@ class SkillDependencySEMModel:
             if n < self.min_members:
                 return None
 
-            # 単回帰でパス係数を推定
+            # 単回帰でパス係数を推定（numpy 高速計算）
             # Y = a + b*X
-            mean_x = np.mean(from_levels)
-            mean_y = np.mean(to_levels)
+            from_levels_f = from_levels.astype(np.float64)
+            to_levels_f = to_levels.astype(np.float64)
 
-            numerator = np.sum((from_levels - mean_x) * (to_levels - mean_y))
-            denominator = np.sum((from_levels - mean_x) ** 2)
+            mean_x = np.mean(from_levels_f)
+            mean_y = np.mean(to_levels_f)
+
+            # 差分を事前計算（再利用）
+            x_diff = from_levels_f - mean_x
+            y_diff = to_levels_f - mean_y
+
+            numerator = np.dot(x_diff, y_diff)  # np.sum より高速
+            denominator = np.dot(x_diff, x_diff)
 
             if denominator == 0:
                 return None
 
             coefficient = numerator / denominator
-            intercept = mean_y - coefficient * mean_x
 
-            # 予測値と残差を計算
-            y_pred = intercept + coefficient * from_levels
-            residuals = to_levels - y_pred
+            # 残差を計算（予測値を明示的に計算しない）
+            residuals = y_diff - coefficient * x_diff
 
             # 標準誤差とt値を計算
-            mse = np.sum(residuals ** 2) / (n - 2)
+            ss_residual = np.dot(residuals, residuals)  # 高速
+            mse = ss_residual / (n - 2)
             se_coefficient = np.sqrt(mse / denominator)
-            t_value = coefficient / se_coefficient if se_coefficient > 0 else 0
 
-            # p値を計算
-            p_value = 2 * (1 - stats.t.cdf(abs(t_value), n - 2))
+            if se_coefficient > 0:
+                t_value = coefficient / se_coefficient
+            else:
+                return None
 
-            # 信頼区間を計算
+            # p値を計算（統計的有意性のみ判定）
+            if n > 2 and abs(t_value) > 0.01:  # t値がほぼ0は早期リターン
+                p_value = 2 * (1 - stats.t.cdf(abs(t_value), n - 2))
+                is_significant = p_value < 0.05
+            else:
+                return None  # 統計的に明らかに有意でない
+
+            # 信頼区間を計算（有意なペアのみ）
             t_critical = stats.t.ppf((1 + self.confidence_level) / 2, n - 2)
             ci_lower = coefficient - t_critical * se_coefficient
             ci_upper = coefficient + t_critical * se_coefficient
-
-            # 有意性判定（p < 0.05）
-            is_significant = p_value < 0.05 and abs(coefficient) > 0.1
 
             return SkillPathCoefficient(
                 from_skill=from_skill,
@@ -274,22 +284,26 @@ class SkillDependencySEMModel:
 
         return min(1.0, total_score / total_weight)
 
-    def get_skill_network_graph(self) -> Dict[str, Any]:
-        """スキルネットワークグラフを取得"""
-        nodes = []
+    def get_skill_network_graph(self, min_coefficient: float = 0.0) -> Dict[str, Any]:
+        """
+        スキルネットワークグラフを取得
+
+        Args:
+            min_coefficient: 表示するパス係数の最小値（0.0～1.0）
+        """
+        # フィルタリング：min_coefficient 以上のパスのみを対象
+        filtered_paths = [
+            p for p in self.skill_paths
+            if abs(p.coefficient) >= min_coefficient
+        ]
+
+        # 使用されているスキルを抽出
+        used_skills = set()
         edges = []
 
-        # ノード情報
-        for skill_code, skill_info in self.skill_info.items():
-            nodes.append({
-                'id': skill_code,
-                'label': skill_info['name'],
-                'type': skill_info['type'],
-                'category': skill_info['category'],
-            })
-
-        # エッジ情報
-        for path in self.skill_paths:
+        for path in filtered_paths:
+            used_skills.add(path.from_skill)
+            used_skills.add(path.to_skill)
             edges.append({
                 'from': path.from_skill,
                 'to': path.to_skill,
@@ -298,18 +312,35 @@ class SkillDependencySEMModel:
                 'is_significant': path.is_significant,
             })
 
+        # 使用されているスキルのノード情報のみを作成
+        nodes = []
+        for skill_code in used_skills:
+            if skill_code in self.skill_info:
+                skill_info = self.skill_info[skill_code]
+                nodes.append({
+                    'id': skill_code,
+                    'label': skill_info['name'],
+                    'type': skill_info['type'],
+                    'category': skill_info['category'],
+                })
+
         return {
             'nodes': nodes,
             'edges': edges,
         }
 
-    def visualize_skill_network(self) -> Optional[go.Figure]:
-        """スキル依存関係ネットワークを可視化"""
+    def visualize_skill_network(self, min_coefficient: float = 0.0) -> Optional[go.Figure]:
+        """
+        スキル依存関係ネットワークを可視化
+
+        Args:
+            min_coefficient: 表示するパス係数の最小値（0.0～1.0）
+        """
         if not HAS_VISUALIZATION:
             logger.warning("networkx and plotly are required for visualization")
             return None
 
-        graph_data = self.get_skill_network_graph()
+        graph_data = self.get_skill_network_graph(min_coefficient=min_coefficient)
 
         if not graph_data['edges']:
             return None
