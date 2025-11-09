@@ -2503,9 +2503,13 @@ if st.session_state.get("last_recommendations_df") is not None:
             # 表示ペア数スライダー
             total_pairs = len(recommender.skill_dependency_sem_model.skill_paths)
 
-            # セッション状態を初期化（整数型で初期化）
+            # セッション状態を初期化・クリーンアップ（異なるメンバーで max_value が変わるため）
             if sem_slider_key not in st.session_state:
                 st.session_state[sem_slider_key] = int(total_pairs * 0.3) if total_pairs > 0 else 1
+            else:
+                # 前回の値が現在の max_value を超えていないか確認（メンバー切り替え時の対応）
+                if st.session_state[sem_slider_key] > total_pairs:
+                    st.session_state[sem_slider_key] = min(int(total_pairs * 0.3), total_pairs) if total_pairs > 0 else 1
 
             col_slider1, col_slider2 = st.columns([3, 1])
             with col_slider1:
@@ -2515,7 +2519,7 @@ if st.session_state.get("last_recommendations_df") is not None:
                     min_value=1,
                     max_value=max(total_pairs, 1),
                     step=1,
-                    value=min(st.session_state.get(sem_slider_key, int(total_pairs * 0.3)), total_pairs),
+                    value=st.session_state.get(sem_slider_key, min(int(total_pairs * 0.3), total_pairs) if total_pairs > 0 else 1),
                     help="スライダーを右に移動させると、より多くの関係を表示します。",
                     key=f"{sem_slider_key}_display"
                 )
