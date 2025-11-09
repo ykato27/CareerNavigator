@@ -575,7 +575,21 @@ if st.session_state.get("model_trained", False):
 
             # この因子で重みが高い力量を取得
             factor_weights = mf_model.H[factor_idx, :]
-            top_indices = factor_weights.argsort()[-10:][::-1]
+
+            # 非ゼロの重みを持つ力量のみを取得
+            non_zero_indices = np.where(factor_weights > 1e-10)[0]
+
+            if len(non_zero_indices) > 0:
+                # 非ゼロの力量から上位10個を選択
+                non_zero_weights = factor_weights[non_zero_indices]
+                top_local_indices = non_zero_weights.argsort()[-10:][::-1]
+                top_indices = non_zero_indices[top_local_indices]
+            else:
+                # すべてが0に近い場合（潜在因子が不要）
+                st.warning(f"⚠️ 潜在因子 {factor_idx + 1} はすべて 0 または 0 に非常に近い値です。このモデルでは不使用の潜在因子と考えられます。")
+                st.info("💡 潜在因子数（n_components）が多すぎる可能性があります。減らしてモデルを再学習することをお勧めします。")
+                continue
+
             top_competences = [mf_model.competence_codes[i] for i in top_indices]
             top_weights = [factor_weights[i] for i in top_indices]
 
