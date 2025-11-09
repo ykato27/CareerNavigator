@@ -878,102 +878,131 @@ with st.expander("⚙️ 詳細設定（オプション）"):
             default=["NMF推薦", "グラフベース推薦"]
         )
         recommendation_method = None
+        current_methods = methods_to_compare
     else:
         methods_to_compare = None
+        current_methods = [recommendation_method] if recommendation_method else []
 
     st.markdown("---")
-    st.markdown("### グラフ設定（グラフベース・ハイブリッド推薦のみ）")
 
-    # メンバー類似度パラメータ調整
-    st.markdown("#### 🔧 メンバー類似度パラメータ")
+    # 推薦手法に応じた設定表示
+    uses_graph = any(method in ["グラフベース推薦", "ハイブリッド推薦（推奨）"] for method in current_methods)
+    uses_nmf = any(method in ["NMF推薦", "ハイブリッド推薦（推奨）"] for method in current_methods)
+    uses_career_pattern = "キャリアパターン別推薦" in current_methods
+    uses_role_path = "役職ベースの成長パス推薦" in current_methods
 
-    col1, col2 = st.columns(2)
+    # グラフベース推薦・ハイブリッド推薦用の設定
+    if uses_graph:
+        st.markdown("### グラフ設定（グラフベース・ハイブリッド推薦）")
 
-    with col1:
-        new_threshold = st.slider(
-            "類似度閾値",
-            min_value=0.05,
-            max_value=0.5,
-            value=st.session_state.graph_similarity_threshold,
-            step=0.05,
-            help="メンバー間の類似度がこの値以上の場合にエッジを張ります。小さいほど多くの接続が生成されます。"
-        )
+        # メンバー類似度パラメータ調整
+        st.markdown("#### 🔧 メンバー類似度パラメータ")
 
-    with col2:
-        new_top_k = st.slider(
-            "類似メンバー数",
-            min_value=3,
-            max_value=20,
-            value=st.session_state.graph_similarity_top_k,
-            step=1,
-            help="各メンバーから接続する類似メンバーの最大数。多いほど推薦パスが豊富になります。"
-        )
+        col1, col2 = st.columns(2)
 
-    # パラメータが変更された場合の通知
-    params_changed = (
-        new_threshold != st.session_state.graph_similarity_threshold or
-        new_top_k != st.session_state.graph_similarity_top_k
-    )
-
-    if params_changed:
-        st.info("⚠️ パラメータが変更されました。下のボタンでグラフを再構築してください。")
-
-    # グラフ再構築ボタン
-    if st.button("🔄 Knowledge Graphを再構築", help="新しいパラメータでグラフを再構築します"):
-        st.session_state.graph_similarity_threshold = new_threshold
-        st.session_state.graph_similarity_top_k = new_top_k
-
-        from skillnote_recommendation.graph import CompetenceKnowledgeGraph
-        with st.spinner("Knowledge Graphを再構築中..."):
-            st.session_state.knowledge_graph = CompetenceKnowledgeGraph(
-                member_competence=td["member_competence"],
-                member_master=td["members_clean"],
-                competence_master=td["competence_master"],
-                use_category_hierarchy=True,
-                member_similarity_threshold=new_threshold,
-                member_similarity_top_k=new_top_k
+        with col1:
+            new_threshold = st.slider(
+                "類似度閾値",
+                min_value=0.05,
+                max_value=0.5,
+                value=st.session_state.graph_similarity_threshold,
+                step=0.05,
+                help="メンバー間の類似度がこの値以上の場合にエッジを張ります。小さいほど多くの接続が生成されます。"
             )
-        st.success(f"✅ グラフを再構築しました！（閾値={new_threshold}, 類似メンバー数={new_top_k}）")
-        st.rerun()
 
-    st.markdown("---")
-    st.markdown("#### 📊 パス表示設定")
+        with col2:
+            new_top_k = st.slider(
+                "類似メンバー数",
+                min_value=3,
+                max_value=20,
+                value=st.session_state.graph_similarity_top_k,
+                step=1,
+                help="各メンバーから接続する類似メンバーの最大数。多いほど推薦パスが豊富になります。"
+            )
 
-    show_paths = st.checkbox(
-        "学習パスを表示",
-        value=True,
-        help="推薦理由を可視化します"
-    )
+        # パラメータが変更された場合の通知
+        params_changed = (
+            new_threshold != st.session_state.graph_similarity_threshold or
+            new_top_k != st.session_state.graph_similarity_top_k
+        )
 
-    max_path_length = st.slider(
-        "パスの最大ステップ数",
-        min_value=2,
-        max_value=20,
-        value=10,
-        step=2
-    )
+        if params_changed:
+            st.info("⚠️ パラメータが変更されました。下のボタンでグラフを再構築してください。")
 
-    max_paths = st.slider(
-        "表示するパス数",
-        min_value=1,
-        max_value=20,
-        value=10,
-        step=1
-    )
+        # グラフ再構築ボタン
+        if st.button("🔄 Knowledge Graphを再構築", help="新しいパラメータでグラフを再構築します"):
+            st.session_state.graph_similarity_threshold = new_threshold
+            st.session_state.graph_similarity_top_k = new_top_k
 
-    st.markdown("---")
-    st.markdown("#### 👔 役職ベース推薦設定")
+            from skillnote_recommendation.graph import CompetenceKnowledgeGraph
+            with st.spinner("Knowledge Graphを再構築中..."):
+                st.session_state.knowledge_graph = CompetenceKnowledgeGraph(
+                    member_competence=td["member_competence"],
+                    member_master=td["members_clean"],
+                    competence_master=td["competence_master"],
+                    use_category_hierarchy=True,
+                    member_similarity_threshold=new_threshold,
+                    member_similarity_top_k=new_top_k
+                )
+            st.success(f"✅ グラフを再構築しました！（閾値={new_threshold}, 類似メンバー数={new_top_k}）")
+            st.rerun()
 
-    min_acquisition_rate = st.slider(
-        "最小取得率",
-        min_value=0.0,
-        max_value=0.5,
-        value=0.15,
-        step=0.05,
-        help="役職内でこの割合以上のメンバーが習得しているスキルのみを推薦します。0に近いほど多くのスキルが推薦されます。"
-    )
+        st.markdown("---")
+        st.markdown("#### 📊 パス表示設定")
 
-    st.info(f"📊 現在の設定: 役職内の{min_acquisition_rate*100:.0f}%以上のメンバーが習得しているスキルを推薦")
+        show_paths = st.checkbox(
+            "学習パスを表示",
+            value=True,
+            help="推薦理由を可視化します"
+        )
+
+        max_path_length = st.slider(
+            "パスの最大ステップ数",
+            min_value=2,
+            max_value=20,
+            value=10,
+            step=2
+        )
+
+        max_paths = st.slider(
+            "表示するパス数",
+            min_value=1,
+            max_value=20,
+            value=10,
+            step=1
+        )
+    else:
+        # グラフを使わない場合のデフォルト値
+        show_paths = False
+        max_path_length = 10
+        max_paths = 10
+
+    # NMF推薦用の設定
+    if uses_nmf:
+        st.markdown("### NMF推薦設定")
+        st.markdown("（NMF推薦はハイパーパラメータチューニングで最適化されています）")
+
+    # キャリアパターン別推薦用の設定
+    if uses_career_pattern:
+        st.markdown("### キャリアパターン別推薦設定")
+        st.markdown("（キャリアパターン別推薦は学習パターンに基づいて自動推薦されます）")
+
+    # 役職ベース推薦用の設定
+    if uses_role_path:
+        st.markdown("### 役職ベース推薦設定")
+
+        min_acquisition_rate = st.slider(
+            "最小取得率",
+            min_value=0.0,
+            max_value=0.5,
+            value=0.15,
+            step=0.05,
+            help="役職内でこの割合以上のメンバーが習得しているスキルのみを推薦します。0に近いほど多くのスキルが推薦されます。"
+        )
+
+        st.info(f"📊 現在の設定: 役職内の{min_acquisition_rate*100:.0f}%以上のメンバーが習得しているスキルを推薦")
+    else:
+        min_acquisition_rate = 0.15
 
 # デフォルト値の設定
 diversity_strategy = "hybrid"  # 常にハイブリッド戦略を使用
