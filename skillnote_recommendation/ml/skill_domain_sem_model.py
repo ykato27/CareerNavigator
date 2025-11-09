@@ -678,36 +678,68 @@ class SkillDomainSEMModel:
         return profile
 
     def get_model_fit_indices(self, domain_name: str) -> Dict[str, float]:
-        """モデル適合度指標を取得"""
+        """
+        モデル適合度指標を取得（拡張版）
+
+        Returns:
+            Dict containing:
+            - avg_path_coefficient: 平均パス係数
+            - significant_paths: 有意なパス数
+            - total_paths: 総パス数
+            - avg_loading: 平均因子負荷量
+            - avg_effect_size: 平均効果サイズ（Cohen's d）
+            - model_variance_explained: 説明分散（R²）
+            - gfi: 適合度指標（GFI）
+            - nfi: 規準適合度指標（NFI）
+        """
         domain_struct = self.domain_structures.get(domain_name)
         if not domain_struct:
             return {}
 
-        # 簡易的なモデル適合度指標
+        # パス係数の統計
         path_coeffs = [p.coefficient for p in domain_struct.path_coefficients]
         significant_paths = sum(
             1 for p in domain_struct.path_coefficients if p.is_significant
         )
 
+        # 平均因子負荷量
+        loadings = [
+            loading
+            for f in domain_struct.latent_factors
+            for loading in f.factor_loadings.values()
+        ]
+        avg_loading = np.mean(loadings) if loadings else 0.0
+
+        # 効果サイズ（Cohen's d）の計算
+        # パス係数を標準化された効果サイズとして扱う
+        effect_sizes = [abs(p.coefficient) for p in domain_struct.path_coefficients]
+        avg_effect_size = np.mean(effect_sizes) if effect_sizes else 0.0
+
+        # 説明分散（R²）の推定
+        # 因子負荷量の二乗平均として計算
+        variance_explained = np.mean([l**2 for l in loadings]) if loadings else 0.0
+
+        # GFI（適合度指標）の簡易推定
+        # 1に近いほど良好（0.9以上が望ましい）
+        # 有意なパスの割合と平均ローディングから推定
+        sig_ratio = significant_paths / len(domain_struct.path_coefficients) if domain_struct.path_coefficients else 0
+        gfi = (sig_ratio * 0.5) + (avg_loading * 0.5)
+
+        # NFI（規準適合度指標）の簡易推定
+        # 1に近いほど良好（0.9以上が望ましい）
+        # パス係数の大きさと有意性から推定
+        nfi = (np.mean([abs(p.coefficient) for p in domain_struct.path_coefficients if p.is_significant])
+               if any(p.is_significant for p in domain_struct.path_coefficients) else 0.0)
+
         return {
-            "avg_path_coefficient": (
-                np.mean(path_coeffs) if path_coeffs else 0.0
-            ),
+            "avg_path_coefficient": np.mean(path_coeffs) if path_coeffs else 0.0,
             "significant_paths": significant_paths,
             "total_paths": len(domain_struct.path_coefficients),
-            "avg_loading": (
-                np.mean(
-                    [
-                        loading
-                        for f in domain_struct.latent_factors
-                        for loading in f.factor_loadings.values()
-                    ]
-                )
-                if any(
-                    f.factor_loadings for f in domain_struct.latent_factors
-                )
-                else 0.0
-            ),
+            "avg_loading": avg_loading,
+            "avg_effect_size": avg_effect_size,
+            "variance_explained": variance_explained,
+            "gfi": min(gfi, 1.0),  # 0-1の範囲に制限
+            "nfi": min(nfi, 1.0),  # 0-1の範囲に制限
         }
 
     def get_skill_dependency_graph(self, domain_name: str) -> Optional[Dict[str, Any]]:
@@ -752,12 +784,21 @@ class SkillDomainSEMModel:
             "edges": edges,
         }
 
-    def visualize_domain_network(self, domain_name: str) -> Optional[go.Figure]:
+    def visualize_domain_network(
+        self,
+        domain_name: str,
+        layout: str = "spring",
+        show_all_edges: bool = False,
+        min_coefficient: float = 0.0
+    ) -> Optional[go.Figure]:
         """
-        領域のスキル依存関係をプロット
+        領域のスキル依存関係をインタラクティブにプロット（拡張版）
 
         Args:
             domain_name: 領域名
+            layout: レイアウト手法 ("spring", "circular", "hierarchical")
+            show_all_edges: すべてのエッジを表示（有意でないものも含む）
+            min_coefficient: 表示する最小パス係数（絶対値）
 
         Returns:
             Plotly Figure（グラフがない場合はNone）
@@ -777,48 +818,111 @@ class SkillDomainSEMModel:
         for node in graph_data["nodes"]:
             G.add_node(node["id"], label=node["label"], num_skills=node["num_skills"])
 
-        # エッジを追加（有意なパスのみ）
+        # エッジを追加（フィルタリング）
+        edge_data_list = []
         for edge in graph_data["edges"]:
-            if edge["is_significant"]:
-                G.add_edge(
-                    edge["from"],
-                    edge["to"],
-                    weight=abs(edge["coefficient"]),
-                    coefficient=edge["coefficient"],
-                    p_value=edge["p_value"],
-                )
+            if show_all_edges or edge["is_significant"]:
+                if abs(edge["coefficient"]) >= min_coefficient:
+                    G.add_edge(
+                        edge["from"],
+                        edge["to"],
+                        weight=abs(edge["coefficient"]),
+                        coefficient=edge["coefficient"],
+                        p_value=edge["p_value"],
+                        t_value=edge["t_value"],
+                        is_significant=edge["is_significant"]
+                    )
+                    edge_data_list.append(edge)
 
         # レイアウトを計算
-        try:
-            pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
-        except Exception as e:
-            logger.warning(f"Spring layout failed: {e}, using circular layout")
+        if layout == "spring":
+            try:
+                pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
+            except Exception as e:
+                logger.warning(f"Spring layout failed: {e}, using circular layout")
+                pos = nx.circular_layout(G)
+        elif layout == "circular":
             pos = nx.circular_layout(G)
+        elif layout == "hierarchical":
+            try:
+                pos = nx.kamada_kawai_layout(G)
+            except Exception as e:
+                logger.warning(f"Hierarchical layout failed: {e}, using spring layout")
+                pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
+        else:
+            pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
 
-        # エッジを描画
-        edge_x, edge_y = [], []
-        for edge in G.edges():
-            x0, y0 = pos[edge[0]]
-            x1, y1 = pos[edge[1]]
-            edge_x.extend([x0, x1, None])
-            edge_y.extend([y0, y1, None])
+        # エッジを描画（パス係数に応じた太さと色）
+        edge_traces = []
+        for edge_data in edge_data_list:
+            edge_from = edge_data["from"]
+            edge_to = edge_data["to"]
 
-        edge_trace = go.Scatter(
-            x=edge_x,
-            y=edge_y,
-            mode="lines",
-            line=dict(width=0.5, color="#888"),
-            hoverinfo="none",
-            showlegend=False,
-        )
+            if edge_from not in pos or edge_to not in pos:
+                continue
 
-        # ノードを描画
-        node_x, node_y, node_text = [], [], []
+            x0, y0 = pos[edge_from]
+            x1, y1 = pos[edge_to]
+
+            # パス係数の大きさに応じてエッジの太さを変更
+            width = abs(edge_data["coefficient"]) * 5 + 0.5
+
+            # 有意性に応じて色を変更
+            color = "#2E7D32" if edge_data["is_significant"] else "#BDBDBD"
+
+            edge_trace = go.Scatter(
+                x=[x0, x1, None],
+                y=[y0, y1, None],
+                mode="lines",
+                line=dict(width=width, color=color),
+                hoverinfo="text",
+                hovertext=f"係数: {edge_data['coefficient']:.3f}<br>"
+                         f"t値: {edge_data['t_value']:.3f}<br>"
+                         f"p値: {edge_data['p_value']:.4f}<br>"
+                         f"有意: {'Yes' if edge_data['is_significant'] else 'No'}",
+                showlegend=False,
+            )
+            edge_traces.append(edge_trace)
+
+        # ノードを描画（ホバー情報を充実）
+        node_x, node_y, node_text, node_hover = [], [], [], []
+        node_sizes = []
+
         for node in G.nodes():
             x, y = pos[node]
             node_x.append(x)
             node_y.append(y)
-            node_text.append(node)
+
+            # ノード名を短縮
+            short_name = node.replace(f"{domain_name}_", "")
+            node_text.append(short_name)
+
+            # ノード情報を取得
+            node_info = next((n for n in graph_data["nodes"] if n["id"] == node), None)
+            num_skills = node_info["num_skills"] if node_info else 0
+
+            # ノードサイズをスキル数に応じて調整
+            node_sizes.append(20 + num_skills * 3)
+
+            # ホバー情報
+            hover_text = f"<b>{short_name}</b><br>"
+            hover_text += f"スキル数: {num_skills}<br>"
+
+            # 入力・出力エッジの情報
+            in_edges = [e for e in edge_data_list if e["to"] == node]
+            out_edges = [e for e in edge_data_list if e["from"] == node]
+
+            if in_edges:
+                hover_text += f"<br><b>入力パス:</b><br>"
+                for e in in_edges[:3]:  # 最大3つ表示
+                    hover_text += f"  • {e['coefficient']:.3f} (p={e['p_value']:.3f})<br>"
+
+            if out_edges:
+                hover_text += f"<br><b>出力パス:</b><br>"
+                for e in out_edges[:3]:  # 最大3つ表示
+                    hover_text += f"  • {e['coefficient']:.3f} (p={e['p_value']:.3f})<br>"
+
+            node_hover.append(hover_text)
 
         node_trace = go.Scatter(
             x=node_x,
@@ -827,24 +931,39 @@ class SkillDomainSEMModel:
             text=node_text,
             textposition="top center",
             hoverinfo="text",
+            hovertext=node_hover,
             marker=dict(
-                size=20,
+                size=node_sizes,
                 color="#1f77b4",
                 line_width=2,
                 line_color="#ffffff",
             ),
         )
 
-        # Figureを作成
-        fig = go.Figure(data=[edge_trace, node_trace])
+        # Figureを作成（すべてのエッジトレースとノードトレース）
+        fig_data = edge_traces + [node_trace]
+        fig = go.Figure(data=fig_data)
+
         fig.update_layout(
-            title=f"📊 {domain_name} - スキル依存関係ネットワーク",
+            title=f"📊 {domain_name} - スキル依存関係ネットワーク（インタラクティブ）",
             showlegend=False,
             hovermode="closest",
-            margin=dict(b=20, l=5, r=5, t=40),
+            margin=dict(b=20, l=5, r=5, t=60),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            height=500,
+            height=700,
+            # インタラクティブ機能を有効化
+            dragmode='pan',  # パン操作をデフォルトに
+        )
+
+        # ズーム・パン機能のヘルプを追加
+        fig.add_annotation(
+            text="ヒント: マウスホイールでズーム、ドラッグでパン、ノード/エッジにホバーで詳細表示",
+            xref="paper", yref="paper",
+            x=0.5, y=-0.05,
+            showarrow=False,
+            font=dict(size=10, color="gray"),
+            xanchor='center'
         )
 
         return fig

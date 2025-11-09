@@ -325,9 +325,45 @@ class SEMOnlyRecommender:
         """領域の詳細情報を取得"""
         return self.sem_model.get_domain_info(domain_name)
 
-    def visualize_domain_network(self, domain_name: str):
-        """領域のスキル依存関係をプロット"""
-        return self.sem_model.visualize_domain_network(domain_name)
+    def get_model_fit_indices(self, domain_name: str) -> Dict[str, float]:
+        """
+        モデル適合度指標を取得
+
+        Returns:
+            Dict containing:
+            - avg_path_coefficient: 平均パス係数
+            - significant_paths: 有意なパス数
+            - total_paths: 総パス数
+            - avg_loading: 平均因子負荷量
+            - avg_effect_size: 平均効果サイズ（Cohen's d）
+            - variance_explained: 説明分散（R²）
+            - gfi: 適合度指標（GFI）
+            - nfi: 規準適合度指標（NFI）
+        """
+        return self.sem_model.get_model_fit_indices(domain_name)
+
+    def visualize_domain_network(
+        self,
+        domain_name: str,
+        layout: str = "spring",
+        show_all_edges: bool = False,
+        min_coefficient: float = 0.0
+    ):
+        """
+        領域のスキル依存関係をインタラクティブにプロット
+
+        Args:
+            domain_name: 領域名
+            layout: レイアウト手法 ("spring", "circular", "hierarchical")
+            show_all_edges: すべてのエッジを表示（有意でないものも含む）
+            min_coefficient: 表示する最小パス係数（絶対値）
+        """
+        return self.sem_model.visualize_domain_network(
+            domain_name=domain_name,
+            layout=layout,
+            show_all_edges=show_all_edges,
+            min_coefficient=min_coefficient
+        )
 
     def _get_member_competences(self, member_code: str) -> pd.DataFrame:
         """メンバーの習得力量を取得"""

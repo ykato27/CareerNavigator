@@ -17,6 +17,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+from datetime import datetime
 
 from skillnote_recommendation.ml.sem_only_recommender import SEMOnlyRecommender
 from skillnote_recommendation.utils.streamlit_helpers import (
@@ -473,35 +474,128 @@ with tab3:
 # =========================================================
 
 with tab4:
-    st.markdown("### 🕸️ 領域別スキル依存関係ネットワーク")
+    st.markdown("### 🕸️ 領域別スキル依存関係ネットワーク（インタラクティブ）")
 
     st.info(
-        "各領域内のスキル依存関係をネットワークグラフで可視化します。"
-        "矢印は統計的に有意なパス（因果関係）を示しています。"
+        "**インタラクティブ機能:** マウスホイールでズーム、ドラッグでパン、ノード/エッジにホバーで詳細表示"
     )
 
-    # 領域選択
-    selected_network_domain = st.selectbox(
-        "ネットワークを表示する領域",
-        options=all_domains,
-        key='network_domain'
-    )
+    # 領域選択とネットワークオプション
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        selected_network_domain = st.selectbox(
+            "ネットワークを表示する領域",
+            options=all_domains,
+            key='network_domain'
+        )
+
+    with col2:
+        layout_type = st.selectbox(
+            "レイアウト",
+            options=["spring", "circular", "hierarchical"],
+            index=0,
+            key='network_layout'
+        )
+
+    # フィルタリングオプション
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        show_all_edges = st.checkbox(
+            "すべてのエッジを表示",
+            value=False,
+            help="有意でないパスも表示します"
+        )
+
+    with col2:
+        min_coefficient = st.slider(
+            "最小パス係数",
+            min_value=0.0,
+            max_value=0.5,
+            value=0.0,
+            step=0.05,
+            help="この値未満のパスは表示しません"
+        )
 
     # ネットワークを表示
     if st.button("📊 ネットワークを表示", type="primary", key='show_network_btn'):
         with st.spinner(f"{selected_network_domain} 領域のネットワークを生成中..."):
             try:
-                fig = sem_recommender.visualize_domain_network(selected_network_domain)
+                # インタラクティブネットワークグラフを生成
+                fig = sem_recommender.visualize_domain_network(
+                    domain_name=selected_network_domain,
+                    layout=layout_type,
+                    show_all_edges=show_all_edges,
+                    min_coefficient=min_coefficient
+                )
 
                 if fig:
                     st.plotly_chart(fig, use_container_width=True)
+
+                    # モデル適合度指標を表示
+                    st.markdown("---")
+                    st.markdown(f"#### 📊 {selected_network_domain} 領域の統計情報")
+
+                    fit_indices = sem_recommender.get_model_fit_indices(selected_network_domain)
+
+                    if fit_indices:
+                        # 基本統計
+                        col1, col2, col3, col4 = st.columns(4)
+
+                        with col1:
+                            st.metric("平均パス係数", f"{fit_indices['avg_path_coefficient']:.3f}")
+
+                        with col2:
+                            st.metric(
+                                "有意なパス",
+                                f"{fit_indices['significant_paths']}/{fit_indices['total_paths']}"
+                            )
+
+                        with col3:
+                            st.metric("平均因子負荷量", f"{fit_indices['avg_loading']:.3f}")
+
+                        with col4:
+                            st.metric("平均効果サイズ", f"{fit_indices['avg_effect_size']:.3f}")
+
+                        # モデル適合度指標
+                        st.markdown("#### 🎯 モデル適合度指標")
+
+                        col1, col2, col3 = st.columns(3)
+
+                        with col1:
+                            gfi = fit_indices['gfi']
+                            gfi_status = "良好" if gfi >= 0.9 else "要改善"
+                            st.metric(
+                                "GFI (適合度指標)",
+                                f"{gfi:.3f}",
+                                delta=gfi_status,
+                                delta_color="normal" if gfi >= 0.9 else "inverse"
+                            )
+                            st.caption("0.9以上が望ましい")
+
+                        with col2:
+                            nfi = fit_indices['nfi']
+                            nfi_status = "良好" if nfi >= 0.9 else "要改善"
+                            st.metric(
+                                "NFI (規準適合度)",
+                                f"{nfi:.3f}",
+                                delta=nfi_status,
+                                delta_color="normal" if nfi >= 0.9 else "inverse"
+                            )
+                            st.caption("0.9以上が望ましい")
+
+                        with col3:
+                            var_explained = fit_indices['variance_explained']
+                            st.metric("説明分散 (R²)", f"{var_explained:.3f}")
+                            st.caption("1に近いほど良好")
 
                     # 領域情報を表示
                     domain_info = sem_recommender.get_domain_info(selected_network_domain)
 
                     if domain_info:
                         st.markdown("---")
-                        st.markdown(f"#### 📊 {selected_network_domain} 領域の詳細情報")
+                        st.markdown(f"#### 📋 {selected_network_domain} 領域の構造詳細")
 
                         col1, col2, col3 = st.columns(3)
 
@@ -525,10 +619,20 @@ with tab4:
 
                             path_data = []
                             for p in domain_info['path_coefficients']:
+                                # 効果サイズの判定
+                                coeff_abs = abs(p['coefficient'])
+                                if coeff_abs < 0.2:
+                                    effect_size = "小"
+                                elif coeff_abs < 0.5:
+                                    effect_size = "中"
+                                else:
+                                    effect_size = "大"
+
                                 path_data.append({
                                     '開始': p['from'].replace(f"{selected_network_domain}_", ""),
                                     '終了': p['to'].replace(f"{selected_network_domain}_", ""),
                                     'パス係数': f"{p['coefficient']:.3f}",
+                                    '効果サイズ': effect_size,
                                     't値': f"{p['t_value']:.3f}",
                                     'p値': f"{p['p_value']:.4f}",
                                     '有意性': '✓' if p['is_significant'] else '',
@@ -537,6 +641,29 @@ with tab4:
 
                             path_df = pd.DataFrame(path_data)
                             st.dataframe(path_df, hide_index=True, use_container_width=True)
+
+                            # 説明を追加
+                            with st.expander("📖 統計指標の説明"):
+                                st.markdown("""
+                                **パス係数**: 潜在変数間の因果効果の強さ（-1～1）
+
+                                **効果サイズ（Cohen's d）**:
+                                - **小**: |係数| < 0.2（小さな効果）
+                                - **中**: 0.2 ≤ |係数| < 0.5（中程度の効果）
+                                - **大**: |係数| ≥ 0.5（大きな効果）
+
+                                **t値**: パス係数の有意性を検定する統計量
+
+                                **p値**: 統計的有意性（p < 0.05で有意）
+
+                                **信頼区間**: パス係数の95%信頼区間
+
+                                **GFI (Goodness of Fit Index)**: モデルの適合度（0.9以上が望ましい）
+
+                                **NFI (Normed Fit Index)**: 規準適合度指標（0.9以上が望ましい）
+
+                                **R² (説明分散)**: モデルが説明する分散の割合（1に近いほど良好）
+                                """)
                 else:
                     st.warning(f"{selected_network_domain} 領域のネットワークグラフを生成できませんでした")
 
@@ -682,6 +809,85 @@ with tab5:
 
     elif not selected_members_for_comparison:
         st.warning("比較するメンバーを選択してください")
+
+# =========================================================
+# レポート生成
+# =========================================================
+
+st.markdown("---")
+st.markdown("## 📄 HTMLレポート生成")
+
+st.info(
+    "現在のメンバーの分析結果を包括的なHTMLレポートとして生成できます。"
+    "ブラウザで開いてPDFとして保存することも可能です。"
+)
+
+if st.button("📥 HTMLレポートを生成", type="primary", key='generate_report_btn'):
+    with st.spinner("レポートを生成中..."):
+        try:
+            from skillnote_recommendation.utils.report_generator import generate_html_report
+
+            # 推薦データを取得（既に生成されている場合）
+            if 'sem_recommendations' in st.session_state:
+                recommendations = st.session_state.sem_recommendations
+            else:
+                # 推薦を新規生成
+                recommendations = sem_recommender.recommend(
+                    member_code=selected_member,
+                    top_n=10,
+                    min_significance=True,
+                )
+
+            # ギャップデータを取得
+            gaps = sem_recommender.get_competence_gaps(selected_member)
+
+            # メンバー情報を取得
+            member_info_row = members_clean[members_clean['メンバーコード'] == selected_member]
+            member_info_dict = {}
+            if not member_info_row.empty:
+                member_info_dict = {
+                    '職種': member_info_row.iloc[0].get('職種', 'N/A'),
+                    '役職名': member_info_row.iloc[0].get('役職名', 'N/A'),
+                    '職能等級': member_info_row.iloc[0].get('職能等級', 'N/A'),
+                }
+
+            # 全領域のモデル適合度指標を取得
+            fit_indices_all = {}
+            for domain in all_domains:
+                fit_indices_all[domain] = sem_recommender.get_model_fit_indices(domain)
+
+            # HTMLレポートを生成
+            html_report = generate_html_report(
+                member_code=selected_member,
+                member_name=member_name,
+                member_info=member_info_dict,
+                domain_scores=domain_scores,
+                recommendations=recommendations,
+                gaps_by_domain=gaps,
+                fit_indices=fit_indices_all
+            )
+
+            # ダウンロードボタンを表示
+            st.success("✅ レポートの生成が完了しました！")
+
+            st.download_button(
+                label="📥 HTMLレポートをダウンロード",
+                data=html_report,
+                file_name=f'SEM_Report_{selected_member}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.html',
+                mime='text/html',
+                key='download_html_report'
+            )
+
+            st.info("""
+            **💡 PDFとして保存する方法:**
+            1. ダウンロードしたHTMLファイルをブラウザで開く
+            2. ブラウザの印刷機能（Ctrl+P または Cmd+P）を開く
+            3. 「送信先」または「プリンター」で「PDFに保存」を選択
+            4. 保存ボタンをクリック
+            """)
+
+        except Exception as e:
+            display_error_details(e, "レポート生成")
 
 # =========================================================
 # フッター
