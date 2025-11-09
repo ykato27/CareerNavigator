@@ -57,7 +57,10 @@ def build_ml_recommender(
     tuning_search_space: dict = None,
     tuning_sampler: str = None,
     tuning_random_state: int = None,
-    tuning_progress_callback = None
+    tuning_progress_callback = None,
+    use_sem: bool = False,
+    sem_weight: float = 0.2,
+    num_domain_categories: int = 8
 ) -> MLRecommender:
     """
     MLRecommenderを学習済みの状態で作成する
@@ -72,20 +75,43 @@ def build_ml_recommender(
         tuning_sampler: チューニングサンプラー
         tuning_random_state: チューニングの乱数シード
         tuning_progress_callback: 進捗コールバック
+        use_sem: SEMモデルを使用するか
+        sem_weight: SEMスコアの重み（0-1）
+        num_domain_categories: スキル領域の分類数
     """
-    recommender = MLRecommender.build(
-        member_competence=transformed_data["member_competence"],
-        competence_master=transformed_data["competence_master"],
-        member_master=transformed_data["members_clean"],
-        use_preprocessing=use_preprocessing,
-        use_tuning=use_tuning,
-        tuning_n_trials=tuning_n_trials,
-        tuning_timeout=tuning_timeout,
-        tuning_search_space=tuning_search_space,
-        tuning_sampler=tuning_sampler,
-        tuning_random_state=tuning_random_state,
-        tuning_progress_callback=tuning_progress_callback
-    )
+    # SEMを使用する場合はMLSEMRecommenderを、使用しない場合はMLRecommenderを使用
+    if use_sem:
+        from skillnote_recommendation.ml.ml_sem_recommender import MLSEMRecommender
+        recommender = MLSEMRecommender.build(
+            member_competence=transformed_data["member_competence"],
+            competence_master=transformed_data["competence_master"],
+            member_master=transformed_data["members_clean"],
+            use_preprocessing=use_preprocessing,
+            use_tuning=use_tuning,
+            tuning_n_trials=tuning_n_trials,
+            tuning_timeout=tuning_timeout,
+            tuning_search_space=tuning_search_space,
+            tuning_sampler=tuning_sampler,
+            tuning_random_state=tuning_random_state,
+            tuning_progress_callback=tuning_progress_callback,
+            use_sem=True,
+            sem_weight=sem_weight,
+            num_domain_categories=num_domain_categories,
+        )
+    else:
+        recommender = MLRecommender.build(
+            member_competence=transformed_data["member_competence"],
+            competence_master=transformed_data["competence_master"],
+            member_master=transformed_data["members_clean"],
+            use_preprocessing=use_preprocessing,
+            use_tuning=use_tuning,
+            tuning_n_trials=tuning_n_trials,
+            tuning_timeout=tuning_timeout,
+            tuning_search_space=tuning_search_space,
+            tuning_sampler=tuning_sampler,
+            tuning_random_state=tuning_random_state,
+            tuning_progress_callback=tuning_progress_callback
+        )
     return recommender
 
 
@@ -241,6 +267,58 @@ else:
             """)
             st.warning("⏱️ チューニングには時間がかかる場合があります。")
 
+    # SEM（スキル依存性分析）オプション
+    with st.expander("📊 SEM（スキル依存性分析）", expanded=False):
+        st.info("""
+        **SEM (構造方程式モデリング)** は、スキル間の段階的な依存関係を分析し、
+        推薦スコアを強化するモデルです。
+        - 初級→中級→上級の段階的学習パスを検出
+        - スキル依存性を定量化（パス係数で因果効果を表現）
+        - より説明可能な推薦理由を生成
+        """)
+
+        sem_cols = st.columns(3)
+
+        with sem_cols[0]:
+            use_sem = st.checkbox(
+                "SEMを有効化",
+                value=False,
+                help="スキル依存性を考慮した推薦を有効化します。学習時間が5-10秒程度増加します。"
+            )
+
+        # SEM有効時のみ詳細オプションを表示
+        if use_sem:
+            with sem_cols[1]:
+                sem_weight = st.slider(
+                    "SEM重み",
+                    min_value=0.05,
+                    max_value=0.5,
+                    value=0.2,
+                    step=0.05,
+                    help="SEMスコアをどの程度推薦スコアに反映させるか（推奨: 0.15-0.25）"
+                )
+
+            with sem_cols[2]:
+                num_domain_categories = st.number_input(
+                    "スキル領域数",
+                    min_value=5,
+                    max_value=15,
+                    value=8,
+                    help="スキルを分類する領域数（推奨: 6-10）"
+                )
+
+            st.info(f"""
+            **SEM設定:**
+            - SEM重み: {sem_weight:.2f} (他の方法の重み合計: {1-sem_weight:.2f})
+            - スキル領域数: {num_domain_categories}
+
+            **推奨スコア計算:**
+            最終スコア = NMF/グラフスコア × {1-sem_weight:.2f} + SEMスコア × {sem_weight:.2f}
+            """)
+        else:
+            sem_weight = 0.2
+            num_domain_categories = 8
+
     # 学習実行ボタン
     button_label = "🚀 MLモデル学習を実行（チューニングあり）" if use_tuning else "🚀 MLモデル学習を実行"
 
@@ -270,6 +348,11 @@ else:
             debug_messages.append(f"✅ データ読み込み完了")
             debug_messages.append(f"✅ use_tuning={use_tuning}")
             debug_messages.append(f"✅ use_preprocessing={use_preprocessing}")
+            debug_messages.append(f"✅ use_sem={use_sem}")
+
+            if use_sem:
+                debug_messages.append(f"✅ sem_weight={sem_weight}")
+                debug_messages.append(f"✅ num_domain_categories={num_domain_categories}")
 
             if use_tuning:
                 debug_messages.append(f"✅ sampler_choice={sampler_choice}")
@@ -386,7 +469,10 @@ else:
                         tuning_search_space=custom_search_space if use_tuning else None,
                         tuning_sampler=sampler_choice if use_tuning else None,
                         tuning_random_state=int(random_state) if use_tuning else None,
-                        tuning_progress_callback=progress_callback if use_tuning else None
+                        tuning_progress_callback=progress_callback if use_tuning else None,
+                        use_sem=use_sem,
+                        sem_weight=sem_weight,
+                        num_domain_categories=num_domain_categories
                     )
                 finally:
                     # stdoutとstderrを復元
