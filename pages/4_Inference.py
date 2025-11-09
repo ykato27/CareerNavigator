@@ -1062,6 +1062,10 @@ rwr_weight = 0.5  # グラフとNMFを同等に評価
 # スライダーキーをメンバーコードで一意に生成
 sem_slider_key = f"sem_min_coeff_{selected_member_code}"
 
+# recommender の state チェック
+has_recommender = "recommender" in st.session_state and st.session_state["recommender"] is not None
+has_sem_model = has_recommender and hasattr(st.session_state["recommender"], "skill_dependency_sem_model") and st.session_state["recommender"].skill_dependency_sem_model
+
 
 # =========================================================
 # 推薦実行
@@ -1070,6 +1074,9 @@ sem_slider_key = f"sem_min_coeff_{selected_member_code}"
 st.markdown("---")
 
 if st.button("🚀 推薦を実行する", type="primary", use_container_width=True):
+    # recommender を session_state に保存（ボタン外からのアクセスを可能にする）
+    st.session_state["recommender"] = recommender
+
     # 比較モードの場合
     if comparison_mode:
         if not methods_to_compare:
@@ -2363,86 +2370,6 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                         - 習得経路の推奨
                         """)
 
-                        # スキル依存関係SEMを表示（新しいモデル）
-                        try:
-                            if hasattr(recommender, 'skill_dependency_sem_model') and recommender.skill_dependency_sem_model:
-                                st.subheader("📊 スキル依存関係ネットワーク")
-
-                                # 関係強度フィルタリング用スライダー
-                                col_slider1, col_slider2 = st.columns([3, 1])
-                                with col_slider1:
-                                    current_min_coefficient = st.slider(
-                                        "表示する関係強度（パス係数）の最小値",
-                                        min_value=0.0,
-                                        max_value=1.0,
-                                        step=0.05,
-                                        help="スライダーを右に移動させると、より強い関係のみが表示されます。",
-                                        key=sem_slider_key
-                                    )
-                                with col_slider2:
-                                    st.metric("最小値", f"{current_min_coefficient:.2f}")
-
-                                filtered_pairs_count = len([p for p in recommender.skill_dependency_sem_model.skill_paths
-                                                           if abs(p.coefficient) >= current_min_coefficient])
-                                st.info(f"📊 表示中の関係: **{filtered_pairs_count}** ペア（フィルタ値: {current_min_coefficient:.2f}）")
-
-                                # ネットワーク可視化を表示
-                                try:
-                                    network_fig = recommender.skill_dependency_sem_model.visualize_skill_network(
-                                        min_coefficient=current_min_coefficient
-                                    )
-                                    if network_fig:
-                                        st.plotly_chart(network_fig, use_container_width=True)
-                                    else:
-                                        st.info("選択した関係強度でのスキル依存関係が見つかりません。スライダーを左に移動させてください。")
-                                except Exception as viz_error:
-                                    st.warning(f"⚠️ ネットワーク可視化の表示に失敗しました: {str(viz_error)[:100]}")
-
-                                # パス係数情報をテーブルで表示
-                                st.write("### 📋 スキル間の依存関係（パス係数）")
-
-                                path_data = []
-                                for path in recommender.skill_dependency_sem_model.skill_paths:
-                                    # スライダーの値でフィルタリング
-                                    if abs(path.coefficient) >= current_min_coefficient:
-                                        path_data.append({
-                                            'から': path.from_skill_name,
-                                            'へ': path.to_skill_name,
-                                            'パス係数': f"{path.coefficient:.3f}",
-                                            'p値': f"{path.p_value:.4f}",
-                                            '有意': '✓' if path.is_significant else '×',
-                                            '信頼区間': f"[{path.ci_lower:.2f}, {path.ci_upper:.2f}]"
-                                        })
-
-                                if path_data:
-                                    path_df = pd.DataFrame(path_data)
-                                    st.dataframe(path_df, use_container_width=True)
-
-                                    st.markdown("**統計的有意性の解釈：**")
-                                    st.caption("✓ = p < 0.05 で統計的に有意（因果関係の確率が高い）")
-                                    st.caption("× = p ≥ 0.05 で有意でない（偶然の可能性が高い）")
-
-                                    # メンバーの推奨スキルに対するSEMスコアを表示
-                                    st.write("### 🎯 推奨スキルのSEM依存スコア")
-                                    rec_sem_scores = []
-                                    for rec in recs[:5]:  # 上位5件の推奨
-                                        sem_score = recommender.skill_dependency_sem_model.calculate_sem_score(
-                                            selected_member_code, rec.competence_code
-                                        )
-                                        rec_sem_scores.append({
-                                            'スキル': rec.competence_name,
-                                            'SEM依存スコア': f"{sem_score:.2f}",
-                                            '説明': 'このスキルへの依存関係の強度'
-                                        })
-
-                                    if rec_sem_scores:
-                                        sem_score_df = pd.DataFrame(rec_sem_scores)
-                                        st.dataframe(sem_score_df, use_container_width=True)
-                            else:
-                                st.info("スキル依存関係SEM分析のデータが不足しています")
-
-                        except Exception as sem_error:
-                            st.warning(f"⚠️ SEM分析の表示に失敗しました: {str(sem_error)[:200]}")
 
         except Exception as e:
             # エラー処理
@@ -2684,3 +2611,70 @@ if st.session_state.get("last_recommendations_df") is not None:
                     st.error(f"❌ キャリアパス分析エラー: {str(e)}")
                     import traceback
                     st.text(traceback.format_exc())
+
+# =========================================================
+# SEM分析表示（ボタン外：recommender が session_state に保存されている場合）
+# =========================================================
+
+if has_sem_model:
+    st.markdown("---")
+    st.markdown("### 📊 スキル依存関係ネットワーク分析")
+
+    # 関係強度フィルタリング用スライダー（ボタン外に配置）
+    col_slider1, col_slider2 = st.columns([3, 1])
+    with col_slider1:
+        sem_min_coefficient = st.slider(
+            "表示する関係強度（パス係数）の最小値",
+            min_value=0.0,
+            max_value=1.0,
+            step=0.05,
+            help="スライダーを右に移動させると、より強い関係のみが表示されます。",
+            key=sem_slider_key
+        )
+    with col_slider2:
+        st.metric("最小値", f"{sem_min_coefficient:.2f}")
+
+    # recommender を session_state から取得
+    recommender = st.session_state.get("recommender")
+    if recommender and hasattr(recommender, 'skill_dependency_sem_model') and recommender.skill_dependency_sem_model:
+        try:
+            filtered_pairs_count = len([p for p in recommender.skill_dependency_sem_model.skill_paths
+                                       if abs(p.coefficient) >= sem_min_coefficient])
+            st.info(f"📊 表示中の関係: **{filtered_pairs_count}** ペア（フィルタ値: {sem_min_coefficient:.2f}）")
+
+            # ネットワーク可視化を表示
+            try:
+                network_fig = recommender.skill_dependency_sem_model.visualize_skill_network(
+                    min_coefficient=sem_min_coefficient
+                )
+                if network_fig:
+                    st.plotly_chart(network_fig, use_container_width=True)
+                else:
+                    st.info("選択した関係強度でのスキル依存関係が見つかりません。スライダーを左に移動させてください。")
+            except Exception as viz_error:
+                st.warning(f"⚠️ ネットワーク可視化の表示に失敗しました: {str(viz_error)[:100]}")
+
+            # パス係数情報をテーブルで表示
+            st.write("### 📋 スキル間の依存関係（パス係数）")
+
+            path_data = []
+            for path in recommender.skill_dependency_sem_model.skill_paths:
+                if abs(path.coefficient) >= sem_min_coefficient:
+                    path_data.append({
+                        'から': path.from_skill_name,
+                        'へ': path.to_skill_name,
+                        'パス係数': f"{path.coefficient:.3f}",
+                        'p値': f"{path.p_value:.4f}",
+                        '有意': '✓' if path.is_significant else '×',
+                        '信頼区間': f"[{path.ci_lower:.2f}, {path.ci_upper:.2f}]"
+                    })
+
+            if path_data:
+                path_df = pd.DataFrame(path_data)
+                st.dataframe(path_df, use_container_width=True)
+                st.markdown("**統計的有意性の解釈：**")
+                st.caption("✓ = p < 0.05 で統計的に有意（因果関係の確率が高い）")
+                st.caption("× = p ≥ 0.05 で有意でない（偶然の可能性が高い）")
+
+        except Exception as sem_error:
+            st.warning(f"⚠️ SEM分析の表示に失敗しました: {str(sem_error)[:200]}")
