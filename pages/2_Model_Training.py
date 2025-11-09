@@ -523,7 +523,7 @@ if st.session_state.get("model_trained", False):
     mf_model = recommender.mf_model
 
     # 目的関数の明確な表示（ハイパーパラメータチューニング時）
-    if recommender.tuning_results is not None:
+    if hasattr(recommender, 'tuning_results') and recommender.tuning_results is not None:
         tuner = recommender.tuning_results['tuner']
         st.markdown("---")
         st.markdown("### 🎯 最適化の目的関数")
