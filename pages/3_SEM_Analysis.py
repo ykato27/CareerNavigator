@@ -283,8 +283,8 @@ if model_type == "UnifiedSEM（実データ）":
                     if len(skill_codes) >= 2:  # 最低2個のスキルが必要
                         measurement_specs.append(
                             MeasurementModelSpec(
-                                latent_var=category,
-                                indicators=skill_codes,
+                                latent_name=category,
+                                observed_vars=skill_codes,
                                 reference_indicator=skill_codes[0]  # 最初のスキルを参照指標に
                             )
                         )
