@@ -255,27 +255,32 @@ tests/
 - CI/CDとの統合: テストディレクトリが明確に定義されている
 
 #### ドキュメントファイル（*.md）
-**ルール**: ドキュメントは目的に応じて配置する
+**ルール**: ルートには最小限のドキュメントのみ配置し、その他はすべてdocs/に配置する
 
 ```
 ✅ 正しい配置
 /CareerNavigator/
-├── README.md                          # プロジェクト概要（ルート）
-├── CONTRIBUTING.md                    # コントリビューションガイド（ルート）
-├── ARCHITECTURE.md                    # アーキテクチャ概要（ルート）
-└── docs/                              # 詳細ドキュメント
+├── README.md                          # プロジェクト概要（ルート・必須）
+├── CONTRIBUTING.md                    # コントリビューションガイド（ルート・推奨）
+└── docs/                              # すべての詳細ドキュメント
+    ├── ARCHITECTURE.md                # アーキテクチャ概要
+    ├── API_REFERENCE.md               # API リファレンス
+    ├── REFACTORING_GUIDE.md           # リファクタリングガイド
+    ├── SEM_SCALABILITY_ANALYSIS.md    # SEM スケーラビリティ分析
+    ├── STREAMLIT_CLOUD_SETUP.md       # Streamlit Cloud セットアップ
     ├── SEM_IMPLEMENTATION_SUMMARY.md  # SEM実装サマリー
     ├── TESTING_QUICKSTART.md          # テストガイド
     └── CODE_STRUCTURE.md              # コード構造
 
 ❌ 誤った配置
+/CareerNavigator/ARCHITECTURE.md       # アーキテクチャドキュメントはdocs/へ
 /CareerNavigator/MY_NOTES.md           # 個人メモはルートに配置しない
-/CareerNavigator/docs/README.md        # プロジェクトREADMEはルートに配置
+/CareerNavigator/GUIDE.md              # ガイドはdocs/へ
 ```
 
 **ドキュメントの分類**:
-- **ルート直下**: プロジェクト全体に関わる重要なドキュメント（README, CONTRIBUTING, ARCHITECTURE等）
-- **docs/**: 詳細な技術ドキュメント、ガイド、チュートリアル
+- **ルート直下**: README.md と CONTRIBUTING.md のみ（GitHub標準）
+- **docs/**: すべての技術ドキュメント、ガイド、チュートリアル、リファレンス
 - **skillnote_recommendation/*/README.md**: 各モジュールの説明
 
 #### 一時ファイル・デバッグファイル
@@ -331,12 +336,17 @@ tests/
 /CareerNavigator/
 ├── streamlit_app.py          # アプリケーションエントリーポイント
 ├── pyproject.toml            # 依存関係管理
-├── README.md                 # プロジェクト概要
-├── CONTRIBUTING.md           # コントリビューションガイド
-├── ARCHITECTURE.md           # アーキテクチャドキュメント
+├── README.md                 # プロジェクト概要（必須）
+├── CONTRIBUTING.md           # コントリビューションガイド（推奨）
 ├── .gitignore                # Git設定
 ├── .python-version           # Pythonバージョン指定
 └── uv.lock                   # uvロックファイル
+
+❌ ルートに配置してはいけないもの
+├── ARCHITECTURE.md           # → docs/ に移動
+├── API_REFERENCE.md          # → docs/ に移動
+├── *_GUIDE.md                # → docs/ に移動
+└── その他の技術ドキュメント  # → docs/ に移動
 ```
 
 ### ファイル配置チェックリスト
