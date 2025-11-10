@@ -229,6 +229,171 @@ v1.2.1 (2025-11-09) で実装
 
 ---
 
+## 📁 フォルダ構成とファイル配置規約
+
+### 必須ルール: ファイルは適切なディレクトリに配置する
+
+#### テストファイル（test_*.py）
+**ルール**: すべてのテストファイルは `tests/` ディレクトリに配置する
+
+```
+✅ 正しい配置
+tests/
+├── test_ml_recommender.py
+├── test_hyperparameter_tuning.py
+├── test_unified_sem_estimator.py
+└── test_hierarchical_sem.py
+
+❌ 誤った配置
+/CareerNavigator/test_hierarchical_sem.py        # ルートディレクトリにテストファイル
+/CareerNavigator/skillnote_recommendation/graph/test_knowledge_graph.py  # 実装ディレクトリにテストファイル
+```
+
+**理由**:
+- テストの一元管理: すべてのテストが1箇所に集約され、管理しやすい
+- pytest実行の効率化: `pytest tests/` で全テストを実行可能
+- CI/CDとの統合: テストディレクトリが明確に定義されている
+
+#### ドキュメントファイル（*.md）
+**ルール**: ドキュメントは目的に応じて配置する
+
+```
+✅ 正しい配置
+/CareerNavigator/
+├── README.md                          # プロジェクト概要（ルート）
+├── CONTRIBUTING.md                    # コントリビューションガイド（ルート）
+├── ARCHITECTURE.md                    # アーキテクチャ概要（ルート）
+└── docs/                              # 詳細ドキュメント
+    ├── SEM_IMPLEMENTATION_SUMMARY.md  # SEM実装サマリー
+    ├── TESTING_QUICKSTART.md          # テストガイド
+    └── CODE_STRUCTURE.md              # コード構造
+
+❌ 誤った配置
+/CareerNavigator/MY_NOTES.md           # 個人メモはルートに配置しない
+/CareerNavigator/docs/README.md        # プロジェクトREADMEはルートに配置
+```
+
+**ドキュメントの分類**:
+- **ルート直下**: プロジェクト全体に関わる重要なドキュメント（README, CONTRIBUTING, ARCHITECTURE等）
+- **docs/**: 詳細な技術ドキュメント、ガイド、チュートリアル
+- **skillnote_recommendation/*/README.md**: 各モジュールの説明
+
+#### 一時ファイル・デバッグファイル
+**ルール**: 一時ファイルやデバッグ用ファイルはルートディレクトリに残さない
+
+```
+❌ 削除すべきファイル
+/CareerNavigator/test_debug.py         # デバッグ用スクリプト
+/CareerNavigator/scratch.py            # 試作コード
+/CareerNavigator/sem_code_examples.py  # サンプルコード
+/CareerNavigator/temp_*.py             # 一時ファイル
+
+✅ 適切な対応
+- デバッグコード: 実装完了後に削除
+- サンプルコード: docs/examples/ に移動
+- 一時ファイル: 作業完了後に削除
+```
+
+**理由**:
+- プロジェクトの整理: ルートディレクトリがすっきりし、重要なファイルが見つけやすい
+- 混乱の防止: 本番コードと一時コードが混在しない
+- Gitの汚染防止: 不要なファイルがコミットされない
+
+#### Pythonスクリプト（*.py）
+**ルール**: Pythonファイルは機能に応じた適切なディレクトリに配置する
+
+```
+✅ 正しい配置
+/CareerNavigator/
+├── streamlit_app.py                   # メインエントリーポイント（ルート可）
+├── pages/                             # Streamlitページ
+│   ├── 1_Data_Loading.py
+│   └── 2_Model_Training.py
+├── skillnote_recommendation/          # コアライブラリ
+│   ├── ml/
+│   │   ├── ml_recommender.py
+│   │   └── unified_sem_estimator.py
+│   └── core/
+│       └── data_loader.py
+└── tests/                             # テストコード
+    └── test_ml_recommender.py
+
+❌ 誤った配置
+/CareerNavigator/my_script.py          # スクリプトはルートに配置しない
+/CareerNavigator/utils.py              # ユーティリティはskillnote_recommendation/utils/へ
+```
+
+#### ルートディレクトリに配置して良いファイル
+以下のファイルのみルートディレクトリに配置可能:
+
+```
+✅ 許可されるルートファイル
+/CareerNavigator/
+├── streamlit_app.py          # アプリケーションエントリーポイント
+├── pyproject.toml            # 依存関係管理
+├── README.md                 # プロジェクト概要
+├── CONTRIBUTING.md           # コントリビューションガイド
+├── ARCHITECTURE.md           # アーキテクチャドキュメント
+├── .gitignore                # Git設定
+├── .python-version           # Pythonバージョン指定
+└── uv.lock                   # uvロックファイル
+```
+
+### ファイル配置チェックリスト
+
+**新規ファイルを作成する前に**:
+- [ ] このファイルは本当に必要か？（一時的なデバッグコードではないか）
+- [ ] 適切なディレクトリに配置しているか？
+- [ ] ルートディレクトリに配置する正当な理由があるか？
+
+**実装完了時に**:
+- [ ] テストファイル（test_*.py）は `tests/` にあるか？
+- [ ] 一時ファイル・デバッグファイルを削除したか？
+- [ ] ルートディレクトリに不要なファイルが残っていないか？
+- [ ] ドキュメントは適切な場所に配置されているか？
+
+**コミット前に**:
+```bash
+# ルートディレクトリのPythonファイルを確認
+ls *.py
+
+# 許可されていないファイルがあれば削除または移動
+# 例: test_*.py → tests/ に移動
+# 例: debug_*.py → 削除
+```
+
+### フォルダ構成の確認方法
+
+```bash
+# プロジェクト構造を確認
+tree -L 2 -I '__pycache__|*.pyc|.git'
+
+# テストファイルの配置を確認
+find . -name "test_*.py" -o -name "*_test.py"
+
+# ルートディレクトリのPythonファイルを確認
+ls -la /*.py
+```
+
+### 違反時の対応
+
+**フォルダ構成ルール違反を発見した場合**:
+1. 即座に適切な場所に移動
+2. Gitで変更をコミット
+3. 今後同じ間違いをしないようclaude.mdを参照
+
+```bash
+# 例: ルートのテストファイルをtests/に移動
+mv /CareerNavigator/test_hierarchical_sem.py /CareerNavigator/tests/test_hierarchical_sem.py
+
+# コミット
+git add tests/test_hierarchical_sem.py
+git commit -m "refactor: ルートのテストファイルをtests/に移動"
+git push
+```
+
+---
+
 ## 📋 コーディング規約
 
 ### Python コード品質基準
