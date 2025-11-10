@@ -1060,7 +1060,6 @@ rwr_weight = 0.5  # グラフとNMFを同等に評価
 # =========================================================
 
 # スライダーキーをメンバーコードで一意に生成
-sem_slider_key = f"sem_min_coeff_{selected_member_code}"
 
 # =========================================================
 # 推薦実行
@@ -2425,86 +2424,6 @@ if st.session_state.get("last_recommendations_df") is not None:
         file_name="recommendations.csv",
         mime="text/csv"
     )
-
-    # =========================================================
-    # SEM分析セクション（ボタン外：recommender が session_state に保存されている）
-    # =========================================================
-
-    if "recommender" in st.session_state and st.session_state["recommender"] is not None:
-        recommender = st.session_state["recommender"]
-        if hasattr(recommender, 'skill_dependency_sem_model') and recommender.skill_dependency_sem_model:
-            st.markdown("---")
-            st.markdown("### 📊 スキル依存関係ネットワーク分析")
-
-            # 表示ペア数スライダー
-            total_pairs = len(recommender.skill_dependency_sem_model.skill_paths)
-
-            # Streamlit スライダーに default value を渡す
-            # （key パラメータを使用して Streamlit が自動で session_state を管理）
-            col_slider1, col_slider2 = st.columns([3, 1])
-            with col_slider1:
-                # 表示ペア数を選択（強い順から）
-                display_pair_count = st.slider(
-                    "表示するペア数（関係強度が強い順）",
-                    min_value=1,
-                    max_value=max(total_pairs, 1),
-                    step=1,
-                    value=min(int(total_pairs * 0.3), total_pairs) if total_pairs > 0 else 1,
-                    help="スライダーを右に移動させると、より多くの関係を表示します。",
-                    key=sem_slider_key
-                )
-            with col_slider2:
-                percentage = (display_pair_count / total_pairs * 100) if total_pairs > 0 else 0
-                st.metric("表示割合", f"{percentage:.1f}%")
-
-            # パス係数でソートして上位を取得（強い順）
-            sorted_paths = sorted(
-                recommender.skill_dependency_sem_model.skill_paths,
-                key=lambda p: abs(p.coefficient),
-                reverse=True
-            )
-            displayed_paths = sorted_paths[:display_pair_count]
-
-            st.info(f"📊 表示中の関係: **{len(displayed_paths)}** ペア / **{total_pairs}** ペア（{percentage:.1f}%）")
-
-            # ネットワーク可視化を表示
-            try:
-                # 表示するパスのパス係数の最小値を計算
-                if displayed_paths:
-                    min_coefficient_for_viz = min(abs(p.coefficient) for p in displayed_paths)
-                else:
-                    min_coefficient_for_viz = 0.0
-
-                network_fig = recommender.skill_dependency_sem_model.visualize_skill_network(
-                    min_coefficient=min_coefficient_for_viz * 0.99  # わずかに下げて該当パスをすべて含める
-                )
-                if network_fig:
-                    st.plotly_chart(network_fig, use_container_width=True)
-                else:
-                    st.info("スキル依存関係が見つかりません。")
-            except Exception as viz_error:
-                st.warning(f"⚠️ ネットワーク可視化の表示に失敗しました: {str(viz_error)[:100]}")
-
-            # パス係数情報をテーブルで表示
-            st.write("### 📋 スキル間の依存関係（パス係数：上位順）")
-
-            path_data = []
-            for path in displayed_paths:
-                path_data.append({
-                    'から': path.from_skill_name,
-                    'へ': path.to_skill_name,
-                    'パス係数': f"{path.coefficient:.3f}",
-                    'p値': f"{path.p_value:.4f}",
-                    '有意': '✓' if path.is_significant else '×',
-                    '信頼区間': f"[{path.ci_lower:.2f}, {path.ci_upper:.2f}]"
-                })
-
-            if path_data:
-                path_df = pd.DataFrame(path_data)
-                st.dataframe(path_df, use_container_width=True)
-                st.markdown("**統計的有意性の解釈：**")
-                st.caption("✓ = p < 0.05 で統計的に有意（因果関係の確率が高い）")
-                st.caption("× = p ≥ 0.05 で有意でない（偶然の可能性が高い）")
 
     # メンバーポジショニングマップ
     if st.session_state.get("last_recommendations") is not None:
