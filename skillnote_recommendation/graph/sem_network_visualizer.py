@@ -56,6 +56,7 @@ class SEMNetworkVisualizer:
         latent_vars: List[str],
         observed_vars: List[str],
         loading_threshold: float = 0.3,
+        skill_name_mapping: Optional[Dict[str, str]] = None,
     ) -> go.Figure:
         """
         測定モデル（観測変数→潜在変数）を可視化
@@ -65,6 +66,7 @@ class SEMNetworkVisualizer:
             latent_vars: 潜在変数名のリスト
             observed_vars: 観測変数名（スキルコード）のリスト
             loading_threshold: ローディング強度の表示閾値（デフォルト: 0.3）
+            skill_name_mapping: スキルコード → スキル名（日本語）のマッピング
 
         Returns:
             Plotly Figure オブジェクト
@@ -100,7 +102,7 @@ class SEMNetworkVisualizer:
 
         # Plotly Figure を作成
         fig = self._create_measurement_figure(
-            G, pos, lambda_matrix, latent_vars, observed_vars, loading_threshold
+            G, pos, lambda_matrix, latent_vars, observed_vars, loading_threshold, skill_name_mapping
         )
 
         return fig
@@ -249,6 +251,7 @@ class SEMNetworkVisualizer:
         observed_vars: List[str],
         loading_threshold: float = 0.3,
         path_significance: Optional[Dict[Tuple[str, str], bool]] = None,
+        skill_name_mapping: Optional[Dict[str, str]] = None,
     ) -> go.Figure:
         """
         完全なSEMモデル（測定+構造）を統合可視化
@@ -260,6 +263,7 @@ class SEMNetworkVisualizer:
             observed_vars: 観測変数名
             loading_threshold: ローディング表示閾値
             path_significance: パス係数の有意性
+            skill_name_mapping: スキルコード → スキル名（日本語）のマッピング
 
         Returns:
             Plotly Figure オブジェクト
@@ -308,7 +312,7 @@ class SEMNetworkVisualizer:
         pos = self._calculate_combined_layout(G, latent_vars, observed_vars)
 
         # Plotly Figure を作成
-        fig = self._create_combined_figure(G, pos, lambda_matrix, b_matrix)
+        fig = self._create_combined_figure(G, pos, lambda_matrix, b_matrix, skill_name_mapping)
 
         return fig
 
@@ -376,11 +380,18 @@ class SEMNetworkVisualizer:
         latent_vars: List[str],
         observed_vars: List[str],
         loading_threshold: float,
+        skill_name_mapping: Optional[Dict[str, str]] = None,
     ) -> go.Figure:
         """
         測定モデルのFigureを作成
         """
         fig = go.Figure()
+
+        # スキル表示用のマッピング
+        def get_display_name(code: str, mapping: Optional[Dict[str, str]] = None) -> str:
+            if mapping and code in mapping:
+                return mapping[code]
+            return code
 
         # エッジを描画
         for edge in G.edges(data=True):
@@ -391,6 +402,9 @@ class SEMNetworkVisualizer:
             loading = data["weight"]
             line_width = 1 + loading * 3  # 線の太さをローディングで変化
 
+            from_display = get_display_name(from_node, skill_name_mapping)
+            to_display = get_display_name(to_node, skill_name_mapping)
+
             fig.add_trace(
                 go.Scatter(
                     x=[x0, x1, None],
@@ -400,7 +414,7 @@ class SEMNetworkVisualizer:
                         width=line_width,
                         color="#667eea",
                     ),
-                    hovertemplate=f"{from_node} → {to_node}<br>ローディング: {loading:.3f}<extra></extra>",
+                    hovertemplate=f"{from_display} → {to_display}<br>ローディング: {loading:.3f}<extra></extra>",
                     showlegend=False,
                 )
             )
@@ -408,6 +422,7 @@ class SEMNetworkVisualizer:
         # ノードを描画：観測変数
         observed_x = [pos[node][0] for node in observed_vars]
         observed_y = [pos[node][1] for node in observed_vars]
+        observed_display = [get_display_name(code, skill_name_mapping) for code in observed_vars]
 
         fig.add_trace(
             go.Scatter(
@@ -419,7 +434,7 @@ class SEMNetworkVisualizer:
                     color=self.node_colors["observed"],
                     line=dict(color="black", width=3),
                 ),
-                text=observed_vars,
+                text=observed_display,
                 textposition="middle center",
                 textfont=dict(size=12, color="black", weight="bold"),
                 hovertemplate="%{text}<extra></extra>",
@@ -546,11 +561,18 @@ class SEMNetworkVisualizer:
         pos: Dict[str, Tuple[float, float]],
         lambda_matrix: np.ndarray,
         b_matrix: np.ndarray,
+        skill_name_mapping: Optional[Dict[str, str]] = None,
     ) -> go.Figure:
         """
         統合モデルのFigureを作成（測定+構造）
         """
         fig = go.Figure()
+
+        # スキル表示用のマッピング
+        def get_display_name(code: str, mapping: Optional[Dict[str, str]] = None) -> str:
+            if mapping and code in mapping:
+                return mapping[code]
+            return code
 
         # エッジを描画
         for edge in G.edges(data=True):
@@ -573,13 +595,16 @@ class SEMNetworkVisualizer:
                 )
                 line_dash = "dash" if not is_significant else "solid"
 
+            from_display = get_display_name(from_node, skill_name_mapping)
+            to_display = get_display_name(to_node, skill_name_mapping)
+
             fig.add_trace(
                 go.Scatter(
                     x=[x0, x1, None],
                     y=[y0, y1, None],
                     mode="lines",
                     line=dict(width=line_width, color=color, dash=line_dash),
-                    hovertemplate=f"{from_node} → {to_node}<br>タイプ: {edge_type}<extra></extra>",
+                    hovertemplate=f"{from_display} → {to_display}<br>タイプ: {edge_type}<extra></extra>",
                     showlegend=False,
                 )
             )
@@ -594,6 +619,7 @@ class SEMNetworkVisualizer:
         if observed_nodes:
             obs_x = [pos[node][0] for node in observed_nodes]
             obs_y = [pos[node][1] for node in observed_nodes]
+            obs_display = [get_display_name(code, skill_name_mapping) for code in observed_nodes]
 
             fig.add_trace(
                 go.Scatter(
@@ -605,7 +631,7 @@ class SEMNetworkVisualizer:
                         color=self.node_colors["observed"],
                         line=dict(color="black", width=3),
                     ),
-                    text=observed_nodes,
+                    text=obs_display,
                     textposition="middle center",
                     textfont=dict(size=11, color="black", weight="bold"),
                     hovertemplate="%{text}<extra></extra>",
