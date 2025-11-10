@@ -219,71 +219,19 @@ all_scores = hsem.predict_all_scores(data)
 
 ---
 
-### 3. **SEMAdapter & SEMEnsemble** - 統合アダプター
+## 📊 **実装の特徴**
 
-既存モデルと新モデルの並列運用とアンサンブル。
-
-#### アーキテクチャ
-
-```
-┌────────────────────────────────────────┐
-│ SEMEnsemble（アンサンブル推薦）        │
-└────────────────────────────────────────┘
-              │
-              ├─ LegacySEMAdapter
-              │  （既存: SkillDomainSEMModel）
-              │
-              ├─ UnifiedSEMAdapter
-              │  （新: UnifiedSEMEstimator）
-              │
-              └─ HierarchicalSEMAdapter
-                 （新: HierarchicalSEMEstimator）
-```
-
-#### 使用例
-
-```python
-from skillnote_recommendation.ml.sem_adapter import (
-    LegacySEMAdapter,
-    UnifiedSEMAdapter,
-    HierarchicalSEMAdapter,
-    SEMEnsemble,
-)
-
-# アダプター作成
-legacy = LegacySEMAdapter(skill_domain_model)
-unified = UnifiedSEMAdapter(unified_sem, data, master)
-hierarchical = HierarchicalSEMAdapter(hsem_result, data, master)
-
-# アンサンブル
-ensemble = SEMEnsemble(
-    adapters=[legacy, unified, hierarchical],
-    weights=[0.3, 0.4, 0.3]  # 新モデルに70%の重み
-)
-
-# 推薦取得
-recommendations = ensemble.get_ensemble_recommendations('M001', top_k=10)
-
-# モデル比較
-comparison = ensemble.compare_models('M001', ['S001', 'S002', 'S003'])
-print(comparison)
-```
-
----
-
-## 📊 **比較表: 既存 vs 新実装**
-
-| 特徴 | 既存実装 | UnifiedSEM | HierarchicalSEM |
-|-----|---------|-----------|----------------|
-| **目的関数** | ❌ なし（個別推定） | ✅ 統一ML推定 | ✅ 階層的ML推定 |
-| **共分散構造** | ⚠️ 暗黙的 | ✅ 明示的（Σ(θ)） | ✅ 階層的構造 |
-| **力量関係性** | ⚠️ 個別計算 | ✅ B行列で明示 | ✅ 多層構造で明示 |
-| **測定誤差** | ❌ 考慮なし | ✅ Θ行列 | ✅ 各層で推定 |
-| **適合度指標** | ⚠️ 簡易版 | ✅ 標準指標完備 | ✅ 階層別+全体 |
-| **間接効果** | ❌ 計算不可 | ✅ 自動計算 | ✅ 多層効果 |
-| **最大スキル数** | ~100 | ~200 | **1000+** |
-| **推定時間** | 数秒 | 数秒 | **6-10秒** |
-| **理論的根拠** | ⚠️ 弱い | ✅ 強固 | ✅ 強固 |
+| 特徴 | UnifiedSEM | HierarchicalSEM |
+|-----|-----------|----------------|
+| **目的関数** | ✅ 統一ML推定 | ✅ 階層的ML推定 |
+| **共分散構造** | ✅ 明示的（Σ(θ)） | ✅ 階層的構造 |
+| **力量関係性** | ✅ B行列で明示 | ✅ 多層構造で明示 |
+| **測定誤差** | ✅ Θ行列 | ✅ 各層で推定 |
+| **適合度指標** | ✅ 標準指標完備 | ✅ 階層別+全体 |
+| **間接効果** | ✅ 自動計算 | ✅ 多層効果 |
+| **最大スキル数** | ~200 | **1000+** |
+| **推定時間** | 数秒 | **6-10秒** |
+| **理論的根拠** | ✅ 強固 | ✅ 強固 |
 
 ---
 
@@ -291,19 +239,20 @@ print(comparison)
 
 ```
 skillnote_recommendation/ml/
-├── unified_sem_estimator.py          # 統一SEM推定器（970行）
-├── hierarchical_sem_estimator.py     # 階層的SEM推定器（630行）
-└── sem_adapter.py                    # 統合アダプター（450行）
+├── unified_sem_estimator.py          # 統一SEM推定器
+└── hierarchical_sem_estimator.py     # 階層的SEM推定器
 
 tests/
 ├── test_unified_sem_estimator.py     # UnifiedSEMのテスト
 └── test_hierarchical_sem.py          # HierarchicalSEMのテスト
 
+pages/
+└── 3_SEM_Analysis.py                 # SEM分析UI
+
 docs/
-├── SEM_PROFESSIONAL_CRITIQUE.md      # プロの批判的分析
 ├── SEM_SCALABILITY_ANALYSIS.md       # スケーラビリティ分析
-├── SEM_IMPLEMENTATION_ANALYSIS.md    # 実装の詳細分析
-└── SEM_IMPLEMENTATION_SUMMARY.md     # 本ドキュメント
+├── SEM_IMPLEMENTATION_SUMMARY.md     # 本ドキュメント
+└── NEW_SEM_FEATURES.md               # 機能紹介
 ```
 
 ---
@@ -336,16 +285,6 @@ result = hsem.fit(data, n_jobs=4)  # 並列処理
 print(f"実行時間: {result.elapsed_time:.2f}秒")
 ```
 
-### 既存モデルとの並列運用
-
-```python
-# SEMEnsembleを使用
-from skillnote_recommendation.ml.sem_adapter import SEMEnsemble
-
-ensemble = SEMEnsemble([legacy_adapter, unified_adapter, hierarchical_adapter])
-recs = ensemble.get_ensemble_recommendations(member_code, top_k=10)
-```
-
 ---
 
 ## 📈 **効果と成果**
@@ -370,9 +309,9 @@ recs = ensemble.get_ensemble_recommendations(member_code, top_k=10)
 
 ### 4. **柔軟な運用**
 
-- ✅ 既存モデルとの並列運用で段階的移行が可能
-- ✅ アンサンブルにより、複数モデルの長所を活用
+- ✅ UnifiedSEMとHierarchicalSEMを使い分け可能
 - ✅ データ規模に応じた最適なモデル選択
+- ✅ 並列処理による高速化対応
 
 ---
 
