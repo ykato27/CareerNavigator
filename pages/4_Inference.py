@@ -260,9 +260,9 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
         'LICENSE': 'diamond'
     }
     competence_type_names = {
-        'SKILL': '●SKILL',
-        'EDUCATION': '■EDUCATION',
-        'LICENSE': '◆LICENSE'
+        'SKILL': '●スキル',
+        'EDUCATION': '■教育',
+        'LICENSE': '◆資格'
     }
 
     # 散布図を作成
@@ -340,7 +340,7 @@ def create_growth_path_timeline(growth_path, role_name: str, members_df=None, me
     fig.update_layout(
         title=dict(
             text=f"<b>役職「{role_name}」のスキルマトリックス（難易度×貴重度）</b><br>"
-                 f"<sup>凡例の職種名をクリックして表示/非表示を切替。マーカー形状で力量タイプを区別（●=SKILL、■=EDUCATION、◆=LICENSE）（{growth_path.total_members}名のデータから分析）</sup>",
+                 f"<sup>凡例の職種名をクリックして表示/非表示を切替。マーカー形状で力量タイプを区別（●=スキル、■=教育、◆=資格）（{growth_path.total_members}名のデータから分析）</sup>",
             x=0.5,
             xanchor='center'
         ),
@@ -1829,9 +1829,9 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     if timeline_fig:
                                         st.plotly_chart(timeline_fig, use_container_width=True)
                                         if role_name == selected_member_role:
-                                            st.caption("💡 【職種フィルター】凡例の職種名をクリックして表示/非表示を切替。【力量タイプフィルター】上部のマルチセレクトで選択。マーカー形状で力量タイプを区別（●=SKILL、■=EDUCATION、◆=LICENSE）。**あなたが未習得のスキルのみ表示されています。**")
+                                            st.caption("💡 【職種フィルター】凡例の職種名をクリックして表示/非表示を切替。【力量タイプフィルター】上部のマルチセレクトで選択。マーカー形状で力量タイプを区別（●=スキル、■=教育、◆=資格）。**あなたが未習得のスキルのみ表示されています。**")
                                         else:
-                                            st.caption("💡 【職種フィルター】凡例の職種名をクリックして表示/非表示を切替。【力量タイプフィルター】上部のマルチセレクトで選択。マーカー形状で力量タイプを区別（●=SKILL、■=EDUCATION、◆=LICENSE）。")
+                                            st.caption("💡 【職種フィルター】凡例の職種名をクリックして表示/非表示を切替。【力量タイプフィルター】上部のマルチセレクトで選択。マーカー形状で力量タイプを区別（●=スキル、■=教育、◆=資格）。")
                                     else:
                                         if role_name == selected_member_role:
                                             st.warning("あなたが未習得のスキルがありません。")
