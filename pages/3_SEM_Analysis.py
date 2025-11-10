@@ -721,7 +721,12 @@ if model_type == "UnifiedSEM（実データ）":
 
                             max_edges = len(temp_edges)
 
-                            # スライダーで表示する接続数を調整
+                            # スライダーで表示する接続数を調整（session_state で状態保持）
+                            # スライダーの初期値をsession_stateで管理
+                            slider_key = f"edge_limit_{hash(tuple(sem.latent_vars))}"
+                            if slider_key not in st.session_state:
+                                st.session_state[slider_key] = min(20, max_edges) if max_edges > 0 else 1
+
                             col1, col2 = st.columns([1, 4])
                             with col1:
                                 st.markdown("#### 表示接続数")
@@ -730,10 +735,11 @@ if model_type == "UnifiedSEM（実データ）":
                                     "表示するスキル間接続数（強度順）",
                                     min_value=1,
                                     max_value=max_edges if max_edges > 0 else 1,
-                                    value=min(20, max_edges) if max_edges > 0 else 1,
+                                    value=st.session_state[slider_key],
                                     step=1,
                                     help=f"接続の強度が強い順に表示します。最大：{max_edges}接続",
                                     label_visibility="collapsed",
+                                    key=slider_key,
                                 )
 
                             fig_skill_network = visualizer.visualize_skill_network(
