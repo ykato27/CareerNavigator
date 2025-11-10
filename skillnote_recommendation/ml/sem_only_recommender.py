@@ -487,3 +487,358 @@ class SEMOnlyRecommender:
         reason_parts.append(f"領域習得度: {avg_score*100:.0f}%")
 
         return " ".join(reason_parts)
+
+    def get_recommendation_reasoning(
+        self,
+        member_code: str,
+        competence_code: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        推薦理由を詳細に分析
+
+        指定された力量がなぜ推薦されたかを、
+        習得済み力量からの影響経路とともに返します。
+
+        Args:
+            member_code: メンバーコード
+            competence_code: 推薦された力量コード
+
+        Returns:
+            推薦理由の詳細情報（グラフデータ含む）、または None
+        """
+        # 力量情報を取得
+        competence_info = self.competence_master_df[
+            self.competence_master_df['力量コード'] == competence_code
+        ]
+
+        if competence_info.empty:
+            logger.warning(f"Competence {competence_code} not found")
+            return None
+
+        competence_row = competence_info.iloc[0]
+        target_domain = competence_row.get('力量ドメイン')
+
+        if not target_domain or target_domain not in self.sem_model.domain_structures:
+            logger.warning(f"Domain {target_domain} not found for competence {competence_code}")
+            return None
+
+        # メンバーの習得済み力量を取得
+        acquired_competences = self._get_member_competences(member_code)
+
+        # 影響経路を分析
+        influences = []
+        total_influence = 0.0
+
+        domain_struct = self.sem_model.domain_structures[target_domain]
+
+        # ターゲット力量がどの潜在変数に属するかを探す
+        target_latent_factor = None
+        target_loading = 0.0
+
+        for latent_factor in domain_struct.latent_factors:
+            if competence_code in latent_factor.observed_skills:
+                target_latent_factor = latent_factor
+                target_loading = latent_factor.factor_loadings.get(competence_code, 0.5)
+                break
+
+        if not target_latent_factor:
+            logger.warning(f"Target competence {competence_code} not found in domain structure")
+            return None
+
+        # 習得済み力量からの影響を計算
+        for _, acq_row in acquired_competences.iterrows():
+            acq_code = acq_row['力量コード']
+            acq_level = acq_row.get('正規化レベル', 0.5)
+
+            # この習得済み力量がどの潜在変数に属するかを探す
+            source_latent_factor = None
+            source_loading = 0.0
+
+            for latent_factor in domain_struct.latent_factors:
+                if acq_code in latent_factor.observed_skills:
+                    source_latent_factor = latent_factor
+                    source_loading = latent_factor.factor_loadings.get(acq_code, 0.5)
+                    break
+
+            if not source_latent_factor:
+                continue
+
+            # パス係数を探す
+            path_coefficient = 0.0
+            is_significant = False
+            p_value = 1.0
+
+            for path_coeff in domain_struct.path_coefficients:
+                if (path_coeff.from_factor == source_latent_factor.factor_name and
+                    path_coeff.to_factor == target_latent_factor.factor_name):
+                    path_coefficient = path_coeff.coefficient
+                    is_significant = path_coeff.is_significant
+                    p_value = path_coeff.p_value
+                    break
+
+            if path_coefficient != 0.0:
+                # 影響度を計算: パス係数 × 習得レベル × source_loading × target_loading
+                influence = path_coefficient * acq_level * source_loading * target_loading
+                total_influence += abs(influence)
+
+                acq_info = self.competence_master_df[
+                    self.competence_master_df['力量コード'] == acq_code
+                ]
+
+                influences.append({
+                    'source_code': acq_code,
+                    'source_name': acq_info.iloc[0]['力量名'] if not acq_info.empty else acq_code,
+                    'source_type': acq_info.iloc[0].get('力量タイプ', 'UNKNOWN') if not acq_info.empty else 'UNKNOWN',
+                    'source_level': acq_level,
+                    'source_loading': source_loading,
+                    'target_loading': target_loading,
+                    'path_coefficient': path_coefficient,
+                    'influence': influence,
+                    'is_significant': is_significant,
+                    'p_value': p_value,
+                    'source_latent': source_latent_factor.factor_name,
+                    'target_latent': target_latent_factor.factor_name,
+                })
+
+        # 影響度の大きい順にソート
+        influences.sort(key=lambda x: abs(x['influence']), reverse=True)
+
+        return {
+            'target_code': competence_code,
+            'target_name': competence_row['力量名'],
+            'target_type': competence_row.get('力量タイプ', 'UNKNOWN'),
+            'target_domain': target_domain,
+            'target_latent': target_latent_factor.factor_name,
+            'target_loading': target_loading,
+            'influences': influences,
+            'total_influence': total_influence,
+            'num_sources': len(influences),
+        }
+
+    def visualize_recommendation_reasoning(
+        self,
+        member_code: str,
+        competence_code: str,
+        top_n: int = 5
+    ):
+        """
+        推薦理由をグラフで可視化
+
+        Args:
+            member_code: メンバーコード
+            competence_code: 推薦された力量コード
+            top_n: 表示する影響経路の数（上位N件）
+
+        Returns:
+            Plotly Figure、または None
+        """
+        try:
+            import networkx as nx
+            import plotly.graph_objects as go
+        except ImportError:
+            logger.warning("networkx and plotly are required for visualization")
+            return None
+
+        reasoning = self.get_recommendation_reasoning(member_code, competence_code)
+
+        if not reasoning or not reasoning['influences']:
+            logger.warning(f"No reasoning data for {competence_code}")
+            return None
+
+        # 上位N件の影響のみを使用
+        top_influences = reasoning['influences'][:top_n]
+
+        # グラフを作成
+        G = nx.DiGraph()
+
+        # ノード追加
+        # ターゲット力量
+        G.add_node(
+            reasoning['target_code'],
+            label=reasoning['target_name'],
+            competence_type=reasoning['target_type'],
+            node_type='target'
+        )
+
+        # 影響元の力量
+        for inf in top_influences:
+            G.add_node(
+                inf['source_code'],
+                label=inf['source_name'],
+                competence_type=inf['source_type'],
+                node_type='source',
+                level=inf['source_level']
+            )
+
+            # エッジ追加
+            G.add_edge(
+                inf['source_code'],
+                reasoning['target_code'],
+                weight=abs(inf['influence']),
+                influence=inf['influence'],
+                path_coefficient=inf['path_coefficient'],
+                is_significant=inf['is_significant'],
+                p_value=inf['p_value']
+            )
+
+        # レイアウトを計算（階層的）
+        # ソースノードを左、ターゲットノードを右に配置
+        pos = {}
+        source_nodes = [inf['source_code'] for inf in top_influences]
+        target_node = reasoning['target_code']
+
+        # ソースノードを縦に並べる
+        for i, node in enumerate(source_nodes):
+            pos[node] = (0, i)
+
+        # ターゲットノードを右側の中央に配置
+        pos[target_node] = (1, (len(source_nodes) - 1) / 2)
+
+        # エッジを描画
+        edge_traces = []
+        for edge_data in top_influences:
+            source = edge_data['source_code']
+            target = reasoning['target_code']
+
+            x0, y0 = pos[source]
+            x1, y1 = pos[target]
+
+            # 影響度に応じてエッジの太さを変更
+            width = abs(edge_data['influence']) * 10 + 1
+
+            # 有意性に応じて色を変更
+            color = "#2E7D32" if edge_data['is_significant'] else "#BDBDBD"
+
+            edge_trace = go.Scatter(
+                x=[x0, x1, None],
+                y=[y0, y1, None],
+                mode="lines",
+                line=dict(width=width, color=color),
+                hoverinfo="text",
+                hovertext=f"影響度: {edge_data['influence']:.3f}<br>"
+                         f"パス係数: {edge_data['path_coefficient']:.3f}<br>"
+                         f"習得レベル: {edge_data['source_level']:.2f}<br>"
+                         f"p値: {edge_data['p_value']:.4f}<br>"
+                         f"有意: {'Yes' if edge_data['is_significant'] else 'No'}",
+                showlegend=False,
+            )
+            edge_traces.append(edge_trace)
+
+        # ノードを描画
+        node_x_source, node_y_source, node_text_source, node_hover_source = [], [], [], []
+        node_x_target, node_y_target, node_text_target, node_hover_target = [], [], [], []
+
+        # 力量タイプごとの色
+        type_colors = {
+            'SKILL': '#1f77b4',
+            'EDUCATION': '#ff7f0e',
+            'LICENSE': '#2ca02c',
+            'UNKNOWN': '#7f7f7f',
+        }
+
+        # ソースノード
+        for inf in top_influences:
+            node = inf['source_code']
+            x, y = pos[node]
+            node_x_source.append(x)
+            node_y_source.append(y)
+
+            # ノードテキスト
+            label = inf['source_name']
+            display_label = label if len(label) <= 20 else label[:17] + "..."
+            node_text_source.append(display_label)
+
+            # ホバー情報
+            hover_text = f"<b>{label}</b><br>"
+            hover_text += f"力量タイプ: {inf['source_type']}<br>"
+            hover_text += f"習得レベル: {inf['source_level']:.2f}<br>"
+            hover_text += f"ファクターローディング: {inf['source_loading']:.3f}<br>"
+            hover_text += f"→ 影響度: {inf['influence']:.3f}"
+            node_hover_source.append(hover_text)
+
+        # ターゲットノード
+        x, y = pos[target_node]
+        node_x_target.append(x)
+        node_y_target.append(y)
+
+        label = reasoning['target_name']
+        display_label = label if len(label) <= 20 else label[:17] + "..."
+        node_text_target.append(display_label)
+
+        hover_text = f"<b>{label}</b><br>"
+        hover_text += f"力量タイプ: {reasoning['target_type']}<br>"
+        hover_text += f"【推薦対象】<br>"
+        hover_text += f"総影響度: {reasoning['total_influence']:.3f}<br>"
+        hover_text += f"影響元: {len(top_influences)}個の習得済み力量"
+        node_hover_target.append(hover_text)
+
+        # ソースノードのトレース（習得済み）
+        source_trace = go.Scatter(
+            x=node_x_source,
+            y=node_y_source,
+            mode="markers+text",
+            text=node_text_source,
+            textposition="middle left",
+            hoverinfo="text",
+            hovertext=node_hover_source,
+            marker=dict(
+                size=20,
+                color='#4CAF50',  # 緑（習得済み）
+                line_width=2,
+                line_color="#ffffff",
+                symbol='circle'
+            ),
+            name='習得済み力量'
+        )
+
+        # ターゲットノードのトレース（推薦）
+        target_trace = go.Scatter(
+            x=node_x_target,
+            y=node_y_target,
+            mode="markers+text",
+            text=node_text_target,
+            textposition="middle right",
+            hoverinfo="text",
+            hovertext=node_hover_target,
+            marker=dict(
+                size=30,
+                color='#FF5722',  # オレンジ（推薦）
+                line_width=3,
+                line_color="#ffffff",
+                symbol='star'
+            ),
+            name='推薦力量'
+        )
+
+        # Figureを作成
+        fig_data = edge_traces + [source_trace, target_trace]
+        fig = go.Figure(data=fig_data)
+
+        fig.update_layout(
+            title=f"📊 推薦理由: {reasoning['target_name']}",
+            showlegend=True,
+            hovermode="closest",
+            margin=dict(b=20, l=120, r=120, t=60),
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            height=max(400, len(top_influences) * 80),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        # ヘルプテキスト
+        fig.add_annotation(
+            text="矢印の太さ = 影響度の大きさ、緑の矢印 = 統計的に有意",
+            xref="paper", yref="paper",
+            x=0.5, y=-0.05,
+            showarrow=False,
+            font=dict(size=10, color="gray"),
+            xanchor='center'
+        )
+
+        return fig
