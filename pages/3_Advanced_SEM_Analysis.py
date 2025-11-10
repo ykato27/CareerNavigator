@@ -19,13 +19,21 @@ import plotly.express as px
 from datetime import datetime
 import sys
 import importlib.util
+from pathlib import Path
+
+# プロジェクトルートを取得（環境非依存）
+current_file = Path(__file__).resolve()
+project_root = current_file.parent.parent
+ml_dir = project_root / "skillnote_recommendation" / "ml"
 
 # UnifiedSEMEstimatorを直接import
 def load_unified_sem():
     """UnifiedSEMEstimatorを動的にロード"""
+    unified_sem_path = ml_dir / "unified_sem_estimator.py"
+
     spec = importlib.util.spec_from_file_location(
         "unified_sem_estimator",
-        "/home/user/CareerNavigator/skillnote_recommendation/ml/unified_sem_estimator.py"
+        str(unified_sem_path)
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -37,9 +45,11 @@ def load_hierarchical_sem():
     unified_module = load_unified_sem()
     sys.modules['skillnote_recommendation.ml.unified_sem_estimator'] = unified_module
 
+    hierarchical_sem_path = ml_dir / "hierarchical_sem_estimator.py"
+
     spec = importlib.util.spec_from_file_location(
         "hierarchical_sem_estimator",
-        "/home/user/CareerNavigator/skillnote_recommendation/ml/hierarchical_sem_estimator.py"
+        str(hierarchical_sem_path)
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
