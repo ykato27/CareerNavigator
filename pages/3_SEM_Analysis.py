@@ -271,6 +271,7 @@ if model_type == "UnifiedSEM（実データ）":
 
                 # 測定モデル仕様の作成（カテゴリーごと）
                 measurement_specs = []
+                valid_categories = []  # 測定モデルに含まれるカテゴリーを記録
                 for category in selected_categories:
                     cat_competences = selected_competences[
                         selected_competences['力量カテゴリー名'] == category
@@ -288,15 +289,21 @@ if model_type == "UnifiedSEM（実データ）":
                                 reference_indicator=skill_codes[0]  # 最初のスキルを参照指標に
                             )
                         )
+                        valid_categories.append(category)  # 有効なカテゴリーを記録
 
-                # 構造モデル仕様の作成（全カテゴリー間の関係を想定）
+                # 構造モデル仕様の作成（測定モデルに含まれるカテゴリーのみ使用）
                 structural_specs = []
-                for i, from_cat in enumerate(selected_categories):
-                    for j, to_cat in enumerate(selected_categories):
+                for i, from_cat in enumerate(valid_categories):
+                    for j, to_cat in enumerate(valid_categories):
                         if i < j:  # 上三角のみ（一方向の関係）
                             structural_specs.append(
                                 StructuralModelSpec(from_latent=from_cat, to_latent=to_cat)
                             )
+
+                # 除外されたカテゴリーを警告
+                excluded_categories = set(selected_categories) - set(valid_categories)
+                if excluded_categories:
+                    st.warning(f"⚠️ スキル数が2個未満のため除外されたカテゴリー: {', '.join(excluded_categories)}")
 
                 st.info(f"📐 測定モデル: {len(measurement_specs)}個の潜在変数、構造モデル: {len(structural_specs)}個のパス")
 
