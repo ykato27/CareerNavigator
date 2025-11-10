@@ -589,11 +589,48 @@ if model_type == "UnifiedSEM（実データ）":
                                 "同じ力量カテゴリーに統話するスキル同士の関連性"
                             )
 
+                            # スキルコード → スキル名（日本語）のマッピングを作成
+                            skill_code_to_name = dict(zip(
+                                competence_master['力量コード'],
+                                competence_master['力量名']
+                            ))
+
+                            # 全接続数を計算（edge_limit なしで実行）
+                            temp_edges = []
+                            for j in range(len(sem.latent_vars)):
+                                contributing_skills = [
+                                    (i, abs(sem.Lambda[i, j]))
+                                    for i in range(len(sem.observed_vars))
+                                    if abs(sem.Lambda[i, j]) > 0.2
+                                ]
+                                for k1 in range(len(contributing_skills)):
+                                    for k2 in range(k1 + 1, len(contributing_skills)):
+                                        temp_edges.append(True)
+
+                            max_edges = len(temp_edges)
+
+                            # スライダーで表示する接続数を調整
+                            col1, col2 = st.columns([1, 4])
+                            with col1:
+                                st.markdown("#### 表示接続数")
+                            with col2:
+                                edge_limit = st.slider(
+                                    "表示するスキル間接続数（強度順）",
+                                    min_value=1,
+                                    max_value=max_edges if max_edges > 0 else 1,
+                                    value=min(20, max_edges) if max_edges > 0 else 1,
+                                    step=1,
+                                    help=f"接続の強度が強い順に表示します。最大：{max_edges}接続",
+                                    label_visibility="collapsed",
+                                )
+
                             fig_skill_network = visualizer.visualize_skill_network(
                                 lambda_matrix=sem.Lambda,
                                 latent_vars=sem.latent_vars,
                                 observed_vars=sem.observed_vars,
+                                skill_name_mapping=skill_code_to_name,
                                 loading_threshold=0.2,
+                                edge_limit=edge_limit,
                             )
                             st.plotly_chart(fig_skill_network, use_container_width=True)
 
