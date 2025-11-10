@@ -24,6 +24,7 @@ from pathlib import Path
 current_file = Path(__file__).resolve()
 project_root = current_file.parent.parent
 ml_dir = project_root / "skillnote_recommendation" / "ml"
+graph_dir = project_root / "skillnote_recommendation" / "graph"
 
 # UnifiedSEMEstimatorを直接import
 def load_unified_sem():
@@ -49,6 +50,18 @@ def load_hierarchical_sem():
     spec = importlib.util.spec_from_file_location(
         "hierarchical_sem_estimator",
         str(hierarchical_sem_path)
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+def load_sem_network_visualizer():
+    """SEMNetworkVisualizerを動的にロード"""
+    visualizer_path = graph_dir / "sem_network_visualizer.py"
+
+    spec = importlib.util.spec_from_file_location(
+        "sem_network_visualizer",
+        str(visualizer_path)
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -499,6 +512,84 @@ if model_type == "UnifiedSEM（実データ）":
                 fig.update_layout(height=400)
 
                 st.plotly_chart(fig, use_container_width=True)
+
+                # ============================================
+                # ネットワークグラフ可視化
+                # ============================================
+                st.markdown("---")
+                st.markdown("## 📊 ネットワークグラフ可視化")
+
+                with st.spinner("ネットワークグラフを生成中..."):
+                    try:
+                        # グラフ可視化モジュールをロード
+                        visualizer_module = load_sem_network_visualizer()
+                        SEMNetworkVisualizer = visualizer_module.SEMNetworkVisualizer
+
+                        visualizer = SEMNetworkVisualizer()
+
+                        # タブで表示方法を選択
+                        tab1, tab2, tab3 = st.tabs(
+                            ["📈 統合モデル", "🔬 測定モデル", "⚙️ 構造モデル"]
+                        )
+
+                        with tab1:
+                            st.markdown(
+                                "### 統合SEM構造\n"
+                                "スキル（下）→ 潜在変数（上）→ 潜在変数間の関係を一覧表示"
+                            )
+
+                            # パス有意性の辞書を作成
+                            path_significance = {}
+                            relationships = sem.get_skill_relationships()
+                            for _, row in relationships.iterrows():
+                                path_significance[(row["from_skill"], row["to_skill"])] = (
+                                    row["is_significant"]
+                                )
+
+                            fig_combined = visualizer.visualize_combined_model(
+                                lambda_matrix=sem.Lambda,
+                                b_matrix=sem.B,
+                                latent_vars=sem.latent_vars,
+                                observed_vars=sem.observed_vars,
+                                loading_threshold=0.2,
+                                path_significance=path_significance,
+                            )
+                            st.plotly_chart(fig_combined, use_container_width=True)
+
+                        with tab2:
+                            st.markdown(
+                                "### 測定モデル\n"
+                                "スキルから潜在変数へのローディング（矢印の太さ = 関係の強さ）"
+                            )
+
+                            fig_measurement = visualizer.visualize_measurement_model(
+                                lambda_matrix=sem.Lambda,
+                                latent_vars=sem.latent_vars,
+                                observed_vars=sem.observed_vars,
+                                loading_threshold=0.2,
+                            )
+                            st.plotly_chart(fig_measurement, use_container_width=True)
+
+                        with tab3:
+                            st.markdown(
+                                "### 構造モデル\n"
+                                "潜在変数間の因果関係（緑 = 有意 | グレー = 非有意）"
+                            )
+
+                            fig_structural = visualizer.visualize_structural_model(
+                                b_matrix=sem.B,
+                                latent_vars=sem.latent_vars,
+                                path_significance=path_significance,
+                            )
+                            st.plotly_chart(fig_structural, use_container_width=True)
+
+                        st.success("✅ ネットワークグラフを生成しました")
+
+                    except Exception as e:
+                        st.error(f"❌ グラフ生成エラー: {e}")
+                        import traceback
+                        with st.expander("エラー詳細"):
+                            st.code(traceback.format_exc())
 
                 # 詳細データ
                 with st.expander("📋 詳細データ"):
