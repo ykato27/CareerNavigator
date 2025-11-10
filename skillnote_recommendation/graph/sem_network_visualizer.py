@@ -709,7 +709,7 @@ class SEMNetworkVisualizer:
                 ),
                 text=node_texts,
                 textposition="top center",
-                textfont=dict(size=12, color="white", weight="bold"),
+                textfont=dict(size=12, color="black", weight="bold"),
                 hovertemplate="%{text}<extra></extra>",
                 showlegend=False,
             )
