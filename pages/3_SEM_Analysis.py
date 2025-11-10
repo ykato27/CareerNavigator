@@ -514,8 +514,17 @@ with tab4:
     st.markdown("### 🕸️ 領域別スキル依存関係ネットワーク（インタラクティブ）")
 
     st.info(
-        "**インタラクティブ機能:** マウスホイールでズーム、ドラッグでパン、ノード/エッジにホバーで詳細表示"
+        "**インタラクティブ機能:** マウスホイールでズーム、ドラッグでパン、ノード/エッジにホバーで詳細表示\n\n"
+        "**ノード**: 個別の力量（スキル、資格、教育）を表示\n"
+        "**エッジ**: 力量間の依存関係を表示\n"
+        "**色**: 力量タイプ（🔵=SKILL、🟠=EDUCATION、🟢=LICENSE）"
     )
+
+    # モデル再読み込みボタン
+    if st.button("🔄 モデルを再読み込み", help="最新のコードでモデルを再構築します"):
+        if 'sem_recommender' in st.session_state:
+            del st.session_state['sem_recommender']
+        st.rerun()
 
     # 領域選択とネットワークオプション
     col1, col2 = st.columns([2, 1])
@@ -541,8 +550,8 @@ with tab4:
     with col1:
         show_all_edges = st.checkbox(
             "すべてのエッジを表示",
-            value=False,
-            help="有意でないパスも表示します"
+            value=True,
+            help="有意でないパスも表示します（推奨：オン）"
         )
 
     with col2:
@@ -569,6 +578,17 @@ with tab4:
 
                 if fig:
                     st.plotly_chart(fig, use_container_width=True)
+
+                    # グラフ情報の表示
+                    graph_data = sem_recommender.sem_model.get_skill_dependency_graph(selected_network_domain)
+                    if graph_data:
+                        n_nodes = len(graph_data.get('nodes', []))
+                        n_edges = len(graph_data.get('edges', []))
+
+                        if n_edges == 0:
+                            st.warning(f"⚠️ このドメインにはエッジ（力量間の関係）がありません。パス係数が定義されていないか、すべてのスキルが1つの潜在変数に属している可能性があります。")
+
+                        st.info(f"📊 ネットワーク情報: {n_nodes}個のノード（力量）、{n_edges}個のエッジ（関係）")
 
                     # モデル適合度指標を表示
                     st.markdown("---")
@@ -702,7 +722,15 @@ with tab4:
                                 **R² (説明分散)**: モデルが説明する分散の割合（1に近いほど良好）
                                 """)
                 else:
-                    st.warning(f"{selected_network_domain} 領域のネットワークグラフを生成できませんでした")
+                    st.error(f"❌ {selected_network_domain} 領域のネットワークグラフを生成できませんでした")
+                    st.info("""
+                    **考えられる原因:**
+                    - この領域にスキルデータがない
+                    - この領域の潜在変数構造が構築されていない
+                    - データが不足している
+
+                    別の領域を選択してみてください。
+                    """)
 
             except Exception as e:
                 display_error_details(e, "ネットワーク可視化")

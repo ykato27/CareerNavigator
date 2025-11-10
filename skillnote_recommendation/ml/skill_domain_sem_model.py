@@ -760,7 +760,11 @@ class SkillDomainSEMModel:
         nodes = []
         skill_to_factor = {}  # スキルがどの潜在因子に属するかのマッピング
 
+        logger.info(f"Domain {domain_name}: {len(domain_struct.latent_factors)} latent factors")
+
         for latent_factor in domain_struct.latent_factors:
+            logger.info(f"  Latent factor: {latent_factor.factor_name}, {len(latent_factor.observed_skills)} skills")
+
             for skill_code in latent_factor.observed_skills:
                 # 力量マスタから情報を取得
                 skill_info = self.competence_master_df[
@@ -785,12 +789,19 @@ class SkillDomainSEMModel:
                     })
 
                     skill_to_factor[skill_code] = latent_factor.factor_name
+                    logger.debug(f"    Added node: {skill_code} -> {skill_name} ({skill_type})")
+                else:
+                    logger.warning(f"    Skill {skill_code} not found in competence_master_df")
 
         # エッジ情報（潜在因子間のパス係数に基づく力量間の関係）
         edges = []
+        logger.info(f"Domain {domain_name}: {len(domain_struct.path_coefficients)} path coefficients")
+
         for path_coeff in domain_struct.path_coefficients:
             from_factor = path_coeff.from_factor
             to_factor = path_coeff.to_factor
+
+            logger.info(f"  Path: {from_factor} -> {to_factor} (coef={path_coeff.coefficient:.3f}, p={path_coeff.p_value:.4f})")
 
             # この2つの潜在因子に属する力量同士の関係を作成
             from_skills = [
@@ -831,6 +842,10 @@ class SkillDomainSEMModel:
                             "t_value": path_coeff.t_value,
                         })
 
+                logger.info(f"    Generated {len(from_latent.observed_skills) * len(to_latent.observed_skills)} edges")
+            else:
+                logger.warning(f"    Cannot find latent factors: {from_factor} or {to_factor}")
+
         return {
             "domain": domain_name,
             "nodes": nodes,
@@ -841,7 +856,7 @@ class SkillDomainSEMModel:
         self,
         domain_name: str,
         layout: str = "spring",
-        show_all_edges: bool = False,
+        show_all_edges: bool = True,  # デフォルトをTrueに変更
         min_coefficient: float = 0.0
     ) -> Optional[go.Figure]:
         """
@@ -861,8 +876,19 @@ class SkillDomainSEMModel:
             return None
 
         graph_data = self.get_skill_dependency_graph(domain_name)
-        if not graph_data or not graph_data["edges"]:
+        if not graph_data:
+            logger.warning(f"No graph data for domain: {domain_name}")
             return None
+
+        # デバッグ情報
+        logger.info(f"Graph data: {len(graph_data.get('nodes', []))} nodes, {len(graph_data.get('edges', []))} edges")
+
+        if not graph_data["nodes"]:
+            logger.warning("No nodes in graph data")
+            return None
+
+        if not graph_data["edges"]:
+            logger.warning("No edges in graph data - will show nodes only")
 
         # ネットワークグラフを作成
         G = nx.DiGraph()
