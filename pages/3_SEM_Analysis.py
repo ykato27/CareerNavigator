@@ -363,10 +363,20 @@ with tab2:
 with tab3:
     st.markdown("### 🎯 SEMベースの推薦 - 次に取るべき力量")
 
-    st.info(
-        "構造方程式モデリング（SEM）に基づいて、"
-        "メンバーの現在の習得状況から統計的に次に取るべき力量を推薦します。"
-    )
+    col_info, col_reload_btn = st.columns([3, 1])
+
+    with col_info:
+        st.info(
+            "構造方程式モデリング（SEM）に基づいて、"
+            "メンバーの現在の習得状況から統計的に次に取るべき力量を推薦します。"
+        )
+
+    with col_reload_btn:
+        if st.button("🔄 モデル再読み込み", key='reload_model_sem', help="最新のコードでモデルを再構築", use_container_width=True):
+            if 'sem_recommender' in st.session_state:
+                del st.session_state['sem_recommender']
+            st.success("モデルを再読み込みします...")
+            st.rerun()
 
     # 推薦設定
     col1, col2, col3, col4 = st.columns(4)
@@ -544,6 +554,21 @@ with tab3:
                                 else:
                                     st.warning("推薦理由のグラフを生成できませんでした。この力量への影響経路が見つからない可能性があります。")
 
+                            except AttributeError as e:
+                                if 'visualize_recommendation_reasoning' in str(e):
+                                    st.error("❌ 推薦理由の可視化機能が利用できません")
+                                    st.info("""
+                                    **解決方法:**
+                                    1. ページ上部の「🔄 モデルを再読み込み」ボタンをクリック
+                                    2. ページ全体を再読み込み（F5キー）
+
+                                    これにより最新のコードでモデルが再構築されます。
+                                    """)
+                                else:
+                                    st.error(f"推薦理由の可視化エラー: {e}")
+                                    import traceback
+                                    with st.expander("エラー詳細"):
+                                        st.code(traceback.format_exc())
                             except Exception as e:
                                 st.error(f"推薦理由の可視化エラー: {e}")
                                 import traceback
