@@ -644,6 +644,12 @@ if model_type == "UnifiedSEM（実データ）":
                                     row["is_significant"]
                                 )
 
+                            # スキル名マッピングの作成
+                            skill_code_to_name = dict(zip(
+                                competence_master['力量コード'],
+                                competence_master['力量名']
+                            ))
+
                             fig_combined = visualizer.visualize_combined_model(
                                 lambda_matrix=sem.Lambda,
                                 b_matrix=sem.B,
@@ -651,6 +657,7 @@ if model_type == "UnifiedSEM（実データ）":
                                 observed_vars=sem.observed_vars,
                                 loading_threshold=0.2,
                                 path_significance=path_significance,
+                                skill_name_mapping=skill_code_to_name,
                             )
                             st.plotly_chart(fig_combined, use_container_width=True)
 
@@ -700,6 +707,7 @@ if model_type == "UnifiedSEM（実データ）":
                                 latent_vars=sem.latent_vars,
                                 observed_vars=sem.observed_vars,
                                 loading_threshold=0.2,
+                                skill_name_mapping=skill_code_to_name,
                             )
                             st.plotly_chart(fig_measurement, use_container_width=True)
 
@@ -784,10 +792,16 @@ if model_type == "UnifiedSEM（実データ）":
                             max_edges = len(temp_edges)
 
                             # スライダーで表示する接続数を調整（session_state で状態保持）
-                            # スライダーの初期値をsession_stateで管理
-                            slider_key = f"edge_limit_{hash(tuple(sem.latent_vars))}"
+                            # キーは一貫性を保つため固定値を使用
+                            slider_key = "unified_sem_skill_network_edge_limit"
+
+                            # max_edges が変更された場合、スライダーの値を調整
                             if slider_key not in st.session_state:
                                 st.session_state[slider_key] = min(20, max_edges) if max_edges > 0 else 1
+
+                            # max_edges を超えないようにvalidate
+                            if st.session_state[slider_key] > max_edges and max_edges > 0:
+                                st.session_state[slider_key] = max_edges
 
                             col1, col2 = st.columns([1, 4])
                             with col1:
@@ -796,8 +810,8 @@ if model_type == "UnifiedSEM（実データ）":
                                 edge_limit = st.slider(
                                     "表示するスキル間接続数（強度順）",
                                     min_value=1,
-                                    max_value=max_edges if max_edges > 0 else 1,
-                                    value=st.session_state[slider_key],
+                                    max_value=max(1, max_edges),
+                                    value=min(st.session_state[slider_key], max(1, max_edges)),
                                     step=1,
                                     help=f"接続の強度が強い順に表示します。最大：{max_edges}接続",
                                     label_visibility="collapsed",
