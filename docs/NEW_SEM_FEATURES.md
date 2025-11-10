@@ -178,7 +178,6 @@ print(f"全体適合度: RMSEA={result.overall_fit['rmsea']:.3f}")
 ### ドキュメント
 
 - `docs/SEM_IMPLEMENTATION_SUMMARY.md`: 全実装の完全サマリー
-- `docs/SEM_PROFESSIONAL_CRITIQUE.md`: プロの批判的分析
 - `docs/SEM_SCALABILITY_ANALYSIS.md`: スケーラビリティ分析
 
 ### テストスクリプト
@@ -190,7 +189,6 @@ print(f"全体適合度: RMSEA={result.overall_fit['rmsea']:.3f}")
 
 - `skillnote_recommendation/ml/unified_sem_estimator.py`: 統一SEM推定器
 - `skillnote_recommendation/ml/hierarchical_sem_estimator.py`: 階層的SEM推定器
-- `skillnote_recommendation/ml/sem_adapter.py`: 統合アダプター
 
 ---
 
