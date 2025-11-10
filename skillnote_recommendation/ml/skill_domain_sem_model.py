@@ -1079,7 +1079,7 @@ class SkillDomainSEMModel:
 
         # 力量タイプの凡例を追加
         fig.add_annotation(
-            text="<b>力量タイプ:</b> 🔵 SKILL（スキル） | 🟠 EDUCATION（教育） | 🟢 LICENSE（資格）",
+            text="<b>力量タイプ:</b> 🔵 スキル | 🟠 教育 | 🟢 資格",
             xref="paper", yref="paper",
             x=0.5, y=1.05,
             showarrow=False,

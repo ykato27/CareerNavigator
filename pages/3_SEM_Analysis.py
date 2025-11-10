@@ -496,6 +496,60 @@ with tab3:
                         else:
                             st.info("統計的有意性なし")
 
+                    # 推薦理由のグラフ可視化
+                    st.markdown("---")
+                    st.markdown("**📊 推薦理由の可視化**")
+                    st.caption("あなたが習得済みの力量から、この力量への影響経路を表示します")
+
+                    if st.button(f"🔍 推薦理由を見る", key=f"reason_btn_{i}"):
+                        with st.spinner("推薦理由を分析中..."):
+                            try:
+                                reasoning_fig = sem_recommender.visualize_recommendation_reasoning(
+                                    member_code=selected_member,
+                                    competence_code=rec.competence_code,
+                                    top_n=5
+                                )
+
+                                if reasoning_fig:
+                                    st.plotly_chart(reasoning_fig, use_container_width=True)
+
+                                    # 詳細情報
+                                    reasoning_data = sem_recommender.get_recommendation_reasoning(
+                                        member_code=selected_member,
+                                        competence_code=rec.competence_code
+                                    )
+
+                                    if reasoning_data and reasoning_data['influences']:
+                                        st.markdown("**影響経路の詳細:**")
+
+                                        influence_table = []
+                                        for inf in reasoning_data['influences'][:5]:
+                                            influence_table.append({
+                                                '習得済み力量': inf['source_name'],
+                                                'タイプ': inf['source_type'],
+                                                '習得レベル': f"{inf['source_level']:.2f}",
+                                                'パス係数': f"{inf['path_coefficient']:.3f}",
+                                                '影響度': f"{inf['influence']:.3f}",
+                                                '有意性': '✓' if inf['is_significant'] else '',
+                                            })
+
+                                        st.dataframe(
+                                            pd.DataFrame(influence_table),
+                                            hide_index=True,
+                                            use_container_width=True
+                                        )
+
+                                        st.info(f"💡 **総影響度:** {reasoning_data['total_influence']:.3f} "
+                                               f"（{reasoning_data['num_sources']}個の習得済み力量から影響）")
+                                else:
+                                    st.warning("推薦理由のグラフを生成できませんでした。この力量への影響経路が見つからない可能性があります。")
+
+                            except Exception as e:
+                                st.error(f"推薦理由の可視化エラー: {e}")
+                                import traceback
+                                with st.expander("エラー詳細"):
+                                    st.code(traceback.format_exc())
+
             # CSVダウンロード
             st.markdown("---")
             csv = rec_df.to_csv(index=False, encoding='utf-8-sig')
@@ -515,9 +569,9 @@ with tab4:
 
     st.info(
         "**インタラクティブ機能:** マウスホイールでズーム、ドラッグでパン、ノード/エッジにホバーで詳細表示\n\n"
-        "**ノード**: 個別の力量（スキル、資格、教育）を表示\n"
+        "**ノード**: 個別の力量（スキル、教育、資格）を表示\n"
         "**エッジ**: 力量間の依存関係を表示\n"
-        "**色**: 力量タイプ（🔵=SKILL、🟠=EDUCATION、🟢=LICENSE）"
+        "**色**: 力量タイプ（🔵=スキル、🟠=教育、🟢=資格）"
     )
 
     # モデル再読み込みボタン
@@ -541,7 +595,10 @@ with tab4:
             "レイアウト",
             options=["spring", "circular", "hierarchical"],
             index=0,
-            key='network_layout'
+            key='network_layout',
+            help="spring: 力学モデル（関係性が近いノードを近くに配置）\n"
+                 "circular: 円形配置（全体を見やすく）\n"
+                 "hierarchical: 階層配置（上下関係を重視）"
         )
 
     # フィルタリングオプション
@@ -555,14 +612,22 @@ with tab4:
         )
 
     with col2:
+        # セッションステートで前回の値を保持
+        if 'min_coefficient' not in st.session_state:
+            st.session_state.min_coefficient = 0.0
+
         min_coefficient = st.slider(
             "最小パス係数",
             min_value=0.0,
             max_value=0.5,
-            value=0.0,
+            value=st.session_state.min_coefficient,
             step=0.05,
-            help="この値未満のパスは表示しません"
+            help="この値未満のパスは表示しません",
+            key='min_coef_slider'
         )
+
+        # 値が変更されたら保存
+        st.session_state.min_coefficient = min_coefficient
 
     # ネットワークを表示
     if st.button("📊 ネットワークを表示", type="primary", key='show_network_btn'):
