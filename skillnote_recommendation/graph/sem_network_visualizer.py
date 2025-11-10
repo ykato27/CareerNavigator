@@ -32,20 +32,22 @@ class SEMNetworkVisualizer:
         """初期化"""
         # ノードタイプ別の色設定
         self.node_colors = {
-            "latent": "#667eea",  # 青系（潜在変数）
-            "observed": "#764ba2",  # 紫系（観測変数）
+            "latent": "#2E86DE",  # 濃い青（潜在変数）
+            "observed": "#A23B72",  # 濃いマゼンタ（観測変数）
         }
 
         # ノードサイズ
         self.node_sizes = {
-            "latent": 30,
-            "observed": 15,
+            "latent": 40,
+            "observed": 20,
         }
 
         # 有意性別の色設定（エッジ用）
         self.edge_colors = {
-            "significant": "#2ecc71",  # 緑（有意）
-            "non_significant": "#bdc3c7",  # グレー（非有意）
+            "significant": "#27AE60",  # 濃い緑（有意）
+            "non_significant": "#95A5A6",  # 濃いグレー（非有意）
+            "loading": "#3498DB",  # 明るい青（ローディング）
+            "skill_connection": "#E74C3C",  # 赤（スキル間連結）
         }
 
     def visualize_measurement_model(
@@ -151,6 +153,72 @@ class SEMNetworkVisualizer:
 
         # Plotly Figure を作成
         fig = self._create_structural_figure(G, pos, latent_vars)
+
+        return fig
+
+    def visualize_skill_network(
+        self,
+        lambda_matrix: np.ndarray,
+        latent_vars: List[str],
+        observed_vars: List[str],
+        loading_threshold: float = 0.3,
+    ) -> go.Figure:
+        """
+        スキル間のネットワークグラフを可視化
+
+        同じ潜在変数に統話するスキル同士を連結。
+        ローディング強度に基づいて接続。
+
+        Args:
+            lambda_matrix: ファクターローディング行列
+            latent_vars: 潜在変数名
+            observed_vars: 観測変数名（スキルコード）
+            loading_threshold: 接続判定閾値
+
+        Returns:
+            Plotly Figure オブジェクト
+        """
+        # NetworkXグラフを構築
+        G = nx.Graph()
+
+        # ノード追加：スキルのみ
+        for skill in observed_vars:
+            G.add_node(skill, node_type="skill")
+
+        # エッジ追加：同じ潜在変数に統話するスキル同士
+        for j, latent in enumerate(latent_vars):
+            # この潜在変数に統話するスキルを検出
+            contributing_skills = []
+            for i, skill in enumerate(observed_vars):
+                loading = abs(lambda_matrix[i, j])
+                if loading > loading_threshold:
+                    contributing_skills.append((skill, loading))
+
+            # スキル同士を接続
+            for k1 in range(len(contributing_skills)):
+                for k2 in range(k1 + 1, len(contributing_skills)):
+                    skill1, loading1 = contributing_skills[k1]
+                    skill2, loading2 = contributing_skills[k2]
+
+                    # ローディングの平均を接続強度として使用
+                    weight = (loading1 + loading2) / 2
+                    latent_context = latent
+
+                    G.add_edge(
+                        skill1,
+                        skill2,
+                        weight=weight,
+                        latent_context=latent_context,
+                    )
+
+        if not G.edges():
+            return self._create_empty_figure("スキル間の接続が見つかりませんでした")
+
+        # レイアウト計算
+        pos = nx.spring_layout(G, k=2, iterations=50, seed=42, weight="weight")
+
+        # Plotly Figure を作成
+        fig = self._create_skill_network_figure(G, pos, latent_vars)
 
         return fig
 
@@ -328,16 +396,16 @@ class SEMNetworkVisualizer:
                 y=observed_y,
                 mode="markers+text",
                 marker=dict(
-                    size=self.node_sizes["observed"],
+                    size=self.node_sizes["observed"] + 5,
                     color=self.node_colors["observed"],
-                    line=dict(color="white", width=2),
+                    line=dict(color="white", width=3),
                 ),
                 text=observed_vars,
                 textposition="middle center",
-                textfont=dict(size=10, color="white"),
+                textfont=dict(size=12, color="white", weight="bold"),
                 hovertemplate="%{text}<extra></extra>",
                 showlegend=True,
-                name="観測変数（スキル）",
+                name="スキル（観測変数）",
             )
         )
 
@@ -351,29 +419,30 @@ class SEMNetworkVisualizer:
                 y=latent_y,
                 mode="markers+text",
                 marker=dict(
-                    size=self.node_sizes["latent"],
+                    size=self.node_sizes["latent"] + 5,
                     color=self.node_colors["latent"],
-                    line=dict(color="white", width=2),
+                    line=dict(color="white", width=3),
                 ),
                 text=latent_vars,
                 textposition="middle center",
-                textfont=dict(size=11, color="white", weight="bold"),
+                textfont=dict(size=13, color="white", weight="bold"),
                 hovertemplate="%{text}<extra></extra>",
                 showlegend=True,
-                name="潜在変数",
+                name="力量カテゴリー（潜在変数）",
             )
         )
 
         fig.update_layout(
-            title="📊 測定モデル：スキル→潜在変数の関係<br><sub>矢印の太さはローディング強度</sub>",
+            title="📊 測定モデル：スキル→力量カテゴリーの関係<br><sub>矢印の太さ = ローディング強度 | 赤い線：強い関係</sub>",
             showlegend=True,
             hovermode="closest",
-            margin=dict(b=20, l=5, r=5, t=100),
+            margin=dict(b=20, l=5, r=5, t=120),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            plot_bgcolor="white",
-            width=1000,
-            height=600,
+            plot_bgcolor="#F8F9FA",
+            width=1100,
+            height=650,
+            font=dict(family="Arial, sans-serif", size=12),
         )
 
         return fig
@@ -425,28 +494,29 @@ class SEMNetworkVisualizer:
                 y=node_y,
                 mode="markers+text",
                 marker=dict(
-                    size=self.node_sizes["latent"],
+                    size=self.node_sizes["latent"] + 5,
                     color=self.node_colors["latent"],
-                    line=dict(color="white", width=2),
+                    line=dict(color="white", width=3),
                 ),
                 text=latent_vars,
                 textposition="middle center",
-                textfont=dict(size=11, color="white", weight="bold"),
+                textfont=dict(size=13, color="white", weight="bold"),
                 hovertemplate="%{text}<extra></extra>",
                 showlegend=False,
             )
         )
 
         fig.update_layout(
-            title="📊 構造モデル：潜在変数間の因果関係<br><sub>緑：有意、グレー：非有意</sub>",
+            title="📊 構造モデル：力量カテゴリー間の因果関係<br><sub>濃い緑：有意 | 濃いグレー：非有意 | 線の太さ = 係数の大きさ</sub>",
             showlegend=False,
             hovermode="closest",
-            margin=dict(b=20, l=5, r=5, t=100),
+            margin=dict(b=20, l=5, r=5, t=130),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            plot_bgcolor="white",
+            plot_bgcolor="#F8F9FA",
             width=1000,
-            height=600,
+            height=650,
+            font=dict(family="Arial, sans-serif", size=12),
         )
 
         return fig
@@ -512,13 +582,13 @@ class SEMNetworkVisualizer:
                     y=obs_y,
                     mode="markers+text",
                     marker=dict(
-                        size=self.node_sizes["observed"],
+                        size=self.node_sizes["observed"] + 3,
                         color=self.node_colors["observed"],
-                        line=dict(color="white", width=2),
+                        line=dict(color="white", width=3),
                     ),
                     text=observed_nodes,
                     textposition="middle center",
-                    textfont=dict(size=9, color="white"),
+                    textfont=dict(size=11, color="white", weight="bold"),
                     hovertemplate="%{text}<extra></extra>",
                     showlegend=True,
                     name="スキル（観測変数）",
@@ -536,28 +606,96 @@ class SEMNetworkVisualizer:
                     y=lat_y,
                     mode="markers+text",
                     marker=dict(
-                        size=self.node_sizes["latent"],
+                        size=self.node_sizes["latent"] + 3,
                         color=self.node_colors["latent"],
-                        line=dict(color="white", width=2),
+                        line=dict(color="white", width=3),
                     ),
                     text=latent_nodes,
                     textposition="middle center",
-                    textfont=dict(size=10, color="white", weight="bold"),
+                    textfont=dict(size=12, color="white", weight="bold"),
                     hovertemplate="%{text}<extra></extra>",
                     showlegend=True,
-                    name="潜在変数（力量カテゴリー）",
+                    name="力量カテゴリー（潜在変数）",
                 )
             )
 
         fig.update_layout(
-            title="🧬 統合SEM構造<br><sub>実線：有意なパス | 点線：非有意なパス | 下→上：測定 | 横：構造</sub>",
+            title="🧬 統合SEM構造<br><sub>下→上：測定モデル | 横：構造モデル | 濃い緑：有意 | 濃いグレー：非有意</sub>",
             showlegend=True,
+            hovermode="closest",
+            margin=dict(b=20, l=5, r=5, t=140),
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            plot_bgcolor="#F8F9FA",
+            width=1300,
+            height=750,
+            font=dict(family="Arial, sans-serif", size=12),
+        )
+
+        return fig
+
+    def _create_skill_network_figure(
+        self,
+        G: nx.Graph,
+        pos: Dict[str, Tuple[float, float]],
+        latent_vars: List[str],
+    ) -> go.Figure:
+        """
+        スキルネットワークのFigureを作成
+        """
+        fig = go.Figure()
+
+        # エッジを描画
+        for edge in G.edges(data=True):
+            from_node, to_node, data = edge
+            x0, y0 = pos[from_node]
+            x1, y1 = pos[to_node]
+
+            weight = data["weight"]
+            line_width = 2 + weight * 3
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[x0, x1, None],
+                    y=[y0, y1, None],
+                    mode="lines",
+                    line=dict(width=line_width, color="#E74C3C"),
+                    hovertemplate=f"{from_node} ↔ {to_node}<br>接続強度: {weight:.3f}<extra></extra>",
+                    showlegend=False,
+                )
+            )
+
+        # ノードを描画
+        node_x = [pos[node][0] for node in G.nodes()]
+        node_y = [pos[node][1] for node in G.nodes()]
+
+        fig.add_trace(
+            go.Scatter(
+                x=node_x,
+                y=node_y,
+                mode="markers+text",
+                marker=dict(
+                    size=self.node_sizes["observed"],
+                    color=self.node_colors["observed"],
+                    line=dict(color="white", width=3),
+                ),
+                text=list(G.nodes()),
+                textposition="top center",
+                textfont=dict(size=12, color="white", weight="bold"),
+                hovertemplate="%{text}<extra></extra>",
+                showlegend=False,
+            )
+        )
+
+        fig.update_layout(
+            title="📊 スキル間ネットワーク<br><sub>同じ力量カテゴリーに統話するスキル同士の関連性</sub>",
+            showlegend=False,
             hovermode="closest",
             margin=dict(b=20, l=5, r=5, t=120),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            plot_bgcolor="white",
-            width=1200,
+            plot_bgcolor="#F8F9FA",
+            width=1000,
             height=700,
         )
 
