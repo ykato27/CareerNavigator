@@ -161,7 +161,9 @@ class SEMNetworkVisualizer:
         lambda_matrix: np.ndarray,
         latent_vars: List[str],
         observed_vars: List[str],
+        skill_name_mapping: Optional[Dict[str, str]] = None,
         loading_threshold: float = 0.3,
+        edge_limit: Optional[int] = None,
     ) -> go.Figure:
         """
         スキル間のネットワークグラフを可視化
@@ -173,7 +175,9 @@ class SEMNetworkVisualizer:
             lambda_matrix: ファクターローディング行列
             latent_vars: 潜在変数名
             observed_vars: 観測変数名（スキルコード）
+            skill_name_mapping: スキルコード → スキル名（日本語）のマッピング
             loading_threshold: 接続判定閾値
+            edge_limit: 表示するエッジの最大本数（Noneの場合は全て表示）
 
         Returns:
             Plotly Figure オブジェクト
@@ -183,9 +187,13 @@ class SEMNetworkVisualizer:
 
         # ノード追加：スキルのみ
         for skill in observed_vars:
-            G.add_node(skill, node_type="skill")
+            # スキル名マッピングがあれば使用、なければコードを使用
+            display_name = skill_name_mapping.get(skill, skill) if skill_name_mapping else skill
+            G.add_node(skill, node_type="skill", display_name=display_name)
 
         # エッジ追加：同じ潜在変数に統話するスキル同士
+        all_edges = []  # 強度順でソート用
+
         for j, latent in enumerate(latent_vars):
             # この潜在変数に統話するスキルを検出
             contributing_skills = []
@@ -204,15 +212,26 @@ class SEMNetworkVisualizer:
                     weight = (loading1 + loading2) / 2
                     latent_context = latent
 
-                    G.add_edge(
-                        skill1,
-                        skill2,
-                        weight=weight,
-                        latent_context=latent_context,
-                    )
+                    all_edges.append({
+                        'from': skill1,
+                        'to': skill2,
+                        'weight': weight,
+                        'latent': latent_context,
+                    })
 
-        if not G.edges():
+        if not all_edges:
             return self._create_empty_figure("スキル間の接続が見つかりませんでした")
+
+        # エッジを強度でソート（強い順）
+        all_edges.sort(key=lambda x: x['weight'], reverse=True)
+
+        # edge_limit が指定されていれば、上位のみを使用
+        if edge_limit is not None:
+            all_edges = all_edges[:edge_limit]
+
+        # グラフにエッジを追加
+        for edge in all_edges:
+            G.add_edge(edge['from'], edge['to'], weight=edge['weight'], latent=edge['latent'])
 
         # レイアウト計算
         pos = nx.spring_layout(G, k=2, iterations=50, seed=42, weight="weight")
@@ -642,6 +661,8 @@ class SEMNetworkVisualizer:
     ) -> go.Figure:
         """
         スキルネットワークのFigureを作成
+
+        ノードに display_name 属性がある場合は日本語名を使用
         """
         fig = go.Figure()
 
@@ -669,17 +690,24 @@ class SEMNetworkVisualizer:
         node_x = [pos[node][0] for node in G.nodes()]
         node_y = [pos[node][1] for node in G.nodes()]
 
+        # ノードテキストを取得（display_name があればそれを使用）
+        node_texts = []
+        for node in G.nodes():
+            node_attr = G.nodes[node]
+            display_name = node_attr.get('display_name', node)
+            node_texts.append(display_name)
+
         fig.add_trace(
             go.Scatter(
                 x=node_x,
                 y=node_y,
                 mode="markers+text",
                 marker=dict(
-                    size=self.node_sizes["observed"],
+                    size=self.node_sizes["observed"] + 5,
                     color=self.node_colors["observed"],
                     line=dict(color="white", width=3),
                 ),
-                text=list(G.nodes()),
+                text=node_texts,
                 textposition="top center",
                 textfont=dict(size=12, color="white", weight="bold"),
                 hovertemplate="%{text}<extra></extra>",
@@ -695,8 +723,8 @@ class SEMNetworkVisualizer:
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             plot_bgcolor="#F8F9FA",
-            width=1000,
-            height=700,
+            width=1100,
+            height=750,
         )
 
         return fig
