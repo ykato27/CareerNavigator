@@ -279,13 +279,16 @@ if model_type == "UnifiedSEM（実データ）":
         with st.expander("🔧 カテゴリーを詳細調整（上級者向け）", expanded=False):
             st.write("複数のカテゴリーを選択してください（推奨: 2~5カテゴリー、スキル数50~200個）")
 
+            # 全件選択チェックボックス
+            select_all = st.checkbox("🌍 全件選択", value=False, key="unified_select_all")
+
             # カテゴリー情報の表示
             category_info = [f"{cat} ({category_counts.get(cat, 0)}個)" for cat in available_categories]
 
             selected_categories_display = st.multiselect(
                 "力量カテゴリー",
                 options=category_info,
-                default=[],
+                default=category_info if select_all else [],
                 help="複数のカテゴリーを選択してください。UnifiedSEMは200スキル程度まで推奨"
             )
 
@@ -468,6 +471,10 @@ if model_type == "UnifiedSEM（実データ）":
                 # UnifiedSEM推定
                 sem = UnifiedSEMEstimator(measurement_specs, structural_specs, method='ML')
                 sem.fit(pivot_data)
+
+                # 推定結果をsession_stateに保存（スライダー変更時も結果を保持）
+                st.session_state['unified_sem_result'] = sem
+                st.session_state['unified_sem_selected_competences'] = selected_competences
 
                 st.success("✅ 推定完了！")
 
@@ -771,6 +778,11 @@ if model_type == "UnifiedSEM（実データ）":
                                 "同じ力量カテゴリーに統話するスキル同士の関連性"
                             )
 
+                            # session_stateから推定結果を取得（スライダー変更時も使用）
+                            if 'unified_sem_result' in st.session_state:
+                                sem = st.session_state['unified_sem_result']
+                                selected_competences = st.session_state['unified_sem_selected_competences']
+
                             # スキルコード → スキル名（日本語）のマッピングを作成
                             skill_code_to_name = dict(zip(
                                 competence_master['力量コード'],
@@ -930,13 +942,16 @@ elif model_type == "HierarchicalSEM（実データ）":
         with st.expander("🔧 カテゴリーを詳細調整（上級者向け）", expanded=False):
             st.write("複数のカテゴリーを選択してください（推奨: 5~20カテゴリー、200~1000スキル）")
 
+            # 全件選択チェックボックス
+            select_all_hier = st.checkbox("🌍 全件選択", value=False, key="hier_select_all")
+
             # カテゴリー情報の表示
             category_info = [f"{cat} ({category_counts.get(cat, 0)}個)" for cat in available_categories]
 
             selected_categories_display = st.multiselect(
                 "力量カテゴリー",
                 options=category_info,
-                default=[],
+                default=category_info if select_all_hier else [],
                 help="複数のカテゴリーを選択してください。HierarchicalSEMは1000スキルまで対応",
                 key="hier_multiselect"
             )
