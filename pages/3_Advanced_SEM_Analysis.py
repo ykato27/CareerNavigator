@@ -172,47 +172,87 @@ st.subheader("🎯 モデル選択")
 
 model_type = st.radio(
     "使用するSEMモデル",
-    options=["デモモード（シミュレーションデータ）", "UnifiedSEM（実データ）", "HierarchicalSEM（実データ）"],
-    help="データサイズに応じて適切なモデルを選択してください"
+    options=["UnifiedSEM（実データ）", "HierarchicalSEM（実データ）"],
+    index=0,
+    help="データサイズに応じて適切なモデルを選択してください。UnifiedSEM: ~200スキル、HierarchicalSEM: 200~1000スキル"
 )
 
 # =========================================================
-# デモモード
+# UnifiedSEM（実データ）
 # =========================================================
 
-if model_type == "デモモード（シミュレーションデータ）":
-    st.info("📊 デモモード: シミュレーションデータでSEMの動作を確認できます")
+if model_type == "UnifiedSEM（実データ）":
+    st.info("📊 実データを使用したUnifiedSEM推定を実行します")
 
-    # シミュレーションデータの生成
-    with st.expander("🔧 シミュレーション設定", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            n_samples = st.slider("サンプル数", 100, 1000, 300, 50)
-        with col2:
-            n_skills_per_domain = st.slider("ドメインあたりスキル数", 3, 20, 10, 1)
+    # カテゴリー選択
+    with st.expander("🔧 ドメイン設定", expanded=True):
+        st.markdown("### 力量カテゴリーの選択")
+        st.write("分析対象とする力量カテゴリーを選択してください（推奨: 2~5カテゴリー、スキル数50~200個）")
 
-    if st.button("🚀 デモを実行", type="primary"):
-        with st.spinner("シミュレーションデータを生成中..."):
-            # データ生成
-            np.random.seed(42)
+        # 利用可能なカテゴリーを取得
+        available_categories = competence_master['力量カテゴリー名'].unique().tolist()
+        available_categories = [cat for cat in available_categories if pd.notna(cat)]
 
-            # 潜在変数
-            beginner = np.random.normal(0, 1, n_samples)
-            intermediate = 0.7 * beginner + np.random.normal(0, 0.5, n_samples)
+        # カテゴリーごとのスキル数を表示
+        category_counts = competence_master.groupby('力量カテゴリー名').size().to_dict()
+        category_info = [f"{cat} ({category_counts.get(cat, 0)}個)" for cat in available_categories]
 
-            # スキルデータ
-            data = {}
-            for i in range(n_skills_per_domain):
-                loading = np.random.uniform(0.7, 0.9)
-                data[f'Python_skill_{i+1}'] = loading * beginner + np.random.normal(0, 0.3, n_samples)
+        selected_categories_display = st.multiselect(
+            "力量カテゴリー",
+            options=category_info,
+            default=category_info[:min(3, len(category_info))],
+            help="複数のカテゴリーを選択してください。UnifiedSEMは200スキル程度まで推奨"
+        )
 
-            for i in range(n_skills_per_domain):
-                loading = np.random.uniform(0.7, 0.9)
-                data[f'Web_skill_{i+1}'] = loading * intermediate + np.random.normal(0, 0.3, n_samples)
+        # 表示名から実際のカテゴリー名を抽出
+        selected_categories = [cat.rsplit(' (', 1)[0] for cat in selected_categories_display]
 
-            sim_data = pd.DataFrame(data)
+        # 選択されたカテゴリーの統計
+        if selected_categories:
+            selected_competences = competence_master[
+                competence_master['力量カテゴリー名'].isin(selected_categories)
+            ]
+            total_skills = len(selected_competences)
+            st.metric("選択されたスキル数", total_skills)
 
-        # UnifiedSEMで推定
+            if total_skills > 200:
+                st.warning(f"⚠️ スキル数が{total_skills}個と多いです。UnifiedSEMは200個程度まで推奨。HierarchicalSEMの使用を検討してください。")
+            elif total_skills < 10:
+                st.error("❌ スキル数が少なすぎます。最低10個以上を選択してください。")
+
+    if st.button("🚀 UnifiedSEM推定を実行", type="primary", disabled=not selected_categories or total_skills < 10):
+        with st.spinner("データを準備中..."):
+            try:
+                # データの準備: member_competence からピボットテーブルを作成
+                selected_skill_codes = selected_competences['力量コード'].tolist()
+
+                # フィルタリング
+                filtered_mc = member_competence[
+                    member_competence['力量コード'].isin(selected_skill_codes)
+                ]
+
+                # ピボット: 行=メンバー、列=力量コード、値=正規化レベル
+                pivot_data = filtered_mc.pivot_table(
+                    index='メンバーコード',
+                    columns='力量コード',
+                    values='正規化レベル',
+                    aggfunc='first'
+                ).fillna(0)  # 未習得は0
+
+                st.success(f"✅ データ準備完了: {len(pivot_data)}人 × {len(pivot_data.columns)}スキル")
+
+                # 最低サンプル数のチェック
+                min_samples = max(50, total_skills * 3)
+                if len(pivot_data) < min_samples:
+                    st.warning(f"⚠️ サンプル数が少ない可能性があります（推奨: {min_samples}人以上、現在: {len(pivot_data)}人）")
+
+            except Exception as e:
+                st.error(f"❌ データ準備エラー: {e}")
+                import traceback
+                with st.expander("エラー詳細"):
+                    st.code(traceback.format_exc())
+                st.stop()
+
         with st.spinner("UnifiedSEM推定中..."):
             try:
                 # モジュールロード
@@ -221,31 +261,44 @@ if model_type == "デモモード（シミュレーションデータ）":
                 MeasurementModelSpec = unified_sem_module.MeasurementModelSpec
                 StructuralModelSpec = unified_sem_module.StructuralModelSpec
 
-                # モデル仕様
-                measurement = [
-                    MeasurementModelSpec(
-                        '初級力量',
-                        [f'Python_skill_{i+1}' for i in range(n_skills_per_domain)],
-                        reference_indicator='Python_skill_1'
-                    ),
-                    MeasurementModelSpec(
-                        '中級力量',
-                        [f'Web_skill_{i+1}' for i in range(n_skills_per_domain)],
-                        reference_indicator='Web_skill_1'
-                    ),
-                ]
+                # 測定モデル仕様の作成（カテゴリーごと）
+                measurement_specs = []
+                for category in selected_categories:
+                    cat_competences = selected_competences[
+                        selected_competences['力量カテゴリー名'] == category
+                    ]
+                    skill_codes = cat_competences['力量コード'].tolist()
 
-                structural = [
-                    StructuralModelSpec('初級力量', '中級力量'),
-                ]
+                    # ピボットデータに存在するスキルのみを使用
+                    skill_codes = [code for code in skill_codes if code in pivot_data.columns]
 
-                # 推定
-                sem = UnifiedSEMEstimator(measurement, structural, method='ML')
-                sem.fit(sim_data)
+                    if len(skill_codes) >= 2:  # 最低2個のスキルが必要
+                        measurement_specs.append(
+                            MeasurementModelSpec(
+                                latent_var=category,
+                                indicators=skill_codes,
+                                reference_indicator=skill_codes[0]  # 最初のスキルを参照指標に
+                            )
+                        )
+
+                # 構造モデル仕様の作成（全カテゴリー間の関係を想定）
+                structural_specs = []
+                for i, from_cat in enumerate(selected_categories):
+                    for j, to_cat in enumerate(selected_categories):
+                        if i < j:  # 上三角のみ（一方向の関係）
+                            structural_specs.append(
+                                StructuralModelSpec(from_latent=from_cat, to_latent=to_cat)
+                            )
+
+                st.info(f"📐 測定モデル: {len(measurement_specs)}個の潜在変数、構造モデル: {len(structural_specs)}個のパス")
+
+                # UnifiedSEM推定
+                sem = UnifiedSEMEstimator(measurement_specs, structural_specs, method='ML')
+                sem.fit(pivot_data)
 
                 st.success("✅ 推定完了！")
 
-                # 結果表示
+                # 結果表示（デモモードと同じ形式）
                 st.markdown("---")
                 st.subheader("📊 推定結果")
 
@@ -286,10 +339,10 @@ if model_type == "デモモード（シミュレーションデータ）":
                     elif fit.is_good_fit():
                         st.info("✅ 良好な適合度です")
                     else:
-                        st.warning("⚠️ 適合度が低いです")
+                        st.warning("⚠️ 適合度が低いです。モデル仕様の見直しを推奨します。")
 
                 with col2:
-                    st.markdown("### 構造係数（力量同士の関係性）")
+                    st.markdown("### 構造係数（力量カテゴリー間の関係性）")
                     relationships = sem.get_skill_relationships()
 
                     if len(relationships) > 0:
@@ -331,6 +384,13 @@ if model_type == "デモモード（シミュレーションデータ）":
                     columns=sem.latent_vars
                 )
 
+                # 力量コードを力量名に変換して表示
+                skill_code_to_name = dict(zip(
+                    competence_master['力量コード'],
+                    competence_master['力量名']
+                ))
+                loading_df.index = [skill_code_to_name.get(code, code) for code in loading_df.index]
+
                 # ヒートマップ
                 fig = px.imshow(
                     loading_df.T,
@@ -338,7 +398,7 @@ if model_type == "デモモード（シミュレーションデータ）":
                     aspect="auto",
                     color_continuous_scale='RdBu_r',
                 )
-                fig.update_layout(height=300)
+                fig.update_layout(height=400)
 
                 st.plotly_chart(fig, use_container_width=True)
 
@@ -366,33 +426,256 @@ if model_type == "デモモード（シミュレーションデータ）":
                     st.code(traceback.format_exc())
 
 # =========================================================
-# UnifiedSEM（実データ）
-# =========================================================
-
-elif model_type == "UnifiedSEM（実データ）":
-    st.warning("🚧 実データでのUnifiedSEM推定は準備中です")
-
-    st.info("""
-    実装予定の機能:
-    - 実際の力量データからドメイン定義を自動抽出
-    - 測定モデルと構造モデルの対話的設定
-    - リアルタイム推定と結果表示
-    """)
-
-# =========================================================
 # HierarchicalSEM（実データ）
 # =========================================================
 
 elif model_type == "HierarchicalSEM（実データ）":
-    st.warning("🚧 実データでのHierarchicalSEM推定は準備中です")
+    st.info("📊 実データを使用したHierarchicalSEM推定を実行します（大規模データ対応）")
 
-    st.info("""
-    実装予定の機能:
-    - カテゴリー情報から階層構造を自動生成
-    - 並列処理による高速推定
-    - ドメイン別の適合度評価
-    - 全レベルのスコア可視化
-    """)
+    # カテゴリー選択
+    with st.expander("🔧 階層構造設定", expanded=True):
+        st.markdown("### 力量カテゴリーの選択")
+        st.write("分析対象とする力量カテゴリーを選択してください（推奨: 5~20カテゴリー、200~1000スキル）")
+
+        # 利用可能なカテゴリーを取得
+        available_categories = competence_master['力量カテゴリー名'].unique().tolist()
+        available_categories = [cat for cat in available_categories if pd.notna(cat)]
+
+        # カテゴリーごとのスキル数を表示
+        category_counts = competence_master.groupby('力量カテゴリー名').size().to_dict()
+        category_info = [f"{cat} ({category_counts.get(cat, 0)}個)" for cat in available_categories]
+
+        selected_categories_display = st.multiselect(
+            "力量カテゴリー",
+            options=category_info,
+            default=category_info[:min(10, len(category_info))],
+            help="複数のカテゴリーを選択してください。HierarchicalSEMは1000スキルまで対応"
+        )
+
+        # 表示名から実際のカテゴリー名を抽出
+        selected_categories = [cat.rsplit(' (', 1)[0] for cat in selected_categories_display]
+
+        # 並列処理設定
+        use_parallel = st.checkbox("並列処理を有効化（高速化）", value=True)
+        if use_parallel:
+            n_jobs = st.slider("並列ジョブ数", 1, 8, 4, help="CPUコア数に応じて調整してください")
+        else:
+            n_jobs = 1
+
+        # 選択されたカテゴリーの統計
+        if selected_categories:
+            selected_competences = competence_master[
+                competence_master['力量カテゴリー名'].isin(selected_categories)
+            ]
+            total_skills = len(selected_competences)
+            st.metric("選択されたスキル数", total_skills)
+
+            if total_skills > 1000:
+                st.warning(f"⚠️ スキル数が{total_skills}個と非常に多いです。処理に時間がかかる場合があります。")
+            elif total_skills < 20:
+                st.error("❌ スキル数が少なすぎます。最低20個以上を選択してください。")
+
+    if st.button("🚀 HierarchicalSEM推定を実行", type="primary", disabled=not selected_categories or total_skills < 20):
+        with st.spinner("データを準備中..."):
+            try:
+                # データの準備
+                selected_skill_codes = selected_competences['力量コード'].tolist()
+
+                # フィルタリング
+                filtered_mc = member_competence[
+                    member_competence['力量コード'].isin(selected_skill_codes)
+                ]
+
+                # ピボット: 行=メンバー、列=力量コード、値=正規化レベル
+                pivot_data = filtered_mc.pivot_table(
+                    index='メンバーコード',
+                    columns='力量コード',
+                    values='正規化レベル',
+                    aggfunc='first'
+                ).fillna(0)
+
+                st.success(f"✅ データ準備完了: {len(pivot_data)}人 × {len(pivot_data.columns)}スキル")
+
+            except Exception as e:
+                st.error(f"❌ データ準備エラー: {e}")
+                import traceback
+                with st.expander("エラー詳細"):
+                    st.code(traceback.format_exc())
+                st.stop()
+
+        with st.spinner("階層構造を構築中..."):
+            try:
+                # モジュールロード
+                hierarchical_sem_module = load_hierarchical_sem()
+                HierarchicalSEMEstimator = hierarchical_sem_module.HierarchicalSEMEstimator
+                DomainDefinition = hierarchical_sem_module.DomainDefinition
+
+                # ドメイン定義の作成
+                domain_definitions = []
+
+                # Level 1: カテゴリーごとのドメイン
+                for category in selected_categories:
+                    cat_competences = selected_competences[
+                        selected_competences['力量カテゴリー名'] == category
+                    ]
+                    skill_codes = cat_competences['力量コード'].tolist()
+
+                    # ピボットデータに存在するスキルのみを使用
+                    skill_codes = [code for code in skill_codes if code in pivot_data.columns]
+
+                    if len(skill_codes) >= 2:
+                        domain_definitions.append(
+                            DomainDefinition(
+                                domain_name=category,
+                                skills=skill_codes,
+                                parent_domain='全体力量',
+                                level=1
+                            )
+                        )
+
+                # Level 2: 統合レベル（全カテゴリーを統合）
+                domain_definitions.append(
+                    DomainDefinition(
+                        domain_name='全体力量',
+                        skills=selected_categories,  # カテゴリー名をスキルとして扱う
+                        level=2
+                    )
+                )
+
+                st.success(f"✅ 階層構造構築完了: {len(domain_definitions)-1}個のドメイン + 統合層")
+
+            except Exception as e:
+                st.error(f"❌ 階層構造構築エラー: {e}")
+                import traceback
+                with st.expander("エラー詳細"):
+                    st.code(traceback.format_exc())
+                st.stop()
+
+        with st.spinner(f"HierarchicalSEM推定中（並列度: {n_jobs}）..."):
+            try:
+                import time
+                start_time = time.time()
+
+                # HierarchicalSEM推定
+                hsem = HierarchicalSEMEstimator(
+                    domain_definitions=domain_definitions,
+                    confidence_level=0.95,
+                    method='ML'
+                )
+                result = hsem.fit(pivot_data, n_jobs=n_jobs, use_multiprocessing=False)
+
+                elapsed_time = time.time() - start_time
+                st.success(f"✅ 推定完了！（{elapsed_time:.1f}秒）")
+
+                # 結果表示
+                st.markdown("---")
+                st.subheader("📊 推定結果")
+
+                # 統合モデルの適合度
+                if result.integration_model and result.integration_fit_indices:
+                    st.markdown("### 統合モデルの適合度指標")
+                    fit = result.integration_fit_indices
+
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("RMSEA", f"{fit.rmsea:.3f}", delta="良好" if fit.rmsea < 0.08 else "要改善", delta_color="inverse")
+                    with col2:
+                        st.metric("CFI", f"{fit.cfi:.3f}", delta="良好" if fit.cfi > 0.90 else "要改善", delta_color="normal")
+                    with col3:
+                        st.metric("TLI", f"{fit.tli:.3f}", delta="良好" if fit.tli > 0.90 else "要改善", delta_color="normal")
+                    with col4:
+                        st.metric("SRMR", f"{fit.srmr:.3f}", delta="良好" if fit.srmr < 0.08 else "要改善", delta_color="inverse")
+
+                    # 総合判定
+                    if fit.is_excellent_fit():
+                        st.success("✅ 優れた適合度です！")
+                    elif fit.is_good_fit():
+                        st.info("✅ 良好な適合度です")
+                    else:
+                        st.warning("⚠️ 適合度が低いです。")
+
+                # ドメイン別の適合度
+                st.markdown("### ドメイン別の適合度")
+
+                domain_fit_data = []
+                for domain_name, fit in result.domain_fit_indices.items():
+                    domain_fit_data.append({
+                        'ドメイン': domain_name,
+                        'RMSEA': f"{fit.rmsea:.3f}",
+                        'CFI': f"{fit.cfi:.3f}",
+                        'TLI': f"{fit.tli:.3f}",
+                        'SRMR': f"{fit.srmr:.3f}",
+                        'AIC': f"{fit.aic:.1f}",
+                        'BIC': f"{fit.bic:.1f}",
+                        '判定': '優秀' if fit.is_excellent_fit() else ('良好' if fit.is_good_fit() else '要改善')
+                    })
+
+                domain_fit_df = pd.DataFrame(domain_fit_data)
+                st.dataframe(domain_fit_df, use_container_width=True, hide_index=True)
+
+                # ドメインスコア
+                if result.domain_scores is not None:
+                    st.markdown("### ドメインスコア統計")
+
+                    score_stats = result.domain_scores.describe().T
+                    score_stats = score_stats[['mean', 'std', 'min', 'max']]
+                    score_stats.columns = ['平均', '標準偏差', '最小値', '最大値']
+                    st.dataframe(score_stats, use_container_width=True)
+
+                    # ドメインスコアの分布
+                    fig = go.Figure()
+                    for col in result.domain_scores.columns:
+                        fig.add_trace(go.Box(
+                            y=result.domain_scores[col],
+                            name=col,
+                            boxmean='sd'
+                        ))
+
+                    fig.update_layout(
+                        title='ドメインスコアの分布',
+                        yaxis_title='スコア',
+                        height=400,
+                        showlegend=True
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # 詳細データ
+                with st.expander("📋 詳細データ"):
+                    st.markdown("#### 統合モデルの構造係数")
+                    if result.integration_model:
+                        relationships = result.integration_model.get_skill_relationships()
+                        if len(relationships) > 0:
+                            st.dataframe(relationships, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("構造パスが定義されていません")
+
+                    st.markdown("#### ドメイン別モデルの詳細")
+                    for domain_name, model in result.domain_models.items():
+                        with st.expander(f"🔍 {domain_name}"):
+                            st.write(f"**観測変数数**: {len(model.observed_vars)}")
+                            st.write(f"**潜在変数数**: {len(model.latent_vars)}")
+
+                            loading_df = pd.DataFrame(
+                                model.Lambda,
+                                index=model.observed_vars,
+                                columns=model.latent_vars
+                            )
+
+                            # 力量コードを力量名に変換
+                            skill_code_to_name = dict(zip(
+                                competence_master['力量コード'],
+                                competence_master['力量名']
+                            ))
+                            loading_df.index = [skill_code_to_name.get(code, code) for code in loading_df.index]
+
+                            st.dataframe(loading_df, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"❌ 推定エラー: {e}")
+                import traceback
+                with st.expander("エラー詳細"):
+                    st.code(traceback.format_exc())
 
 # =========================================================
 # モデル比較ダッシュボード
