@@ -528,8 +528,8 @@ if model_type == "UnifiedSEM（実データ）":
                         visualizer = SEMNetworkVisualizer()
 
                         # タブで表示方法を選択
-                        tab1, tab2, tab3 = st.tabs(
-                            ["📈 統合モデル", "🔬 測定モデル", "⚙️ 構造モデル"]
+                        tab1, tab2, tab3, tab4 = st.tabs(
+                            ["📈 統合モデル", "🔬 測定モデル", "⚙️ 構造モデル", "🕸️ スキル間ネットワーク"]
                         )
 
                         with tab1:
@@ -582,6 +582,20 @@ if model_type == "UnifiedSEM（実データ）":
                                 path_significance=path_significance,
                             )
                             st.plotly_chart(fig_structural, use_container_width=True)
+
+                        with tab4:
+                            st.markdown(
+                                "### スキル間ネットワーク\n"
+                                "同じ力量カテゴリーに統話するスキル同士の関連性"
+                            )
+
+                            fig_skill_network = visualizer.visualize_skill_network(
+                                lambda_matrix=sem.Lambda,
+                                latent_vars=sem.latent_vars,
+                                observed_vars=sem.observed_vars,
+                                loading_threshold=0.2,
+                            )
+                            st.plotly_chart(fig_skill_network, use_container_width=True)
 
                         st.success("✅ ネットワークグラフを生成しました")
 

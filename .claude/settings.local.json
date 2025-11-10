@@ -12,7 +12,8 @@
       "Bash(git reset:*)",
       "Bash(cat:*)",
       "Bash(uv run pytest:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []
