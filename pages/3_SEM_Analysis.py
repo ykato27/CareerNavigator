@@ -1443,13 +1443,41 @@ elif model_type == "HierarchicalSEM（実データ）":
 
                 # 詳細データ
                 with st.expander("📋 詳細データ"):
-                    st.markdown("#### 統合モデルの構造係数")
+                    st.markdown("#### 統合モデル（カテゴリー間の関係）")
                     if result.integration_model:
+                        # 構造係数（カテゴリー間の因果関係）
+                        st.markdown("##### 構造係数（カテゴリー間の因果パス）")
                         relationships = result.integration_model.get_skill_relationships()
                         if len(relationships) > 0:
                             st.dataframe(relationships, use_container_width=True, hide_index=True)
                         else:
-                            st.info("構造パスが定義されていません")
+                            st.info("💡 構造パスが定義されていません（カテゴリー間に因果関係を仮定していないモデルです）")
+
+                        # ファクターローディング（カテゴリー → 統合力量）
+                        st.markdown("##### ファクターローディング（各カテゴリーの統合力量への貢献度）")
+
+                        loading_df = pd.DataFrame(
+                            result.integration_model.Lambda,
+                            index=result.integration_model.observed_vars,
+                            columns=result.integration_model.latent_vars
+                        )
+
+                        # 絶対値でソート
+                        loading_df['最大ローディング'] = loading_df.abs().max(axis=1)
+                        loading_df = loading_df.sort_values('最大ローディング', ascending=False)
+                        loading_df = loading_df.drop(columns=['最大ローディング'])
+
+                        st.dataframe(
+                            loading_df.style.background_gradient(cmap='RdYlGn', axis=None, vmin=-1, vmax=1),
+                            use_container_width=True
+                        )
+
+                        st.markdown("""
+                        **読み方:**
+                        - 値が大きいほど、そのカテゴリーが統合力量に強く影響している
+                        - 正の値: 正の相関（カテゴリースコアが高いと統合力量も高い）
+                        - 負の値: 負の相関（稀）
+                        """)
 
                     st.markdown("#### ドメイン別モデルの詳細")
                     for domain_name, model in result.domain_models.items():
