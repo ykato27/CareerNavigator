@@ -937,13 +937,24 @@ class SEMNetworkVisualizer:
                     textposition="top center",
                     textfont=dict(size=12, color="black", weight="bold"),
                     hovertemplate="%{text}<extra></extra>",
-                    showlegend=False,
+                    showlegend=True,
+                    name="🔵 スキル",
                 )
             )
 
         fig.update_layout(
             title="📊 スキル間ネットワーク（有向グラフ）<br><sub>同じ力量カテゴリーに統話するスキル同士の関連性（矢印：ローディング高→低）</sub>",
-            showlegend=False,
+            showlegend=True,  # 凡例を表示
+            legend=dict(
+                orientation="v",
+                yanchor="top",
+                y=0.99,
+                xanchor="right",
+                x=0.99,
+                bgcolor="rgba(255, 255, 255, 0.9)",
+                bordercolor="gray",
+                borderwidth=1,
+            ),
             hovermode="closest",
             margin=dict(b=20, l=5, r=5, t=120),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
