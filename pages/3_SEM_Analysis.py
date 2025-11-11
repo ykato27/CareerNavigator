@@ -295,17 +295,37 @@ if model_type == "UnifiedSEM（実データ）":
         with st.expander("🔧 カテゴリーを詳細調整（上級者向け）", expanded=False):
             st.write("複数のカテゴリーを選択してください（推奨: 2~5カテゴリー、スキル数50~200個）")
 
-            # 全件選択チェックボックス
-            select_all = st.checkbox("🌍 全件選択", value=False, key="unified_select_all")
+            # 全件選択ボタン（チェックボックスではなくボタンで実装）
+            col_a, col_b = st.columns([1, 3])
+            with col_a:
+                if st.button("🌍 全件選択", key="unified_select_all_btn", use_container_width=True):
+                    # 全カテゴリーを選択してsession_stateに保存
+                    st.session_state['unified_selected_categories'] = available_categories[:]
+                    st.success(f"✅ 全{len(available_categories)}カテゴリーを選択しました")
+
+            with col_b:
+                if st.button("🗑️ 選択解除", key="unified_clear_all_btn", use_container_width=True):
+                    # 選択を解除
+                    if 'unified_selected_categories' in st.session_state:
+                        del st.session_state['unified_selected_categories']
+                    st.info("選択を解除しました")
 
             # カテゴリー情報の表示
             category_info = [f"{cat} ({category_counts.get(cat, 0)}個)" for cat in available_categories]
 
+            # session_stateから現在の選択を取得
+            current_selection = []
+            if 'unified_selected_categories' in st.session_state:
+                current_categories = st.session_state['unified_selected_categories']
+                current_selection = [f"{cat} ({category_counts.get(cat, 0)}個)"
+                                    for cat in current_categories if cat in available_categories]
+
             selected_categories_display = st.multiselect(
                 "力量カテゴリー",
                 options=category_info,
-                default=category_info if select_all else [],
-                help="複数のカテゴリーを選択してください。UnifiedSEMは200スキル程度まで推奨"
+                default=current_selection,
+                help="複数のカテゴリーを選択してください。UnifiedSEMは200スキル程度まで推奨",
+                key="unified_multiselect"
             )
 
             # 表示名から実際のカテゴリー名を抽出
@@ -965,16 +985,35 @@ elif model_type == "HierarchicalSEM（実データ）":
         with st.expander("🔧 カテゴリーを詳細調整（上級者向け）", expanded=False):
             st.write("複数のカテゴリーを選択してください（推奨: 5~20カテゴリー、200~1000スキル）")
 
-            # 全件選択チェックボックス
-            select_all_hier = st.checkbox("🌍 全件選択", value=False, key="hier_select_all")
+            # 全件選択ボタン（チェックボックスではなくボタンで実装）
+            col_a, col_b = st.columns([1, 3])
+            with col_a:
+                if st.button("🌍 全件選択", key="hier_select_all_btn", use_container_width=True):
+                    # 全カテゴリーを選択してsession_stateに保存
+                    st.session_state['hierarchical_selected_categories'] = available_categories[:]
+                    st.success(f"✅ 全{len(available_categories)}カテゴリーを選択しました")
+
+            with col_b:
+                if st.button("🗑️ 選択解除", key="hier_clear_all_btn", use_container_width=True):
+                    # 選択を解除
+                    if 'hierarchical_selected_categories' in st.session_state:
+                        del st.session_state['hierarchical_selected_categories']
+                    st.info("選択を解除しました")
 
             # カテゴリー情報の表示
             category_info = [f"{cat} ({category_counts.get(cat, 0)}個)" for cat in available_categories]
 
+            # session_stateから現在の選択を取得
+            current_selection = []
+            if 'hierarchical_selected_categories' in st.session_state:
+                current_categories = st.session_state['hierarchical_selected_categories']
+                current_selection = [f"{cat} ({category_counts.get(cat, 0)}個)"
+                                    for cat in current_categories if cat in available_categories]
+
             selected_categories_display = st.multiselect(
                 "力量カテゴリー",
                 options=category_info,
-                default=category_info if select_all_hier else [],
+                default=current_selection,
                 help="複数のカテゴリーを選択してください。HierarchicalSEMは1000スキルまで対応",
                 key="hier_multiselect"
             )

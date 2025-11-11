@@ -168,10 +168,11 @@ class SEMNetworkVisualizer:
         edge_limit: Optional[int] = None,
     ) -> go.Figure:
         """
-        スキル間のネットワークグラフを可視化
+        スキル間のネットワークグラフを可視化（有向グラフ）
 
         同じ潜在変数に統話するスキル同士を連結。
-        ローディング強度に基づいて接続。
+        ローディング強度に基づいて接続し、方向性を決定。
+        方向性: ローディングが高いスキル → 低いスキル
 
         Args:
             lambda_matrix: ファクターローディング行列
@@ -184,8 +185,8 @@ class SEMNetworkVisualizer:
         Returns:
             Plotly Figure オブジェクト
         """
-        # NetworkXグラフを構築
-        G = nx.Graph()
+        # NetworkXグラフを構築（有向グラフに変更）
+        G = nx.DiGraph()
 
         # ノード追加：スキルのみ
         for skill in observed_vars:
@@ -204,21 +205,31 @@ class SEMNetworkVisualizer:
                 if loading > loading_threshold:
                     contributing_skills.append((skill, loading))
 
-            # スキル同士を接続
+            # スキル同士を接続（方向性を決定）
             for k1 in range(len(contributing_skills)):
                 for k2 in range(k1 + 1, len(contributing_skills)):
                     skill1, loading1 = contributing_skills[k1]
                     skill2, loading2 = contributing_skills[k2]
+
+                    # 方向性を決定：ローディングが高い方 → 低い方
+                    if loading1 >= loading2:
+                        from_skill, to_skill = skill1, skill2
+                        from_loading, to_loading = loading1, loading2
+                    else:
+                        from_skill, to_skill = skill2, skill1
+                        from_loading, to_loading = loading2, loading1
 
                     # ローディングの平均を接続強度として使用
                     weight = (loading1 + loading2) / 2
                     latent_context = latent
 
                     all_edges.append({
-                        'from': skill1,
-                        'to': skill2,
+                        'from': from_skill,
+                        'to': to_skill,
                         'weight': weight,
                         'latent': latent_context,
+                        'from_loading': from_loading,
+                        'to_loading': to_loading,
                     })
 
         if not all_edges:
@@ -435,8 +446,8 @@ class SEMNetworkVisualizer:
                     line=dict(color="black", width=3),
                 ),
                 text=observed_display,
-                textposition="middle center",
-                textfont=dict(size=12, color="black", weight="bold"),
+                textposition="middle left",
+                textfont=dict(size=10, color="black", weight="bold"),
                 hovertemplate="%{text}<extra></extra>",
                 showlegend=True,
                 name="スキル（観測変数）",
@@ -458,8 +469,8 @@ class SEMNetworkVisualizer:
                     line=dict(color="black", width=3),
                 ),
                 text=latent_vars,
-                textposition="middle center",
-                textfont=dict(size=13, color="black", weight="bold"),
+                textposition="middle right",
+                textfont=dict(size=11, color="black", weight="bold"),
                 hovertemplate="%{text}<extra></extra>",
                 showlegend=True,
                 name="力量カテゴリー（潜在変数）",
@@ -533,8 +544,8 @@ class SEMNetworkVisualizer:
                     line=dict(color="black", width=3),
                 ),
                 text=latent_vars,
-                textposition="middle center",
-                textfont=dict(size=13, color="black", weight="bold"),
+                textposition="top center",
+                textfont=dict(size=11, color="black", weight="bold"),
                 hovertemplate="%{text}<extra></extra>",
                 showlegend=False,
             )
@@ -632,8 +643,8 @@ class SEMNetworkVisualizer:
                         line=dict(color="black", width=3),
                     ),
                     text=obs_display,
-                    textposition="middle center",
-                    textfont=dict(size=11, color="black", weight="bold"),
+                    textposition="bottom center",
+                    textfont=dict(size=9, color="black", weight="bold"),
                     hovertemplate="%{text}<extra></extra>",
                     showlegend=True,
                     name="スキル（観測変数）",
@@ -656,8 +667,8 @@ class SEMNetworkVisualizer:
                         line=dict(color="black", width=3),
                     ),
                     text=latent_nodes,
-                    textposition="middle center",
-                    textfont=dict(size=12, color="black", weight="bold"),
+                    textposition="top center",
+                    textfont=dict(size=11, color="black", weight="bold"),
                     hovertemplate="%{text}<extra></extra>",
                     showlegend=True,
                     name="力量カテゴリー（潜在変数）",
@@ -681,18 +692,18 @@ class SEMNetworkVisualizer:
 
     def _create_skill_network_figure(
         self,
-        G: nx.Graph,
+        G: nx.DiGraph,  # 有向グラフに変更
         pos: Dict[str, Tuple[float, float]],
         latent_vars: List[str],
     ) -> go.Figure:
         """
-        スキルネットワークのFigureを作成
+        スキルネットワークのFigureを作成（矢印付き）
 
         ノードに display_name 属性がある場合は日本語名を使用
         """
         fig = go.Figure()
 
-        # エッジを描画
+        # エッジを矢印付きで描画
         for edge in G.edges(data=True):
             from_node, to_node, data = edge
             x0, y0 = pos[from_node]
@@ -701,15 +712,44 @@ class SEMNetworkVisualizer:
             weight = data["weight"]
             line_width = 2 + weight * 3
 
+            # 矢印の向きを計算（終点の方向）
+            # 矢印をノードの少し手前で止める
+            arrow_ratio = 0.85  # 85%の位置まで線を描画
+            x_arrow = x0 + (x1 - x0) * arrow_ratio
+            y_arrow = y0 + (y1 - y0) * arrow_ratio
+
+            # スキル名を取得（hover用）
+            from_display = G.nodes[from_node].get('display_name', from_node)
+            to_display = G.nodes[to_node].get('display_name', to_node)
+
+            # 線を描画
             fig.add_trace(
                 go.Scatter(
-                    x=[x0, x1, None],
-                    y=[y0, y1, None],
+                    x=[x0, x_arrow, None],
+                    y=[y0, y_arrow, None],
                     mode="lines",
                     line=dict(width=line_width, color="#E74C3C"),
-                    hovertemplate=f"{from_node} ↔ {to_node}<br>接続強度: {weight:.3f}<extra></extra>",
+                    hovertemplate=f"{from_display} → {to_display}<br>接続強度: {weight:.3f}<extra></extra>",
                     showlegend=False,
                 )
+            )
+
+            # 矢印を追加
+            fig.add_annotation(
+                x=x1,
+                y=y1,
+                ax=x_arrow,
+                ay=y_arrow,
+                xref="x",
+                yref="y",
+                axref="x",
+                ayref="y",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1.5,
+                arrowwidth=line_width,
+                arrowcolor="#E74C3C",
+                opacity=0.8,
             )
 
         # ノードを描画
@@ -742,7 +782,7 @@ class SEMNetworkVisualizer:
         )
 
         fig.update_layout(
-            title="📊 スキル間ネットワーク<br><sub>同じ力量カテゴリーに統話するスキル同士の関連性</sub>",
+            title="📊 スキル間ネットワーク（有向グラフ）<br><sub>同じ力量カテゴリーに統話するスキル同士の関連性（矢印：ローディング高→低）</sub>",
             showlegend=False,
             hovermode="closest",
             margin=dict(b=20, l=5, r=5, t=120),
