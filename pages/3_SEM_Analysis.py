@@ -1411,6 +1411,11 @@ elif model_type == "HierarchicalSEM（実データ）":
                     # ドメインスコアの分布（改善版）
                     st.markdown("#### カテゴリー別スコア分布")
 
+                    # カテゴリー数に応じて高さを動的調整
+                    n_categories = len(result.domain_scores.columns)
+                    # 基本: 800px、カテゴリーが多い場合は追加（1カテゴリーあたり40px）
+                    dynamic_height = max(800, 600 + n_categories * 40)
+
                     fig = go.Figure()
                     for col in result.domain_scores.columns:
                         fig.add_trace(go.Box(
@@ -1429,11 +1434,11 @@ elif model_type == "HierarchicalSEM（実データ）":
                         title='各カテゴリーのスコア分布（箱ひげ図）<br><sub>箱：25%-75%範囲、線：中央値、×：平均値</sub>',
                         yaxis_title='ドメインスコア',
                         xaxis_title='力量カテゴリー',
-                        height=500,
+                        height=dynamic_height,
                         showlegend=False,
                         plot_bgcolor='#F8F9FA',
                         font=dict(size=12),
-                        margin=dict(b=100, l=60, r=40, t=100),
+                        margin=dict(b=150, l=80, r=40, t=120),
                     )
 
                     # X軸のラベルを斜めに表示
