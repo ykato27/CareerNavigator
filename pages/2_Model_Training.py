@@ -13,6 +13,12 @@ from skillnote_recommendation.utils.ui_components import (
     apply_rich_ui_styles,
     render_gradient_header
 )
+from skillnote_recommendation.ml.optuna_visualization_helper import (
+    generate_optuna_visualizations,
+    get_best_trials_summary,
+    get_pruned_trials_count,
+    plot_training_history,
+)
 
 
 # =========================================================
@@ -538,6 +544,128 @@ if st.session_state.get("model_trained", False):
             値が小さいほどモデルがメンバー×力量マトリクスをより正確に分解・復元できていることを示します。
             """
         )
+        st.markdown("---")
+
+        # Optunaチューニング結果の可視化
+        st.markdown("### 📊 ハイパーパラメータチューニング結果の可視化")
+
+        try:
+            study = tuner.study
+
+            # Pruning統計情報
+            pruning_stats = get_pruned_trials_count(study)
+
+            col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+            with col_stat1:
+                st.metric("総試行数", pruning_stats['total'])
+            with col_stat2:
+                st.metric("完了試行数", pruning_stats['complete'])
+            with col_stat3:
+                st.metric("枝刈り数", pruning_stats['pruned'])
+            with col_stat4:
+                st.metric("枝刈り率", f"{pruning_stats['pruning_rate']:.1f}%")
+
+            if pruning_stats['pruned'] > 0:
+                st.info(
+                    f"💡 **Pruning（枝刈り）効果**: {pruning_stats['pruned']}個の有望でない試行を早期終了することで、"
+                    f"計算時間を約{pruning_stats['pruning_rate']:.0f}%削減しました。"
+                )
+
+            # 上位試行のサマリーテーブル
+            with st.expander("🏆 上位10試行の詳細", expanded=False):
+                best_trials_df = get_best_trials_summary(study, top_n=10)
+                st.dataframe(best_trials_df, use_container_width=True)
+                st.download_button(
+                    label="📥 上位試行データをダウンロード（CSV）",
+                    data=best_trials_df.to_csv(index=False).encode('utf-8-sig'),
+                    file_name="optuna_best_trials.csv",
+                    mime="text/csv",
+                )
+
+            # Optunaの可視化グラフ生成
+            st.markdown("#### 📈 チューニング過程の詳細分析")
+
+            # パラメータリストを取得
+            param_names = list(study.best_params.keys())
+
+            with st.spinner("可視化グラフを生成中..."):
+                visualizations = generate_optuna_visualizations(study, params_to_plot=param_names)
+
+            # 6種類のグラフをタブで表示
+            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+                "📈 最適化履歴",
+                "🎯 パラメータ重要度",
+                "🔗 パラレル座標",
+                "🗺️ 等高線図",
+                "📊 スライス",
+                "📉 経験分布関数"
+            ])
+
+            with tab1:
+                if 'optimization_history' in visualizations:
+                    st.plotly_chart(visualizations['optimization_history'], use_container_width=True)
+                    st.markdown("""
+                    **最適化履歴**: 各試行の目的関数値の推移を表示します。
+                    青線は各試行の値、赤線は最良値の更新を示します。
+                    """)
+                else:
+                    st.warning("⚠️ 最適化履歴の生成に失敗しました")
+
+            with tab2:
+                if 'param_importances' in visualizations:
+                    st.plotly_chart(visualizations['param_importances'], use_container_width=True)
+                    st.markdown("""
+                    **パラメータ重要度**: 各ハイパーパラメータが目的関数に与える影響度を表示します。
+                    重要度が高いパラメータほど、最適化において重要な役割を果たしています。
+                    """)
+                else:
+                    st.warning("⚠️ パラメータ重要度の生成に失敗しました")
+
+            with tab3:
+                if 'parallel_coordinate' in visualizations:
+                    st.plotly_chart(visualizations['parallel_coordinate'], use_container_width=True)
+                    st.markdown("""
+                    **パラレル座標プロット**: すべてのパラメータと目的関数の関係を同時に可視化します。
+                    各線は1つの試行を表し、色は目的関数値を示します（青=良い、赤=悪い）。
+                    """)
+                else:
+                    st.warning("⚠️ パラレル座標プロットの生成に失敗しました")
+
+            with tab4:
+                if 'contour' in visualizations:
+                    st.plotly_chart(visualizations['contour'], use_container_width=True)
+                    st.markdown("""
+                    **等高線図**: 2つのパラメータ間の相互作用と目的関数値の関係を表示します。
+                    色が濃い領域ほど目的関数値が低い（良い）ことを示します。
+                    """)
+                else:
+                    st.warning("⚠️ 等高線図の生成に失敗しました")
+
+            with tab5:
+                if 'slice' in visualizations:
+                    st.plotly_chart(visualizations['slice'], use_container_width=True)
+                    st.markdown("""
+                    **スライスプロット**: 各パラメータが目的関数に与える個別の影響を表示します。
+                    他のパラメータを固定した状態で、1つのパラメータのみを変化させた場合の効果を確認できます。
+                    """)
+                else:
+                    st.warning("⚠️ スライスプロットの生成に失敗しました")
+
+            with tab6:
+                if 'edf' in visualizations:
+                    st.plotly_chart(visualizations['edf'], use_container_width=True)
+                    st.markdown("""
+                    **経験分布関数（EDF）**: 目的関数値の累積分布を表示します。
+                    探索がどの範囲の値に集中しているかを確認できます。
+                    """)
+                else:
+                    st.warning("⚠️ 経験分布関数の生成に失敗しました")
+
+        except Exception as viz_error:
+            st.error(f"❌ 可視化の生成中にエラーが発生しました: {viz_error}")
+            import traceback
+            st.code(traceback.format_exc())
+
         st.markdown("---")
 
     # 基本統計
