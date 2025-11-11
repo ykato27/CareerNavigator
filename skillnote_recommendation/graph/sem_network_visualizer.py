@@ -651,7 +651,7 @@ class SEMNetworkVisualizer:
         )
 
         fig.update_layout(
-            title="📊 構造モデル：力量カテゴリー間の因果関係<br><sub>濃い緑：有意 | 濃いグレー：非有意 | 線の太さ = 係数の大きさ</sub>",
+            title="📊 構造モデル：力量カテゴリー間の関連性<br><sub>濃い緑：有意 | 濃いグレー：非有意 | 線の太さ = 係数の大きさ</sub>",
             showlegend=False,
             hovermode="closest",
             margin=dict(b=20, l=5, r=5, t=130),
