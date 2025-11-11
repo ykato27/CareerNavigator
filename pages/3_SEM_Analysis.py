@@ -166,6 +166,22 @@ if 'transformed_data' not in st.session_state:
     st.stop()
 
 td = st.session_state.transformed_data
+
+# デバッグ: transformed_dataの型を確認
+if not isinstance(td, dict):
+    st.error(f"❌ transformed_dataが辞書ではありません。型: {type(td)}")
+    st.info("データ読み込みページで再度データをアップロードしてください。")
+    st.stop()
+
+# データが必要なキーを持っているか確認
+required_keys = ["member_competence", "competence_master", "members_clean"]
+missing_keys = [key for key in required_keys if key not in td]
+if missing_keys:
+    st.error(f"❌ 必要なデータが不足しています: {', '.join(missing_keys)}")
+    st.info(f"利用可能なキー: {list(td.keys())}")
+    st.info("データ読み込みページで再度データをアップロードしてください。")
+    st.stop()
+
 member_competence = td["member_competence"]
 competence_master = td["competence_master"]
 members_clean = td["members_clean"]
