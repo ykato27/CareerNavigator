@@ -201,6 +201,7 @@ class SEMNetworkVisualizer:
         skill_name_mapping: Optional[Dict[str, str]] = None,
         loading_threshold: float = 0.3,
         edge_limit: Optional[int] = None,
+        acquired_skills: Optional[set] = None,
     ) -> go.Figure:
         """
         スキル間のネットワークグラフを可視化（有向グラフ）
@@ -216,6 +217,7 @@ class SEMNetworkVisualizer:
             skill_name_mapping: スキルコード → スキル名（日本語）のマッピング
             loading_threshold: 接続判定閾値
             edge_limit: 表示するエッジの最大本数（Noneの場合は全て表示）
+            acquired_skills: 取得済みスキルのセット（メンバー別表示用）
 
         Returns:
             Plotly Figure オブジェクト
@@ -285,7 +287,7 @@ class SEMNetworkVisualizer:
         pos = nx.spring_layout(G, k=2, iterations=50, seed=42, weight="weight")
 
         # Plotly Figure を作成
-        fig = self._create_skill_network_figure(G, pos, latent_vars)
+        fig = self._create_skill_network_figure(G, pos, latent_vars, acquired_skills)
 
         return fig
 
@@ -801,11 +803,13 @@ class SEMNetworkVisualizer:
         G: nx.DiGraph,  # 有向グラフに変更
         pos: Dict[str, Tuple[float, float]],
         latent_vars: List[str],
+        acquired_skills: Optional[set] = None,
     ) -> go.Figure:
         """
         スキルネットワークのFigureを作成（矢印付き）
 
         ノードに display_name 属性がある場合は日本語名を使用
+        acquired_skills が指定されている場合、取得済み/未取得で色分け
         """
         fig = go.Figure()
 
@@ -858,34 +862,84 @@ class SEMNetworkVisualizer:
                 opacity=0.8,
             )
 
-        # ノードを描画
-        node_x = [pos[node][0] for node in G.nodes()]
-        node_y = [pos[node][1] for node in G.nodes()]
+        # ノードを描画（取得済み/未取得で色分け）
+        if acquired_skills is not None:
+            # 取得済みと未取得に分けて描画
+            acquired_nodes = [node for node in G.nodes() if node in acquired_skills]
+            not_acquired_nodes = [node for node in G.nodes() if node not in acquired_skills]
 
-        # ノードテキストを取得（display_name があればそれを使用）
-        node_texts = []
-        for node in G.nodes():
-            node_attr = G.nodes[node]
-            display_name = node_attr.get('display_name', node)
-            node_texts.append(display_name)
+            # 取得済みノード（緑色）
+            if acquired_nodes:
+                acquired_x = [pos[node][0] for node in acquired_nodes]
+                acquired_y = [pos[node][1] for node in acquired_nodes]
+                acquired_texts = [G.nodes[node].get('display_name', node) for node in acquired_nodes]
 
-        fig.add_trace(
-            go.Scatter(
-                x=node_x,
-                y=node_y,
-                mode="markers+text",
-                marker=dict(
-                    size=self.node_sizes["observed"] + 5,
-                    color=self.node_colors["observed"],
-                    line=dict(color="white", width=3),
-                ),
-                text=node_texts,
-                textposition="top center",
-                textfont=dict(size=12, color="black", weight="bold"),
-                hovertemplate="%{text}<extra></extra>",
-                showlegend=False,
+                fig.add_trace(
+                    go.Scatter(
+                        x=acquired_x,
+                        y=acquired_y,
+                        mode="markers+text",
+                        marker=dict(
+                            size=self.node_sizes["observed"] + 8,
+                            color="#27AE60",  # 緑色
+                            line=dict(color="white", width=3),
+                        ),
+                        text=acquired_texts,
+                        textposition="top center",
+                        textfont=dict(size=12, color="black", weight="bold"),
+                        hovertemplate="%{text}<br>✅ 取得済み<extra></extra>",
+                        showlegend=True,
+                        name="✅ 取得済み",
+                    )
+                )
+
+            # 未取得ノード（グレー）
+            if not_acquired_nodes:
+                not_acquired_x = [pos[node][0] for node in not_acquired_nodes]
+                not_acquired_y = [pos[node][1] for node in not_acquired_nodes]
+                not_acquired_texts = [G.nodes[node].get('display_name', node) for node in not_acquired_nodes]
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=not_acquired_x,
+                        y=not_acquired_y,
+                        mode="markers+text",
+                        marker=dict(
+                            size=self.node_sizes["observed"] + 5,
+                            color="#95A5A6",  # グレー
+                            line=dict(color="white", width=3),
+                        ),
+                        text=not_acquired_texts,
+                        textposition="top center",
+                        textfont=dict(size=12, color="black", weight="bold"),
+                        hovertemplate="%{text}<br>⭕ 未取得<extra></extra>",
+                        showlegend=True,
+                        name="⭕ 未取得",
+                    )
+                )
+        else:
+            # 全体表示（従来通り）
+            node_x = [pos[node][0] for node in G.nodes()]
+            node_y = [pos[node][1] for node in G.nodes()]
+            node_texts = [G.nodes[node].get('display_name', node) for node in G.nodes()]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=node_x,
+                    y=node_y,
+                    mode="markers+text",
+                    marker=dict(
+                        size=self.node_sizes["observed"] + 5,
+                        color=self.node_colors["observed"],
+                        line=dict(color="white", width=3),
+                    ),
+                    text=node_texts,
+                    textposition="top center",
+                    textfont=dict(size=12, color="black", weight="bold"),
+                    hovertemplate="%{text}<extra></extra>",
+                    showlegend=False,
+                )
             )
-        )
 
         fig.update_layout(
             title="📊 スキル間ネットワーク（有向グラフ）<br><sub>同じ力量カテゴリーに統話するスキル同士の関連性（矢印：ローディング高→低）</sub>",

@@ -665,6 +665,36 @@ if model_type == "UnifiedSEM（実データ）":
                     # 設定エリア
                     st.markdown("#### ⚙️ 表示設定")
 
+                    # メンバー選択
+                    st.markdown("##### 👤 メンバー別表示（オプション）")
+                    member_names = td["members_clean"]['メンバー名'].tolist()
+                    member_codes = td["members_clean"]['メンバーコード'].tolist()
+
+                    member_options = ["（全体表示）"] + [f"{name} ({code})" for name, code in zip(member_names, member_codes)]
+
+                    selected_member_display = st.selectbox(
+                        "メンバーを選択",
+                        options=member_options,
+                        help="メンバーを選択すると、そのメンバーの取得済み/未取得力量が色分けされます",
+                        key="unified_sem_selected_member"
+                    )
+
+                    # 選択されたメンバーの取得済みスキルを取得
+                    acquired_skills = None
+                    if selected_member_display != "（全体表示）":
+                        # メンバーコードを抽出
+                        selected_member_code = selected_member_display.split("(")[-1].rstrip(")")
+
+                        # このメンバーの取得済みスキルを取得
+                        member_skills = member_competence[
+                            member_competence['メンバーコード'] == selected_member_code
+                        ]['力量コード'].tolist()
+                        acquired_skills = set(member_skills)
+
+                        st.caption(f"✅ 取得済み力量: {len(acquired_skills)}個")
+
+                    st.markdown("---")
+
                     col_threshold, col_edge = st.columns(2)
 
                     with col_threshold:
@@ -725,6 +755,7 @@ if model_type == "UnifiedSEM（実データ）":
                         skill_name_mapping=skill_code_to_name,
                         loading_threshold=loading_threshold,
                         edge_limit=edge_limit,
+                        acquired_skills=acquired_skills,
                     )
                     st.plotly_chart(fig_skill_network, use_container_width=True)
 
