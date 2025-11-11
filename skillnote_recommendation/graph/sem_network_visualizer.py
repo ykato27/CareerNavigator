@@ -28,6 +28,41 @@ class SEMNetworkVisualizer:
     SEM結果をネットワークグラフで可視化するクラス
     """
 
+    # スケーリング設定（観測変数の数に基づく）
+    SCALING_THRESHOLDS = {
+        "very_large": 200,  # 非常に大規模
+        "large": 100,       # 大規模
+        "medium": 50,       # 中規模
+    }
+
+    # 測定モデル用の設定
+    MEASUREMENT_LAYOUT_CONFIG = {
+        "very_large": {"spacing": 0.5, "font_size": 6, "marker_size": 0, "height": 2500},
+        "large": {"spacing": 1.0, "font_size": 7, "marker_size": 2, "height": 1800},
+        "medium": {"spacing": 1.5, "font_size": 8, "marker_size": 3, "height": 1200},
+        "small": {"spacing": 1.5, "font_size": 10, "marker_size": 5, "height": 650},
+    }
+
+    # 統合モデル用の設定
+    COMBINED_LAYOUT_CONFIG = {
+        "very_large": {
+            "spacing": 0.3, "font_size": 5, "marker_size": 0,
+            "width": 2500, "height": 1200, "text_angle": 90
+        },
+        "large": {
+            "spacing": 0.5, "font_size": 6, "marker_size": 1,
+            "width": 2000, "height": 1000, "text_angle": 45
+        },
+        "medium": {
+            "spacing": 1.0, "font_size": 7, "marker_size": 2,
+            "width": 1600, "height": 900, "text_angle": 0
+        },
+        "small": {
+            "spacing": 1.0, "font_size": 9, "marker_size": 3,
+            "width": 1300, "height": 750, "text_angle": 0
+        },
+    }
+
     def __init__(self):
         """初期化"""
         # ノードタイプ別の色設定
@@ -331,6 +366,51 @@ class SEMNetworkVisualizer:
     # 内部メソッド
     # ============================================================
 
+    def _get_scale_category(self, n_observed: int) -> str:
+        """
+        観測変数の数に基づいてスケールカテゴリーを決定
+
+        Args:
+            n_observed: 観測変数の数
+
+        Returns:
+            スケールカテゴリー ("very_large", "large", "medium", "small")
+        """
+        if n_observed > self.SCALING_THRESHOLDS["very_large"]:
+            return "very_large"
+        elif n_observed > self.SCALING_THRESHOLDS["large"]:
+            return "large"
+        elif n_observed > self.SCALING_THRESHOLDS["medium"]:
+            return "medium"
+        else:
+            return "small"
+
+    def _get_measurement_config(self, n_observed: int) -> dict:
+        """
+        測定モデル用の設定を取得
+
+        Args:
+            n_observed: 観測変数の数
+
+        Returns:
+            設定辞書 (spacing, font_size, marker_size, height)
+        """
+        scale = self._get_scale_category(n_observed)
+        return self.MEASUREMENT_LAYOUT_CONFIG[scale]
+
+    def _get_combined_config(self, n_observed: int) -> dict:
+        """
+        統合モデル用の設定を取得
+
+        Args:
+            n_observed: 観測変数の数
+
+        Returns:
+            設定辞書 (spacing, font_size, marker_size, width, height, text_angle)
+        """
+        scale = self._get_scale_category(n_observed)
+        return self.COMBINED_LAYOUT_CONFIG[scale]
+
     def _calculate_bipartite_layout(
         self, latent_vars: List[str], observed_vars: List[str]
     ) -> Dict[str, Tuple[float, float]]:
@@ -340,17 +420,18 @@ class SEMNetworkVisualizer:
         観測変数が多い場合（50個以上）は、縦方向の間隔を広げて重なりを防ぐ
         """
         pos = {}
+        n_observed = len(observed_vars)
+        n_latent = len(latent_vars)
+
+        # 設定を取得
+        config = self._get_measurement_config(n_observed)
+        vertical_spacing = config["spacing"]
 
         # 潜在変数を右側に配置
-        n_latent = len(latent_vars)
         for i, var in enumerate(latent_vars):
             pos[var] = (1, (i - (n_latent - 1) / 2) * 2)
 
         # 観測変数を左側に配置
-        n_observed = len(observed_vars)
-        # 観測変数が多い場合は間隔を大幅に広げる
-        vertical_spacing = 0.5 if n_observed > 100 else (1.0 if n_observed > 50 else 1.5)
-
         for i, var in enumerate(observed_vars):
             pos[var] = (0, (i - (n_observed - 1) / 2) * vertical_spacing)
 
@@ -377,17 +458,18 @@ class SEMNetworkVisualizer:
         観測変数が多い場合（50個以上）は、横方向の間隔を広げて重なりを防ぐ
         """
         pos = {}
-
-        # 観測変数の数に応じて間隔を調整
         n_observed = len(observed_vars)
-        horizontal_spacing = 0.3 if n_observed > 100 else (0.5 if n_observed > 50 else 1.0)
+        n_latent = len(latent_vars)
+
+        # 設定を取得
+        config = self._get_combined_config(n_observed)
+        horizontal_spacing = config["spacing"]
 
         # 層0：観測変数（下側）
         for i, var in enumerate(observed_vars):
             pos[var] = ((i - (n_observed - 1) / 2) * horizontal_spacing, -2)
 
         # 層1：潜在変数（上側）
-        n_latent = len(latent_vars)
         latent_spacing = 2.0  # 潜在変数は広めに配置
         for i, var in enumerate(latent_vars):
             pos[var] = ((i - (n_latent - 1) / 2) * latent_spacing, 0)
@@ -446,20 +528,9 @@ class SEMNetworkVisualizer:
         observed_y = [pos[node][1] for node in observed_vars]
         observed_display = [get_display_name(code, skill_name_mapping) for code in observed_vars]
 
-        # 観測変数の数に応じてフォントサイズとノードサイズを調整
+        # 設定を取得
         n_observed = len(observed_vars)
-        if n_observed > 200:
-            text_size = 6
-            marker_size = self.node_sizes["observed"]
-        elif n_observed > 100:
-            text_size = 7
-            marker_size = self.node_sizes["observed"] + 2
-        elif n_observed > 50:
-            text_size = 8
-            marker_size = self.node_sizes["observed"] + 3
-        else:
-            text_size = 10
-            marker_size = self.node_sizes["observed"] + 5
+        config = self._get_measurement_config(n_observed)
 
         fig.add_trace(
             go.Scatter(
@@ -467,13 +538,13 @@ class SEMNetworkVisualizer:
                 y=observed_y,
                 mode="markers+text",
                 marker=dict(
-                    size=marker_size,
+                    size=self.node_sizes["observed"] + config["marker_size"],
                     color=self.node_colors["observed"],
                     line=dict(color="black", width=2),
                 ),
                 text=observed_display,
                 textposition="middle left",
-                textfont=dict(size=text_size, color="black", weight="bold"),
+                textfont=dict(size=config["font_size"], color="black", weight="bold"),
                 hovertemplate="%{text}<extra></extra>",
                 showlegend=True,
                 name="スキル（観測変数）",
@@ -503,17 +574,6 @@ class SEMNetworkVisualizer:
             )
         )
 
-        # 観測変数の数に応じてグラフの高さを調整
-        n_observed = len(observed_vars)
-        if n_observed > 200:
-            graph_height = 2500
-        elif n_observed > 100:
-            graph_height = 1800
-        elif n_observed > 50:
-            graph_height = 1200
-        else:
-            graph_height = 650
-
         fig.update_layout(
             title="📊 測定モデル：スキル→力量カテゴリーの関係<br><sub>矢印の太さ = ローディング強度 | 赤い線：強い関係</sub>",
             showlegend=True,
@@ -523,7 +583,7 @@ class SEMNetworkVisualizer:
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             plot_bgcolor="#F8F9FA",
             width=1100,
-            height=graph_height,
+            height=config["height"],
             font=dict(family="Arial, sans-serif", size=12),
         )
 
@@ -669,24 +729,9 @@ class SEMNetworkVisualizer:
             obs_y = [pos[node][1] for node in observed_nodes]
             obs_display = [get_display_name(code, skill_name_mapping) for code in observed_nodes]
 
-            # 観測変数の数に応じてフォントサイズとノードサイズを調整
+            # 設定を取得
             n_observed = len(observed_nodes)
-            if n_observed > 200:
-                text_size = 5
-                marker_size = self.node_sizes["observed"]
-                text_angle = 90  # 縦書きに
-            elif n_observed > 100:
-                text_size = 6
-                marker_size = self.node_sizes["observed"] + 1
-                text_angle = 45  # 斜め
-            elif n_observed > 50:
-                text_size = 7
-                marker_size = self.node_sizes["observed"] + 2
-                text_angle = 0
-            else:
-                text_size = 9
-                marker_size = self.node_sizes["observed"] + 3
-                text_angle = 0
+            config = self._get_combined_config(n_observed)
 
             fig.add_trace(
                 go.Scatter(
@@ -694,14 +739,14 @@ class SEMNetworkVisualizer:
                     y=obs_y,
                     mode="markers+text",
                     marker=dict(
-                        size=marker_size,
+                        size=self.node_sizes["observed"] + config["marker_size"],
                         color=self.node_colors["observed"],
                         line=dict(color="black", width=2),
                     ),
                     text=obs_display,
                     textposition="bottom center",
-                    textangle=text_angle,
-                    textfont=dict(size=text_size, color="black", weight="bold"),
+                    textangle=config["text_angle"],
+                    textfont=dict(size=config["font_size"], color="black", weight="bold"),
                     hovertemplate="%{text}<extra></extra>",
                     showlegend=True,
                     name="スキル（観測変数）",
@@ -732,21 +777,6 @@ class SEMNetworkVisualizer:
                 )
             )
 
-        # 観測変数の数に応じてグラフサイズを調整
-        n_observed = len(observed_nodes) if observed_nodes else 0
-        if n_observed > 200:
-            graph_width = 2500
-            graph_height = 1200
-        elif n_observed > 100:
-            graph_width = 2000
-            graph_height = 1000
-        elif n_observed > 50:
-            graph_width = 1600
-            graph_height = 900
-        else:
-            graph_width = 1300
-            graph_height = 750
-
         fig.update_layout(
             title="🧬 統合SEM構造<br><sub>下→上：測定モデル | 横：構造モデル | 濃い緑：有意 | 濃いグレー：非有意</sub>",
             showlegend=True,
@@ -755,8 +785,8 @@ class SEMNetworkVisualizer:
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             plot_bgcolor="#F8F9FA",
-            width=graph_width,
-            height=graph_height,
+            width=config["width"],
+            height=config["height"],
             font=dict(family="Arial, sans-serif", size=12),
         )
 
