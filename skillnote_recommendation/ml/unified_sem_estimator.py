@@ -75,20 +75,20 @@ class SEMFitIndices:
     n_params: int
 
     def is_good_fit(self) -> bool:
-        """良好な適合か判定"""
+        """良好な適合か判定（厳格な基準）"""
         return (
-            self.rmsea < 0.08 and
-            self.cfi > 0.90 and
-            self.tli > 0.90 and
-            self.srmr < 0.08
+            self.rmsea < 0.06 and
+            self.cfi > 0.95 and
+            self.tli > 0.95 and
+            self.srmr < 0.06
         )
 
     def is_excellent_fit(self) -> bool:
-        """優れた適合か判定"""
+        """優れた適合か判定（厳格な基準）"""
         return (
             self.rmsea < 0.05 and
-            self.cfi > 0.95 and
-            self.tli > 0.95 and
+            self.cfi > 0.97 and
+            self.tli > 0.97 and
             self.srmr < 0.05
         )
 
