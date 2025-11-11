@@ -492,400 +492,407 @@ if model_type == "UnifiedSEM（実データ）":
                 st.session_state['unified_sem_result'] = sem
                 st.session_state['unified_sem_selected_competences'] = selected_competences
 
-                st.success("✅ 推定完了！")
-
-                # 結果表示（デモモードと同じ形式）
-                st.markdown("---")
-                st.subheader("📊 推定結果")
-
-                # 適合度指標
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.markdown("### 適合度指標")
-                    fit = sem.fit_indices
-
-                    metrics_df = pd.DataFrame({
-                        '指標': ['RMSEA', 'CFI', 'TLI', 'GFI', 'SRMR', 'AIC', 'BIC'],
-                        '値': [
-                            f"{fit.rmsea:.3f}",
-                            f"{fit.cfi:.3f}",
-                            f"{fit.tli:.3f}",
-                            f"{fit.gfi:.3f}",
-                            f"{fit.srmr:.3f}",
-                            f"{fit.aic:.1f}",
-                            f"{fit.bic:.1f}",
-                        ],
-                        '判定基準': [
-                            '< 0.08 (良好)',
-                            '> 0.90 (良好)',
-                            '> 0.90 (良好)',
-                            '> 0.90 (良好)',
-                            '< 0.08 (良好)',
-                            '小さいほど良い',
-                            '小さいほど良い',
-                        ]
-                    })
-
-                    st.dataframe(metrics_df, use_container_width=True, hide_index=True)
-
-                    # 総合判定
-                    if fit.is_excellent_fit():
-                        st.success("✅ 優れた適合度です！")
-                    elif fit.is_good_fit():
-                        st.info("✅ 良好な適合度です")
-                    else:
-                        st.warning("⚠️ 適合度が低いです。モデル仕様の見直しを推奨します。")
-
-                with col2:
-                    st.markdown("### 構造係数（力量カテゴリー間の関係性）")
-                    relationships = sem.get_skill_relationships()
-
-                    if len(relationships) > 0:
-                        st.dataframe(
-                            relationships[['from_skill', 'to_skill', 'coefficient', 'p_value', 'is_significant']],
-                            use_container_width=True,
-                            hide_index=True
-                        )
-
-                        # 構造係数の可視化
-                        fig = go.Figure()
-
-                        for _, row in relationships.iterrows():
-                            color = 'green' if row['is_significant'] else 'gray'
-                            fig.add_trace(go.Bar(
-                                x=[f"{row['from_skill']}→{row['to_skill']}"],
-                                y=[row['coefficient']],
-                                marker_color=color,
-                                name='有意' if row['is_significant'] else '非有意',
-                                showlegend=False,
-                            ))
-
-                        fig.update_layout(
-                            title='構造係数の大きさ',
-                            yaxis_title='係数',
-                            height=300,
-                        )
-
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("構造パスが定義されていません")
-
-                # ファクターローディング
-                st.markdown("### ファクターローディング行列")
-
-                loading_df = pd.DataFrame(
-                    sem.Lambda,
-                    index=sem.observed_vars,
-                    columns=sem.latent_vars
-                )
-
-                # 力量コードを力量名に変換して表示
-                skill_code_to_name = dict(zip(
-                    competence_master['力量コード'],
-                    competence_master['力量名']
-                ))
-                loading_df.index = [skill_code_to_name.get(code, code) for code in loading_df.index]
-
-                # ヒートマップ
-                fig = px.imshow(
-                    loading_df.T,
-                    labels=dict(x="スキル", y="潜在変数", color="ローディング"),
-                    aspect="auto",
-                    color_continuous_scale='RdBu_r',
-                )
-                fig.update_layout(height=400)
-
-                st.plotly_chart(fig, use_container_width=True)
-
-                # ============================================
-                # ネットワークグラフ可視化
-                # ============================================
-                st.markdown("---")
-                st.markdown("## 📊 ネットワークグラフ可視化")
-
-                with st.spinner("ネットワークグラフを生成中..."):
-                    try:
-                        # グラフ可視化モジュールをロード
-                        visualizer_module = load_sem_network_visualizer()
-                        SEMNetworkVisualizer = visualizer_module.SEMNetworkVisualizer
-
-                        visualizer = SEMNetworkVisualizer()
-
-                        # タブで表示方法を選択
-                        tab1, tab2, tab3, tab4 = st.tabs(
-                            ["📈 統合モデル", "🔬 測定モデル", "⚙️ 構造モデル", "🕸️ スキル間ネットワーク"]
-                        )
-
-                        with tab1:
-                            st.markdown(
-                                "### 📊 統合SEM構造（全体像）\n"
-                                "スキル習得 → 力量カテゴリー形成 → キャリア発展の構造"
-                            )
-
-                            with st.expander("📖 この図の見方", expanded=True):
-                                st.markdown("""
-                                #### 構造図
-                                ```
-                                    力量カテゴリーA        力量カテゴリーB
-                                    （青い丸）            （青い丸）
-                                         ▲                    ▲
-                                         │ ローディング        │ ローディング
-                                         │ (関係の強さ)       │
-                                    ─────┴─────            ─────┴─────
-                                    Python基礎  Git        SQL基礎  DB設計
-                                    （マゼンタ丸）         （マゼンタ丸）
-                                         ◀ スキル ▶
-
-                                力量カテゴリーA  ──→ 力量カテゴリーB
-                                    (因果関係の矢印)
-                                ```
-
-                                #### 色・太さの意味
-                                - **マゼンタ丸（●）**: スキル（習得する具体的な技術）
-                                  - Python基礎、Git、SQL基礎、DB設計 など
-                                - **青い丸（●）**: 力量カテゴリー（複合的な能力）
-                                  - 初級力量、中級力量、システム設計力 など
-                                - **矢印の太さ**: 関係の強さ
-                                  - 太い → 強い関係
-                                  - 細い → 弱い関係
-                                - **緑色の矢印**: 統計的に有意な因果関係
-                                - **グレーの矢印**: 統計的に有意でない可能性
-
-                                #### このタブで分かること
-                                1. **スキル→力量**: どのスキルがどの力量に貢献しているか
-                                2. **力量→力量**: 力量カテゴリー間の発展段階
-                                3. **全体パス**: 初級スキル→高度な力量への学習パス
-                                """)
-
-
-                            # パス有意性の辞書を作成
-                            path_significance = {}
-                            relationships = sem.get_skill_relationships()
-                            for _, row in relationships.iterrows():
-                                path_significance[(row["from_skill"], row["to_skill"])] = (
-                                    row["is_significant"]
-                                )
-
-                            # スキル名マッピングの作成
-                            skill_code_to_name = dict(zip(
-                                competence_master['力量コード'],
-                                competence_master['力量名']
-                            ))
-
-                            fig_combined = visualizer.visualize_combined_model(
-                                lambda_matrix=sem.Lambda,
-                                b_matrix=sem.B,
-                                latent_vars=sem.latent_vars,
-                                observed_vars=sem.observed_vars,
-                                loading_threshold=0.2,
-                                path_significance=path_significance,
-                                skill_name_mapping=skill_code_to_name,
-                            )
-                            st.plotly_chart(fig_combined, use_container_width=True)
-
-                        with tab2:
-                            st.markdown(
-                                "### 🔬 測定モデル（スキル→力量）\n"
-                                "各スキルが力量カテゴリーの形成にどの程度貢献しているか"
-                            )
-
-                            with st.expander("📖 この図の見方", expanded=True):
-                                st.markdown("""
-                                #### 構造図
-                                ```
-                                スキル層          力量カテゴリー層
-                                （左側）          （右側）
-
-                                Python基礎 ──────┐
-                                Git      ──────→ 初級力量カテゴリー
-                                SQL基礎   ──────┘
-
-                                Webフレーム ──────┐
-                                Docker    ──────→ 開発技術力量カテゴリー
-                                Linux     ──────┘
-                                ```
-
-                                #### 矢印の意味
-                                - **太い矢印**: 強いローディング（0.7~1.0）
-                                  - 例：「Python基礎」は「初級力量」の形成に大きく貢献
-                                - **細い矢印**: 弱いローディング（0.3~0.5）
-                                  - 例：「Git」は「初級力量」に多少貢献
-
-                                #### ローディングとは
-                                - 0.0〜1.0の値
-                                - **0.7以上**: スキルは重要（学習必須）
-                                - **0.5~0.7**: スキルはまあまあ重要
-                                - **0.3~0.5**: スキルは補助的
-
-                                #### このタブで分かること
-                                1. **各スキルの重要度**: どのスキルが力量形成に欠かせないか
-                                2. **スキル選択**: 限られた時間で何から習得すべきか
-                                3. **関連スキル**: 特定の力量を身につけるために必要なスキルセット
-                                """)
-
-
-                            fig_measurement = visualizer.visualize_measurement_model(
-                                lambda_matrix=sem.Lambda,
-                                latent_vars=sem.latent_vars,
-                                observed_vars=sem.observed_vars,
-                                loading_threshold=0.2,
-                                skill_name_mapping=skill_code_to_name,
-                            )
-                            st.plotly_chart(fig_measurement, use_container_width=True)
-
-                        with tab3:
-                            st.markdown(
-                                "### ⚙️ 構造モデル（力量→力量）\n"
-                                "力量カテゴリー間の因果関係と発展段階"
-                            )
-
-                            with st.expander("📖 この図の見方", expanded=True):
-                                st.markdown("""
-                                #### 構造図（キャリア発展段階）
-                                ```
-                                初級力量 ──→ 中級力量 ──→ 上級力量
-                                （基礎）    （応用）     （エキスパート）
-
-                                例：プログラミング分野
-                                基礎スキル習得 → 実務開発経験 → アーキテクチャ設計
-                                ```
-
-                                #### 矢印の意味
-                                - **緑色の矢印（→）**: 統計的に有意な因果関係
-                                  - p値 < 0.05（関係がある確率95%以上）
-                                  - 実務で確認されている段階的成長
-                                - **グレーの矢印（→）**: 統計的に有意でない
-                                  - 直接的な因果関係が見つからない可能性
-                                  - 他の要因を経由して影響する可能性
-
-                                #### 矢印の太さ
-                                - **太い矢印**: 因果係数が大きい（強い影響）
-                                  - 例：初級力量 → 中級力量（係数0.8）
-                                  - 初級力量の習得が中級力量習得に大きく貢献
-                                - **細い矢印**: 因果係数が小さい（弱い影響）
-                                  - 例：初級力量 → 上級力量（係数0.2）
-                                  - 直接的な寄与は小さい
-
-                                #### 因果係数（Path Coefficient）
-                                - -1.0〜+1.0の値
-                                - **0.7以上**: 強い影響
-                                - **0.3~0.7**: 中程度の影響
-                                - **0.3未満**: 弱い影響
-
-                                #### このタブで分かること
-                                1. **学習段階**: スキル習得の最適な順序
-                                2. **前提条件**: 高度な力量を習得する前に何を習得すべきか
-                                3. **キャリアパス**: メンバーのキャリア発展の方向性
-                                4. **効率性**: どの力量習得が次のステップに最も貢献するか
-                                """)
-
-
-                            fig_structural = visualizer.visualize_structural_model(
-                                b_matrix=sem.B,
-                                latent_vars=sem.latent_vars,
-                                path_significance=path_significance,
-                            )
-                            st.plotly_chart(fig_structural, use_container_width=True)
-
-                        with tab4:
-                            st.markdown(
-                                "### スキル間ネットワーク\n"
-                                "同じ力量カテゴリーに統話するスキル同士の関連性"
-                            )
-
-                            # session_stateから推定結果を取得（スライダー変更時も使用）
-                            if 'unified_sem_result' in st.session_state:
-                                sem = st.session_state['unified_sem_result']
-                                selected_competences = st.session_state['unified_sem_selected_competences']
-
-                            # スキルコード → スキル名（日本語）のマッピングを作成
-                            skill_code_to_name = dict(zip(
-                                competence_master['力量コード'],
-                                competence_master['力量名']
-                            ))
-
-                            # 全接続数を計算（edge_limit なしで実行）
-                            temp_edges = []
-                            for j in range(len(sem.latent_vars)):
-                                contributing_skills = [
-                                    (i, abs(sem.Lambda[i, j]))
-                                    for i in range(len(sem.observed_vars))
-                                    if abs(sem.Lambda[i, j]) > 0.2
-                                ]
-                                for k1 in range(len(contributing_skills)):
-                                    for k2 in range(k1 + 1, len(contributing_skills)):
-                                        temp_edges.append(True)
-
-                            max_edges = len(temp_edges)
-
-                            # スライダーで表示する接続数を調整（session_state で状態保持）
-                            # キーは一貫性を保つため固定値を使用
-                            slider_key = "unified_sem_skill_network_edge_limit"
-
-                            # max_edges が変更された場合、スライダーの値を調整
-                            if slider_key not in st.session_state:
-                                st.session_state[slider_key] = min(20, max_edges) if max_edges > 0 else 1
-
-                            # max_edges を超えないようにvalidate
-                            if st.session_state[slider_key] > max_edges and max_edges > 0:
-                                st.session_state[slider_key] = max_edges
-
-                            col1, col2 = st.columns([1, 4])
-                            with col1:
-                                st.markdown("#### 表示接続数")
-                            with col2:
-                                edge_limit = st.slider(
-                                    "表示するスキル間接続数（強度順）",
-                                    min_value=1,
-                                    max_value=max(1, max_edges),
-                                    value=min(st.session_state[slider_key], max(1, max_edges)),
-                                    step=1,
-                                    help=f"接続の強度が強い順に表示します。最大：{max_edges}接続",
-                                    label_visibility="collapsed",
-                                    key=slider_key,
-                                )
-
-                            fig_skill_network = visualizer.visualize_skill_network(
-                                lambda_matrix=sem.Lambda,
-                                latent_vars=sem.latent_vars,
-                                observed_vars=sem.observed_vars,
-                                skill_name_mapping=skill_code_to_name,
-                                loading_threshold=0.2,
-                                edge_limit=edge_limit,
-                            )
-                            st.plotly_chart(fig_skill_network, use_container_width=True)
-
-                        st.success("✅ ネットワークグラフを生成しました")
-
-                    except Exception as e:
-                        st.error(f"❌ グラフ生成エラー: {e}")
-                        import traceback
-                        with st.expander("エラー詳細"):
-                            st.code(traceback.format_exc())
-
-                # 詳細データ
-                with st.expander("📋 詳細データ"):
-                    st.markdown("#### ファクターローディング")
-                    st.dataframe(loading_df, use_container_width=True)
-
-                    st.markdown("#### 構造係数行列 B")
-                    st.dataframe(
-                        pd.DataFrame(sem.B, index=sem.latent_vars, columns=sem.latent_vars),
-                        use_container_width=True
-                    )
-
-                    st.markdown("#### 潜在変数の分散 Ψ")
-                    st.dataframe(
-                        pd.DataFrame(sem.Psi, index=sem.latent_vars, columns=sem.latent_vars),
-                        use_container_width=True
-                    )
+                st.success("✅ 推定完了！結果は下部に表示されます。")
 
             except Exception as e:
                 st.error(f"❌ 推定エラー: {e}")
                 import traceback
                 with st.expander("エラー詳細"):
                     st.code(traceback.format_exc())
+
+    # =========================================================
+    # 結果表示セクション（ボタンブロックの外）
+    # =========================================================
+    if 'unified_sem_result' in st.session_state:
+        sem = st.session_state['unified_sem_result']
+        selected_competences = st.session_state['unified_sem_selected_competences']
+
+        # 結果表示
+        st.markdown("---")
+        st.subheader("📊 推定結果")
+
+        # 適合度指標
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("### 適合度指標")
+            fit = sem.fit_indices
+
+            metrics_df = pd.DataFrame({
+                '指標': ['RMSEA', 'CFI', 'TLI', 'GFI', 'SRMR', 'AIC', 'BIC'],
+                '値': [
+                    f"{fit.rmsea:.3f}",
+                    f"{fit.cfi:.3f}",
+                    f"{fit.tli:.3f}",
+                    f"{fit.gfi:.3f}",
+                    f"{fit.srmr:.3f}",
+                    f"{fit.aic:.1f}",
+                    f"{fit.bic:.1f}",
+                ],
+                '判定基準': [
+                    '< 0.08 (良好)',
+                    '> 0.90 (良好)',
+                    '> 0.90 (良好)',
+                    '> 0.90 (良好)',
+                    '< 0.08 (良好)',
+                    '小さいほど良い',
+                    '小さいほど良い',
+                ]
+            })
+
+            st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+
+            # 総合判定
+            if fit.is_excellent_fit():
+                st.success("✅ 優れた適合度です！")
+            elif fit.is_good_fit():
+                st.info("✅ 良好な適合度です")
+            else:
+                st.warning("⚠️ 適合度が低いです。モデル仕様の見直しを推奨します。")
+
+        with col2:
+            st.markdown("### 構造係数（力量カテゴリー間の関係性）")
+            relationships = sem.get_skill_relationships()
+
+            if len(relationships) > 0:
+                st.dataframe(
+                    relationships[['from_skill', 'to_skill', 'coefficient', 'p_value', 'is_significant']],
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                # 構造係数の可視化
+                fig = go.Figure()
+
+                for _, row in relationships.iterrows():
+                    color = 'green' if row['is_significant'] else 'gray'
+                    fig.add_trace(go.Bar(
+                        x=[f"{row['from_skill']}→{row['to_skill']}"],
+                        y=[row['coefficient']],
+                        marker_color=color,
+                        name='有意' if row['is_significant'] else '非有意',
+                        showlegend=False,
+                    ))
+
+                fig.update_layout(
+                    title='構造係数の大きさ',
+                    yaxis_title='係数',
+                    height=300,
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("構造パスが定義されていません")
+
+        # ファクターローディング
+        st.markdown("### ファクターローディング行列")
+
+        loading_df = pd.DataFrame(
+            sem.Lambda,
+            index=sem.observed_vars,
+            columns=sem.latent_vars
+        )
+
+        # 力量コードを力量名に変換して表示
+        skill_code_to_name = dict(zip(
+            competence_master['力量コード'],
+            competence_master['力量名']
+        ))
+        loading_df.index = [skill_code_to_name.get(code, code) for code in loading_df.index]
+
+        # ヒートマップ
+        fig = px.imshow(
+            loading_df.T,
+            labels=dict(x="スキル", y="潜在変数", color="ローディング"),
+            aspect="auto",
+            color_continuous_scale='RdBu_r',
+        )
+        fig.update_layout(height=400)
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # ============================================
+        # ネットワークグラフ可視化
+        # ============================================
+        st.markdown("---")
+        st.markdown("## 📊 ネットワークグラフ可視化")
+
+        with st.spinner("ネットワークグラフを生成中..."):
+            try:
+                # グラフ可視化モジュールをロード
+                visualizer_module = load_sem_network_visualizer()
+                SEMNetworkVisualizer = visualizer_module.SEMNetworkVisualizer
+
+                visualizer = SEMNetworkVisualizer()
+
+                # タブで表示方法を選択
+                tab1, tab2, tab3, tab4 = st.tabs(
+                    ["📈 統合モデル", "🔬 測定モデル", "⚙️ 構造モデル", "🕸️ スキル間ネットワーク"]
+                )
+
+                with tab1:
+                    st.markdown(
+                        "### 📊 統合SEM構造（全体像）\n"
+                        "スキル習得 → 力量カテゴリー形成 → キャリア発展の構造"
+                    )
+
+                    with st.expander("📖 この図の見方", expanded=True):
+                        st.markdown("""
+                        #### 構造図
+                        ```
+                            力量カテゴリーA        力量カテゴリーB
+                            （青い丸）            （青い丸）
+                                 ▲                    ▲
+                                 │ ローディング        │ ローディング
+                                 │ (関係の強さ)       │
+                            ─────┴─────            ─────┴─────
+                            Python基礎  Git        SQL基礎  DB設計
+                            （マゼンタ丸）         （マゼンタ丸）
+                                 ◀ スキル ▶
+
+                        力量カテゴリーA  ──→ 力量カテゴリーB
+                            (因果関係の矢印)
+                        ```
+
+                        #### 色・太さの意味
+                        - **マゼンタ丸（●）**: スキル（習得する具体的な技術）
+                          - Python基礎、Git、SQL基礎、DB設計 など
+                        - **青い丸（●）**: 力量カテゴリー（複合的な能力）
+                          - 初級力量、中級力量、システム設計力 など
+                        - **矢印の太さ**: 関係の強さ
+                          - 太い → 強い関係
+                          - 細い → 弱い関係
+                        - **緑色の矢印**: 統計的に有意な因果関係
+                        - **グレーの矢印**: 統計的に有意でない可能性
+
+                        #### このタブで分かること
+                        1. **スキル→力量**: どのスキルがどの力量に貢献しているか
+                        2. **力量→力量**: 力量カテゴリー間の発展段階
+                        3. **全体パス**: 初級スキル→高度な力量への学習パス
+                        """)
+
+
+                    # パス有意性の辞書を作成
+                    path_significance = {}
+                    relationships = sem.get_skill_relationships()
+                    for _, row in relationships.iterrows():
+                        path_significance[(row["from_skill"], row["to_skill"])] = (
+                            row["is_significant"]
+                        )
+
+                    # スキル名マッピングの作成
+                    skill_code_to_name = dict(zip(
+                        competence_master['力量コード'],
+                        competence_master['力量名']
+                    ))
+
+                    fig_combined = visualizer.visualize_combined_model(
+                        lambda_matrix=sem.Lambda,
+                        b_matrix=sem.B,
+                        latent_vars=sem.latent_vars,
+                        observed_vars=sem.observed_vars,
+                        loading_threshold=0.2,
+                        path_significance=path_significance,
+                        skill_name_mapping=skill_code_to_name,
+                    )
+                    st.plotly_chart(fig_combined, use_container_width=True)
+
+                with tab2:
+                    st.markdown(
+                        "### 🔬 測定モデル（スキル→力量）\n"
+                        "各スキルが力量カテゴリーの形成にどの程度貢献しているか"
+                    )
+
+                    with st.expander("📖 この図の見方", expanded=True):
+                        st.markdown("""
+                        #### 構造図
+                        ```
+                        スキル層          力量カテゴリー層
+                        （左側）          （右側）
+
+                        Python基礎 ──────┐
+                        Git      ──────→ 初級力量カテゴリー
+                        SQL基礎   ──────┘
+
+                        Webフレーム ──────┐
+                        Docker    ──────→ 開発技術力量カテゴリー
+                        Linux     ──────┘
+                        ```
+
+                        #### 矢印の意味
+                        - **太い矢印**: 強いローディング（0.7~1.0）
+                          - 例：「Python基礎」は「初級力量」の形成に大きく貢献
+                        - **細い矢印**: 弱いローディング（0.3~0.5）
+                          - 例：「Git」は「初級力量」に多少貢献
+
+                        #### ローディングとは
+                        - 0.0〜1.0の値
+                        - **0.7以上**: スキルは重要（学習必須）
+                        - **0.5~0.7**: スキルはまあまあ重要
+                        - **0.3~0.5**: スキルは補助的
+
+                        #### このタブで分かること
+                        1. **各スキルの重要度**: どのスキルが力量形成に欠かせないか
+                        2. **スキル選択**: 限られた時間で何から習得すべきか
+                        3. **関連スキル**: 特定の力量を身につけるために必要なスキルセット
+                        """)
+
+
+                    fig_measurement = visualizer.visualize_measurement_model(
+                        lambda_matrix=sem.Lambda,
+                        latent_vars=sem.latent_vars,
+                        observed_vars=sem.observed_vars,
+                        loading_threshold=0.2,
+                        skill_name_mapping=skill_code_to_name,
+                    )
+                    st.plotly_chart(fig_measurement, use_container_width=True)
+
+                with tab3:
+                    st.markdown(
+                        "### ⚙️ 構造モデル（力量→力量）\n"
+                        "力量カテゴリー間の因果関係と発展段階"
+                    )
+
+                    with st.expander("📖 この図の見方", expanded=True):
+                        st.markdown("""
+                        #### 構造図（キャリア発展段階）
+                        ```
+                        初級力量 ──→ 中級力量 ──→ 上級力量
+                        （基礎）    （応用）     （エキスパート）
+
+                        例：プログラミング分野
+                        基礎スキル習得 → 実務開発経験 → アーキテクチャ設計
+                        ```
+
+                        #### 矢印の意味
+                        - **緑色の矢印（→）**: 統計的に有意な因果関係
+                          - p値 < 0.05（関係がある確率95%以上）
+                          - 実務で確認されている段階的成長
+                        - **グレーの矢印（→）**: 統計的に有意でない
+                          - 直接的な因果関係が見つからない可能性
+                          - 他の要因を経由して影響する可能性
+
+                        #### 矢印の太さ
+                        - **太い矢印**: 因果係数が大きい（強い影響）
+                          - 例：初級力量 → 中級力量（係数0.8）
+                          - 初級力量の習得が中級力量習得に大きく貢献
+                        - **細い矢印**: 因果係数が小さい（弱い影響）
+                          - 例：初級力量 → 上級力量（係数0.2）
+                          - 直接的な寄与は小さい
+
+                        #### 因果係数（Path Coefficient）
+                        - -1.0〜+1.0の値
+                        - **0.7以上**: 強い影響
+                        - **0.3~0.7**: 中程度の影響
+                        - **0.3未満**: 弱い影響
+
+                        #### このタブで分かること
+                        1. **学習段階**: スキル習得の最適な順序
+                        2. **前提条件**: 高度な力量を習得する前に何を習得すべきか
+                        3. **キャリアパス**: メンバーのキャリア発展の方向性
+                        4. **効率性**: どの力量習得が次のステップに最も貢献するか
+                        """)
+
+
+                    fig_structural = visualizer.visualize_structural_model(
+                        b_matrix=sem.B,
+                        latent_vars=sem.latent_vars,
+                        path_significance=path_significance,
+                    )
+                    st.plotly_chart(fig_structural, use_container_width=True)
+
+                with tab4:
+                    st.markdown(
+                        "### スキル間ネットワーク\n"
+                        "同じ力量カテゴリーに統話するスキル同士の関連性"
+                    )
+
+                    # session_stateから推定結果を取得（スライダー変更時も使用）
+                    if 'unified_sem_result' in st.session_state:
+                        sem = st.session_state['unified_sem_result']
+                        selected_competences = st.session_state['unified_sem_selected_competences']
+
+                    # スキルコード → スキル名（日本語）のマッピングを作成
+                    skill_code_to_name = dict(zip(
+                        competence_master['力量コード'],
+                        competence_master['力量名']
+                    ))
+
+                    # 全接続数を計算（edge_limit なしで実行）
+                    temp_edges = []
+                    for j in range(len(sem.latent_vars)):
+                        contributing_skills = [
+                            (i, abs(sem.Lambda[i, j]))
+                            for i in range(len(sem.observed_vars))
+                            if abs(sem.Lambda[i, j]) > 0.2
+                        ]
+                        for k1 in range(len(contributing_skills)):
+                            for k2 in range(k1 + 1, len(contributing_skills)):
+                                temp_edges.append(True)
+
+                    max_edges = len(temp_edges)
+
+                    # スライダーで表示する接続数を調整（session_state で状態保持）
+                    # キーは一貫性を保つため固定値を使用
+                    slider_key = "unified_sem_skill_network_edge_limit"
+
+                    # max_edges が変更された場合、スライダーの値を調整
+                    if slider_key not in st.session_state:
+                        st.session_state[slider_key] = min(20, max_edges) if max_edges > 0 else 1
+
+                    # max_edges を超えないようにvalidate
+                    if st.session_state[slider_key] > max_edges and max_edges > 0:
+                        st.session_state[slider_key] = max_edges
+
+                    col1, col2 = st.columns([1, 4])
+                    with col1:
+                        st.markdown("#### 表示接続数")
+                    with col2:
+                        edge_limit = st.slider(
+                            "表示するスキル間接続数（強度順）",
+                            min_value=1,
+                            max_value=max(1, max_edges),
+                            value=min(st.session_state[slider_key], max(1, max_edges)),
+                            step=1,
+                            help=f"接続の強度が強い順に表示します。最大：{max_edges}接続",
+                            label_visibility="collapsed",
+                            key=slider_key,
+                        )
+
+                    fig_skill_network = visualizer.visualize_skill_network(
+                        lambda_matrix=sem.Lambda,
+                        latent_vars=sem.latent_vars,
+                        observed_vars=sem.observed_vars,
+                        skill_name_mapping=skill_code_to_name,
+                        loading_threshold=0.2,
+                        edge_limit=edge_limit,
+                    )
+                    st.plotly_chart(fig_skill_network, use_container_width=True)
+
+                st.success("✅ ネットワークグラフを生成しました")
+
+            except Exception as e:
+                st.error(f"❌ グラフ生成エラー: {e}")
+                import traceback
+                with st.expander("エラー詳細"):
+                    st.code(traceback.format_exc())
+
+        # 詳細データ
+        with st.expander("📋 詳細データ"):
+            st.markdown("#### ファクターローディング")
+            st.dataframe(loading_df, use_container_width=True)
+
+            st.markdown("#### 構造係数行列 B")
+            st.dataframe(
+                pd.DataFrame(sem.B, index=sem.latent_vars, columns=sem.latent_vars),
+                use_container_width=True
+            )
+
+            st.markdown("#### 潜在変数の分散 Ψ")
+            st.dataframe(
+                pd.DataFrame(sem.Psi, index=sem.latent_vars, columns=sem.latent_vars),
+                use_container_width=True
+            )
 
 # =========================================================
 # HierarchicalSEM（実データ）
