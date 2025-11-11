@@ -207,6 +207,85 @@ with col4:
 st.markdown("---")
 st.subheader("🎯 モデル選択")
 
+# 2つの手法の違いを説明
+with st.expander("❓ UnifiedSEMとHierarchicalSEMの違い", expanded=False):
+    st.markdown("""
+    ## 📊 2つの手法の違い
+
+    UnifiedSEMとHierarchicalSEMは**全く異なる分析手法**です。結果が異なるのは正常です。
+
+    ### 🔵 UnifiedSEM（統一型）
+
+    **特徴:**
+    - すべてのスキルとカテゴリーを**同時に1つのモデルで推定**
+    - 全体の構造を統一的に把握できる
+    - カテゴリー間の関係性も同時に分析
+
+    **推定方法:**
+    ```
+    すべてのスキル → カテゴリー → 総合力量
+    （1つの大きなモデルで一度に推定）
+    ```
+
+    **結果の見方:**
+    - スキル間ネットワーク: すべてのスキルの関連性を一度に可視化
+    - 測定モデル: すべてのカテゴリーのローディングを同時に表示
+    - 構造モデル: カテゴリー間の因果関係を表示
+
+    **適用場面:**
+    - スキル数が少ない場合（~200個）
+    - 全体の構造を俯瞰したい場合
+    - カテゴリー間の関係を知りたい場合
+
+    ---
+
+    ### 🟢 HierarchicalSEM（階層型）
+
+    **特徴:**
+    - カテゴリーごとに**独立したモデルを個別に推定**
+    - その後、カテゴリー同士の関係を統合層で推定
+    - 各カテゴリーの詳細な分析が可能
+
+    **推定方法:**
+    ```
+    【段階1】各カテゴリーで独立に推定
+    カテゴリーA: スキル1, 2, 3 → カテゴリーAスコア
+    カテゴリーB: スキル4, 5, 6 → カテゴリーBスコア
+    ...
+
+    【段階2】統合層で推定
+    カテゴリーAスコア、カテゴリーBスコア... → 総合力量
+    ```
+
+    **結果の見方:**
+    - ドメイン別適合度: 各カテゴリーのモデルの精度を個別に評価
+    - ドメインスコア: 各メンバーの各カテゴリーでのスキルレベル
+    - 統合モデル: カテゴリー同士の関係性
+
+    **適用場面:**
+    - スキル数が多い場合（200~1000個）
+    - 各カテゴリーの詳細を知りたい場合
+    - メンバーのカテゴリー別スコアを知りたい場合
+
+    ---
+
+    ### 🔍 なぜ結果が違うのか？
+
+    | 項目 | UnifiedSEM | HierarchicalSEM |
+    |------|-----------|-----------------|
+    | **推定単位** | 全体を一度に | カテゴリーごとに独立 |
+    | **カテゴリー間の影響** | 考慮する | 第2段階でのみ考慮 |
+    | **計算量** | O(全スキル数²) | O(カテゴリー数 × カテゴリー内スキル数²) |
+    | **適合度指標** | 全体で1つ | カテゴリーごと + 統合層 |
+    | **メンバースコア** | 総合力量のみ | カテゴリーごとのスコア |
+
+    **結論:**
+    - **UnifiedSEM**: 全体構造を把握したい → 俯瞰的な分析
+    - **HierarchicalSEM**: 各カテゴリーの詳細を把握したい → 詳細な分析
+
+    どちらも正しい結果ですが、**見ている視点が異なる**ため、結果も異なります。
+    """)
+
 model_type = st.radio(
     "使用するSEMモデル",
     options=["UnifiedSEM（実データ）", "HierarchicalSEM（実データ）"],
@@ -1332,6 +1411,11 @@ elif model_type == "HierarchicalSEM（実データ）":
                     # ドメインスコアの分布（改善版）
                     st.markdown("#### カテゴリー別スコア分布")
 
+                    # カテゴリー数に応じて高さを動的調整
+                    n_categories = len(result.domain_scores.columns)
+                    # 基本: 800px、カテゴリーが多い場合は追加（1カテゴリーあたり40px）
+                    dynamic_height = max(800, 600 + n_categories * 40)
+
                     fig = go.Figure()
                     for col in result.domain_scores.columns:
                         fig.add_trace(go.Box(
@@ -1350,11 +1434,11 @@ elif model_type == "HierarchicalSEM（実データ）":
                         title='各カテゴリーのスコア分布（箱ひげ図）<br><sub>箱：25%-75%範囲、線：中央値、×：平均値</sub>',
                         yaxis_title='ドメインスコア',
                         xaxis_title='力量カテゴリー',
-                        height=500,
+                        height=dynamic_height,
                         showlegend=False,
                         plot_bgcolor='#F8F9FA',
                         font=dict(size=12),
-                        margin=dict(b=100, l=60, r=40, t=100),
+                        margin=dict(b=150, l=80, r=40, t=120),
                     )
 
                     # X軸のラベルを斜めに表示
@@ -1364,13 +1448,41 @@ elif model_type == "HierarchicalSEM（実データ）":
 
                 # 詳細データ
                 with st.expander("📋 詳細データ"):
-                    st.markdown("#### 統合モデルの構造係数")
+                    st.markdown("#### 統合モデル（カテゴリー間の関係）")
                     if result.integration_model:
+                        # 構造係数（カテゴリー間の因果関係）
+                        st.markdown("##### 構造係数（カテゴリー間の因果パス）")
                         relationships = result.integration_model.get_skill_relationships()
                         if len(relationships) > 0:
                             st.dataframe(relationships, use_container_width=True, hide_index=True)
                         else:
-                            st.info("構造パスが定義されていません")
+                            st.info("💡 構造パスが定義されていません（カテゴリー間に因果関係を仮定していないモデルです）")
+
+                        # ファクターローディング（カテゴリー → 統合力量）
+                        st.markdown("##### ファクターローディング（各カテゴリーの統合力量への貢献度）")
+
+                        loading_df = pd.DataFrame(
+                            result.integration_model.Lambda,
+                            index=result.integration_model.observed_vars,
+                            columns=result.integration_model.latent_vars
+                        )
+
+                        # 絶対値でソート
+                        loading_df['最大ローディング'] = loading_df.abs().max(axis=1)
+                        loading_df = loading_df.sort_values('最大ローディング', ascending=False)
+                        loading_df = loading_df.drop(columns=['最大ローディング'])
+
+                        st.dataframe(
+                            loading_df.style.background_gradient(cmap='RdYlGn', axis=None, vmin=-1, vmax=1),
+                            use_container_width=True
+                        )
+
+                        st.markdown("""
+                        **読み方:**
+                        - 値が大きいほど、そのカテゴリーが統合力量に強く影響している
+                        - 正の値: 正の相関（カテゴリースコアが高いと統合力量も高い）
+                        - 負の値: 負の相関（稀）
+                        """)
 
                     st.markdown("#### ドメイン別モデルの詳細")
                     for domain_name, model in result.domain_models.items():
