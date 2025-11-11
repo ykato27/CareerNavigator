@@ -1314,28 +1314,51 @@ elif model_type == "HierarchicalSEM（実データ）":
 
                 # ドメインスコア
                 if result.domain_scores is not None:
-                    st.markdown("### ドメインスコア統計")
+                    st.markdown("### 📊 ドメインスコア統計")
+
+                    st.info(
+                        "**ドメインスコアとは？**\n\n"
+                        "各メンバーがそれぞれの力量カテゴリー（ドメイン）でどの程度のスキルレベルを持っているかを示す指標です。\n\n"
+                        "- **高いスコア**: そのカテゴリーのスキルを多く習得している\n"
+                        "- **低いスコア**: そのカテゴリーのスキル習得が少ない\n\n"
+                        "このスコアを使って、メンバーの得意分野や成長機会を把握できます。"
+                    )
 
                     score_stats = result.domain_scores.describe().T
                     score_stats = score_stats[['mean', 'std', 'min', 'max']]
                     score_stats.columns = ['平均', '標準偏差', '最小値', '最大値']
                     st.dataframe(score_stats, use_container_width=True)
 
-                    # ドメインスコアの分布
+                    # ドメインスコアの分布（改善版）
+                    st.markdown("#### カテゴリー別スコア分布")
+
                     fig = go.Figure()
                     for col in result.domain_scores.columns:
                         fig.add_trace(go.Box(
                             y=result.domain_scores[col],
                             name=col,
-                            boxmean='sd'
+                            boxmean='sd',
+                            marker=dict(
+                                color='lightblue',
+                                line=dict(color='darkblue', width=1.5)
+                            ),
+                            line=dict(color='darkblue'),
+                            fillcolor='rgba(100, 149, 237, 0.5)'
                         ))
 
                     fig.update_layout(
-                        title='ドメインスコアの分布',
-                        yaxis_title='スコア',
-                        height=400,
-                        showlegend=True
+                        title='各カテゴリーのスコア分布（箱ひげ図）<br><sub>箱：25%-75%範囲、線：中央値、×：平均値</sub>',
+                        yaxis_title='ドメインスコア',
+                        xaxis_title='力量カテゴリー',
+                        height=500,
+                        showlegend=False,
+                        plot_bgcolor='#F8F9FA',
+                        font=dict(size=12),
+                        margin=dict(b=100, l=60, r=40, t=100),
                     )
+
+                    # X軸のラベルを斜めに表示
+                    fig.update_xaxes(tickangle=-45)
 
                     st.plotly_chart(fig, use_container_width=True)
 
