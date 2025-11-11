@@ -887,9 +887,9 @@ class SEMNetworkVisualizer:
                         text=acquired_texts,
                         textposition="top center",
                         textfont=dict(size=12, color="black", weight="bold"),
-                        hovertemplate="%{text}<br>✅ 取得済み<extra></extra>",
+                        hovertemplate="%{text}<br>取得済み<extra></extra>",
                         showlegend=True,
-                        name="✅ 取得済み",
+                        name="取得済み",
                     )
                 )
 
@@ -912,9 +912,9 @@ class SEMNetworkVisualizer:
                         text=not_acquired_texts,
                         textposition="top center",
                         textfont=dict(size=12, color="black", weight="bold"),
-                        hovertemplate="%{text}<br>⭕ 未取得<extra></extra>",
+                        hovertemplate="%{text}<br>未取得<extra></extra>",
                         showlegend=True,
-                        name="⭕ 未取得",
+                        name="未取得",
                     )
                 )
         else:
@@ -938,7 +938,7 @@ class SEMNetworkVisualizer:
                     textfont=dict(size=12, color="black", weight="bold"),
                     hovertemplate="%{text}<extra></extra>",
                     showlegend=True,
-                    name="🔵 スキル",
+                    name="スキル",
                 )
             )
 
