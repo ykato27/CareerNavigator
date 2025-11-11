@@ -46,20 +46,20 @@ class SEMNetworkVisualizer:
     # 統合モデル用の設定
     COMBINED_LAYOUT_CONFIG = {
         "very_large": {
-            "spacing": 0.3, "font_size": 5, "marker_size": 0,
-            "width": 2500, "height": 1200, "text_angle": 90
+            "spacing": 0.3, "font_size": 5, "marker_size": 3,
+            "width": 2500, "height": 1200, "show_text": False  # テキスト非表示
         },
         "large": {
-            "spacing": 0.5, "font_size": 6, "marker_size": 1,
-            "width": 2000, "height": 1000, "text_angle": 45
+            "spacing": 0.5, "font_size": 6, "marker_size": 2,
+            "width": 2000, "height": 1000, "show_text": True
         },
         "medium": {
             "spacing": 1.0, "font_size": 7, "marker_size": 2,
-            "width": 1600, "height": 900, "text_angle": 0
+            "width": 1600, "height": 900, "show_text": True
         },
         "small": {
             "spacing": 1.0, "font_size": 9, "marker_size": 3,
-            "width": 1300, "height": 750, "text_angle": 0
+            "width": 1300, "height": 750, "show_text": True
         },
     }
 
@@ -733,21 +733,25 @@ class SEMNetworkVisualizer:
             n_observed = len(observed_nodes)
             config = self._get_combined_config(n_observed)
 
+            # テキスト表示の判定
+            mode = "markers+text" if config["show_text"] else "markers"
+            text_to_display = obs_display if config["show_text"] else None
+
             fig.add_trace(
                 go.Scatter(
                     x=obs_x,
                     y=obs_y,
-                    mode="markers+text",
+                    mode=mode,
                     marker=dict(
                         size=self.node_sizes["observed"] + config["marker_size"],
                         color=self.node_colors["observed"],
                         line=dict(color="black", width=2),
                     ),
-                    text=obs_display,
-                    textposition="bottom center",
-                    textangle=config["text_angle"],
-                    textfont=dict(size=config["font_size"], color="black", weight="bold"),
-                    hovertemplate="%{text}<extra></extra>",
+                    text=text_to_display,
+                    textposition="bottom center" if config["show_text"] else None,
+                    textfont=dict(size=config["font_size"], color="black", weight="bold") if config["show_text"] else None,
+                    hovertext=obs_display,
+                    hovertemplate="%{hovertext}<extra></extra>",
                     showlegend=True,
                     name="スキル（観測変数）",
                 )
