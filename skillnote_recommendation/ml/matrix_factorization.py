@@ -137,109 +137,283 @@ class MatrixFactorizationModel:
 
     def _fit_with_early_stopping(self, X: np.ndarray, X_val: Optional[np.ndarray] = None) -> None:
         """
-        Early stoppingを使用した学習
+        Early stoppingを使用した学習（Multiplicative Update Rule）
 
-        段階的にmax_iterを増やしながら学習し、
-        検証セットの誤差が増加し始めたら早期終了する
+        1ステップずつ更新しながら、検証セットの誤差が増加し始めたら早期終了する。
+        Lee & Seung (2001)のMultiplicative Update Ruleを使用。
 
         Args:
-            X: 訓練用マトリクス
+            X: 訓練用マトリクス (m × n)
             X_val: 検証用マトリクス（Noneの場合は訓練誤差で判定）
         """
-        max_iter_total = self.model.max_iter
-        batch_size = self.early_stopping_batch_size
+        m, n = X.shape
+        max_iter = self.model.max_iter
+
+        # 初期化（NNDSVDA）
+        print("[Early Stopping] 初期化中（NNDSVDA）...")
+        W, H = self._initialize_nmf(X, self.n_components)
 
         best_error = float("inf")
-        best_val_error = float("inf")
         patience_counter = 0
-        best_W = None
-        best_H = None
+        best_W = W.copy()
+        best_H = H.copy()
         best_iter = 0
-        generalization_gap_history = []  # 汎化ギャップの履歴
 
-        for current_max_iter in range(batch_size, max_iter_total + 1, batch_size):
-            # NMFモデルを再作成（max_iterを更新）
-            nmf_params = self.nmf_params.copy()
-            nmf_params["max_iter"] = current_max_iter
-            # 常にnndsvdaを使用（customは初期値W,Hが必要で複雑になるため）
-            nmf_params["init"] = "nndsvda"
+        # 学習履歴
+        train_errors = []
+        val_errors = []
+        generalization_gaps = []
 
-            temp_model = NMF(
-                n_components=self.n_components, random_state=self.random_state, **nmf_params
-            )
+        # アルファ値（正則化係数）を取得
+        alpha_W = self.nmf_params.get('alpha_W', 0.0)
+        alpha_H = self.nmf_params.get('alpha_H', 0.0)
+        l1_ratio = self.nmf_params.get('l1_ratio', 0.0)
 
-            # 学習
-            W = temp_model.fit_transform(X)
-            H = temp_model.components_
+        print(f"[Early Stopping] 学習開始（max_iter={max_iter}, patience={self.early_stopping_patience}）")
 
-            # 訓練誤差を計算
-            reconstructed = W @ H
-            train_error = np.linalg.norm(X - reconstructed, "fro")
+        for iter_num in range(1, max_iter + 1):
+            # Multiplicative Update Rule（1ステップ）
+            W, H = self._update_nmf_step(X, W, H, alpha_W, alpha_H, l1_ratio)
 
-            # 検証誤差を計算（検証セットが提供されている場合）
-            if X_val is not None:
-                reconstructed_val = (W @ H)[:X_val.shape[0], :] if W.shape[0] >= X_val.shape[0] else (W @ H)
-                # マトリクスサイズが異なる場合は、共通部分のみで計算
-                min_rows = min(X_val.shape[0], reconstructed_val.shape[0])
-                val_error = np.linalg.norm(X_val[:min_rows] - reconstructed_val[:min_rows], "fro")
-                generalization_gap = val_error - train_error
-            else:
-                val_error = train_error
-                generalization_gap = 0.0
+            # 評価頻度ごとに誤差を計算
+            if iter_num % 10 == 0 or iter_num == max_iter:
+                # 訓練誤差を計算
+                reconstructed = W @ H
+                train_error = np.linalg.norm(X - reconstructed, "fro")
+                train_errors.append(train_error)
 
-            # Early stopping判定
-            # 検証セットがある場合は検証誤差で判定、ない場合は訓練誤差で判定
-            current_error = val_error if X_val is not None else train_error
-            improvement = best_error - current_error
-
-            if improvement > self.early_stopping_min_delta:
-                best_error = current_error
-                best_val_error = val_error if X_val is not None else train_error
-                best_W = W.copy()
-                best_H = H.copy()
-                best_iter = current_max_iter
-                patience_counter = 0
-                generalization_gap_history.append(generalization_gap)
-
+                # 検証誤差を計算
                 if X_val is not None:
-                    print(
-                        f"[Early Stopping] Iter {current_max_iter}: "
-                        f"train_error={train_error:.6f}, val_error={val_error:.6f}, "
-                        f"gap={generalization_gap:.6f} (improved by {improvement:.6f})"
-                    )
+                    # 検証セット用のW（訓練データで学習済みのHを使用）
+                    W_val = self._transform_new_data(X_val, H, alpha_W, l1_ratio)
+                    reconstructed_val = W_val @ H
+                    val_error = np.linalg.norm(X_val - reconstructed_val, "fro")
+                    val_errors.append(val_error)
+                    generalization_gap = val_error - train_error
+                    generalization_gaps.append(generalization_gap)
                 else:
-                    print(
-                        f"[Early Stopping] Iter {current_max_iter}: error={train_error:.6f} (improved by {improvement:.6f})"
-                    )
-            else:
-                patience_counter += 1
-                generalization_gap_history.append(generalization_gap)
+                    val_error = train_error
+                    val_errors.append(val_error)
+                    generalization_gap = 0.0
 
-                if X_val is not None:
-                    print(
-                        f"[Early Stopping] Iter {current_max_iter}: "
-                        f"train_error={train_error:.6f}, val_error={val_error:.6f}, "
-                        f"gap={generalization_gap:.6f} (no improvement, patience={patience_counter}/{self.early_stopping_patience})"
-                    )
+                # Early stopping判定
+                current_error = val_error if X_val is not None else train_error
+                improvement = best_error - current_error
+
+                if improvement > self.early_stopping_min_delta:
+                    best_error = current_error
+                    best_W = W.copy()
+                    best_H = H.copy()
+                    best_iter = iter_num
+                    patience_counter = 0
+
+                    if iter_num % 50 == 0:  # 50イテレーションごとに表示
+                        if X_val is not None:
+                            print(
+                                f"[Early Stopping] Iter {iter_num:4d}: "
+                                f"train={train_error:.6f}, val={val_error:.6f}, "
+                                f"gap={generalization_gap:.6f} ✓"
+                            )
+                        else:
+                            print(f"[Early Stopping] Iter {iter_num:4d}: error={train_error:.6f} ✓")
                 else:
-                    print(
-                        f"[Early Stopping] Iter {current_max_iter}: error={train_error:.6f} (no improvement, patience={patience_counter}/{self.early_stopping_patience})"
-                    )
+                    patience_counter += 1
 
-                if patience_counter >= self.early_stopping_patience:
-                    print(
-                        f"[Early Stopping] Stopped at iteration {best_iter} (best error: {best_error:.6f})"
-                    )
-                    if X_val is not None:
-                        avg_gap = np.mean(generalization_gap_history[-self.early_stopping_patience:])
-                        print(f"[Early Stopping] Average generalization gap: {avg_gap:.6f}")
-                    break
+                    if iter_num % 50 == 0:  # 50イテレーションごとに表示
+                        if X_val is not None:
+                            print(
+                                f"[Early Stopping] Iter {iter_num:4d}: "
+                                f"train={train_error:.6f}, val={val_error:.6f}, "
+                                f"gap={generalization_gap:.6f} (patience={patience_counter}/{self.early_stopping_patience})"
+                            )
+                        else:
+                            print(
+                                f"[Early Stopping] Iter {iter_num:4d}: error={train_error:.6f} "
+                                f"(patience={patience_counter}/{self.early_stopping_patience})"
+                            )
+
+                    if patience_counter >= self.early_stopping_patience:
+                        print(
+                            f"\n[Early Stopping] ✅ 停止（Iter {best_iter}, best_error={best_error:.6f}）"
+                        )
+                        if X_val is not None:
+                            avg_gap = np.mean(generalization_gaps[-self.early_stopping_patience:])
+                            print(f"[Early Stopping] 平均汎化ギャップ: {avg_gap:.6f}")
+                        break
 
         # ベストモデルを設定
-        self.X = X  # 元のデータマトリクスを保存（再構成誤差計算用）
-        self.W = best_W if best_W is not None else W
-        self.H = best_H if best_H is not None else H
-        self.actual_n_iter_ = best_iter if best_W is not None else current_max_iter
+        self.X = X
+        self.W = best_W
+        self.H = best_H
+        self.actual_n_iter_ = best_iter
+
+        # 学習履歴を保存
+        self.training_history = {
+            'train_errors': train_errors,
+            'val_errors': val_errors,
+            'generalization_gaps': generalization_gaps,
+        }
+
+        print(f"[Early Stopping] 学習完了（最終Iter: {best_iter}/{max_iter}）")
+
+    def _initialize_nmf(self, X: np.ndarray, n_components: int) -> tuple:
+        """
+        NMFの初期化（NNDSVDA法）
+
+        SVD分解に基づく初期化により、収束を高速化する。
+
+        Args:
+            X: データマトリクス (m × n)
+            n_components: 潜在因子数
+
+        Returns:
+            W: (m × n_components), H: (n_components × n)
+        """
+        from sklearn.utils.extmath import randomized_svd
+
+        m, n = X.shape
+
+        # SVD分解
+        U, S, Vt = randomized_svd(X, n_components=n_components, random_state=self.random_state)
+
+        # W, Hの初期化
+        W = np.zeros((m, n_components))
+        H = np.zeros((n_components, n))
+
+        # 正の成分のみ抽出
+        W[:, 0] = np.sqrt(S[0]) * np.abs(U[:, 0])
+        H[0, :] = np.sqrt(S[0]) * np.abs(Vt[0, :])
+
+        for j in range(1, n_components):
+            x = U[:, j]
+            y = Vt[j, :]
+
+            x_pos = np.maximum(x, 0)
+            y_pos = np.maximum(y, 0)
+            x_neg = np.abs(np.minimum(x, 0))
+            y_neg = np.abs(np.minimum(y, 0))
+
+            x_pos_norm = np.linalg.norm(x_pos)
+            y_pos_norm = np.linalg.norm(y_pos)
+            x_neg_norm = np.linalg.norm(x_neg)
+            y_neg_norm = np.linalg.norm(y_neg)
+
+            m_pos = x_pos_norm * y_pos_norm
+            m_neg = x_neg_norm * y_neg_norm
+
+            if m_pos >= m_neg:
+                u = x_pos / (x_pos_norm + 1e-10)
+                v = y_pos / (y_pos_norm + 1e-10)
+                sigma = m_pos
+            else:
+                u = x_neg / (x_neg_norm + 1e-10)
+                v = y_neg / (y_neg_norm + 1e-10)
+                sigma = m_neg
+
+            W[:, j] = np.sqrt(S[j] * sigma) * u
+            H[j, :] = np.sqrt(S[j] * sigma) * v
+
+        # 小さな正の値を追加（ゼロ除算防止）
+        W = np.maximum(W, 1e-10)
+        H = np.maximum(H, 1e-10)
+
+        return W, H
+
+    def _update_nmf_step(
+        self,
+        X: np.ndarray,
+        W: np.ndarray,
+        H: np.ndarray,
+        alpha_W: float = 0.0,
+        alpha_H: float = 0.0,
+        l1_ratio: float = 0.0
+    ) -> tuple:
+        """
+        NMFの1ステップ更新（Multiplicative Update Rule with regularization）
+
+        Lee & Seung (2001)のアルゴリズムに正則化を追加。
+
+        Args:
+            X: データマトリクス (m × n)
+            W: メンバー因子行列 (m × k)
+            H: 力量因子行列 (k × n)
+            alpha_W: Wの正則化係数
+            alpha_H: Hの正則化係数
+            l1_ratio: L1正則化の比率（0=L2のみ, 1=L1のみ）
+
+        Returns:
+            更新されたW, H
+        """
+        eps = 1e-10
+
+        # Hの更新
+        # H = H * (W^T @ X) / (W^T @ W @ H + alpha_H * (l1 + (1-l1)*H))
+        numerator_H = W.T @ X
+        denominator_H = W.T @ W @ H + eps
+
+        if alpha_H > 0:
+            l1_H = l1_ratio
+            l2_H = 1 - l1_ratio
+            denominator_H += alpha_H * (l1_H + l2_H * H)
+
+        H *= numerator_H / denominator_H
+
+        # Wの更新
+        # W = W * (X @ H^T) / (W @ H @ H^T + alpha_W * (l1 + (1-l1)*W))
+        numerator_W = X @ H.T
+        denominator_W = W @ H @ H.T + eps
+
+        if alpha_W > 0:
+            l1_W = l1_ratio
+            l2_W = 1 - l1_ratio
+            denominator_W += alpha_W * (l1_W + l2_W * W)
+
+        W *= numerator_W / denominator_W
+
+        return W, H
+
+    def _transform_new_data(
+        self,
+        X_new: np.ndarray,
+        H: np.ndarray,
+        alpha: float = 0.0,
+        l1_ratio: float = 0.0,
+        max_iter: int = 100
+    ) -> np.ndarray:
+        """
+        新しいデータに対してWを計算（Hは固定）
+
+        Args:
+            X_new: 新しいデータマトリクス (m_new × n)
+            H: 学習済みの力量因子行列 (k × n)
+            alpha: 正則化係数
+            l1_ratio: L1正則化の比率
+            max_iter: 最大イテレーション数
+
+        Returns:
+            W_new: (m_new × k)
+        """
+        m_new, n = X_new.shape
+        k = H.shape[0]
+
+        # Wの初期化（ランダム）
+        W_new = np.random.rand(m_new, k) * 0.01 + 0.01
+
+        eps = 1e-10
+
+        for _ in range(max_iter):
+            # Wの更新（Hは固定）
+            numerator = X_new @ H.T
+            denominator = W_new @ H @ H.T + eps
+
+            if alpha > 0:
+                l1 = l1_ratio
+                l2 = 1 - l1_ratio
+                denominator += alpha * (l1 + l2 * W_new)
+
+            W_new *= numerator / denominator
+
+        return W_new
 
     def predict(self, member_code: str, competence_codes: Optional[List[str]] = None) -> pd.Series:
         """

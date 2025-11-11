@@ -596,10 +596,36 @@ class NMFHyperparameterTuner:
 
         # Studyを作成
         print("[DEBUG] Creating Optuna study...")
-        self.study = optuna.create_study(
-            direction="minimize", sampler=sampler_instance  # 再構成誤差を最小化
+        # データベースで履歴を永続化（SQLite）
+        import os
+        storage_path = os.path.join("output", "optuna_studies.db")
+        os.makedirs("output", exist_ok=True)
+
+        storage_url = f"sqlite:///{storage_path}"
+        study_name = "nmf_tuning"
+
+        # Pruner（枝刈り）を設定（見込みのないtrialを早期終了）
+        pruner = optuna.pruners.MedianPruner(
+            n_startup_trials=5,  # 最初の5trialはpruningしない
+            n_warmup_steps=0,  # イテレーション0からpruning開始
+            interval_steps=1,  # 毎イテレーションチェック
         )
-        print("[DEBUG] Study created successfully")
+
+        self.study = optuna.create_study(
+            study_name=study_name,
+            storage=storage_url,
+            load_if_exists=True,  # 既存のstudyがあれば読み込み
+            direction="minimize",
+            sampler=sampler_instance,
+            pruner=pruner,  # Prunerを設定
+        )
+
+        existing_trials = len(self.study.trials)
+        print(f"[DEBUG] Study created/loaded successfully (existing trials: {existing_trials})")
+
+        if existing_trials > 0:
+            best_trial = self.study.best_trial
+            print(f"[DEBUG] Best trial so far: value={best_trial.value:.6f}, params={best_trial.params}")
 
         # プログレスコールバックを設定
         all_callbacks = callbacks or []
