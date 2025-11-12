@@ -69,7 +69,27 @@ with st.expander("🔍 デバッグ: データ詳細", expanded=False):
     st.write("**members_cleanのカラム:**", list(members_clean.columns))
     st.write("**members_cleanのサンプル（最初の3行）:**")
     st.dataframe(members_clean.head(3))
+
+    st.markdown("---")
     st.write("**competence_masterのカラム:**", list(competence_master.columns))
+    st.write("**competence_masterのサンプル（最初の30行）:**")
+    st.dataframe(competence_master.head(30))
+
+    # 力量カテゴリの分布を確認
+    if '力量カテゴリ' in competence_master.columns:
+        st.write("**力量カテゴリの分布:**")
+        category_dist = competence_master['力量カテゴリ'].value_counts()
+        st.dataframe(category_dist)
+    else:
+        st.warning("⚠️ '力量カテゴリ'列が見つかりません")
+
+    # 力量タイプの分布を確認
+    if '力量タイプ' in competence_master.columns:
+        st.write("**力量タイプの分布:**")
+        type_dist = competence_master['力量タイプ'].value_counts()
+        st.dataframe(type_dist)
+
+    st.markdown("---")
     st.write("**member_competenceのカラム:**", list(member_competence.columns))
 
 
