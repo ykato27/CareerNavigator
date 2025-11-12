@@ -50,6 +50,12 @@ competence_master = transformed_data["competence_master"]
 member_competence = transformed_data["member_competence"]
 members_clean = transformed_data["members_clean"]
 
+# デバッグ: members_cleanの構造を確認
+with st.expander("🔍 デバッグ情報", expanded=False):
+    st.write("**members_cleanのカラム:**", list(members_clean.columns))
+    st.write("**members_cleanのサンプル（最初の3行）:**")
+    st.dataframe(members_clean.head(3))
+
 
 # =========================================================
 # SEMモデルの学習
