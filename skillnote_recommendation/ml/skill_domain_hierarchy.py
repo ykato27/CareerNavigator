@@ -125,12 +125,23 @@ class SkillDomainHierarchy:
         """
         classification = {}
 
+        # デバッグ: カテゴリー名の分布を確認
+        category_counts = {}
+        category_samples = {}
+
         for _, row in self.competence_master.iterrows():
             competence_code = row['力量コード']
             competence_name = row['力量名']
 
             # 力量カテゴリー名がある場合はそれを優先的に使用
             competence_category = row.get('力量カテゴリー名', None)
+
+            # デバッグ情報収集
+            if competence_category and not pd.isna(competence_category):
+                category_str = str(competence_category)
+                category_counts[category_str] = category_counts.get(category_str, 0) + 1
+                if category_str not in category_samples:
+                    category_samples[category_str] = competence_name
 
             # カテゴリーベースでドメインとレベルを判定
             domain, level = self._match_domain_level_with_category(
@@ -143,6 +154,13 @@ class SkillDomainHierarchy:
                     'level': level,
                     'competence_name': competence_name,
                 }
+
+        # デバッグ出力
+        logger.info("\n[DEBUG] 力量カテゴリー名の分布（上位10個）:")
+        sorted_categories = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        for cat, count in sorted_categories:
+            sample = category_samples.get(cat, "N/A")
+            logger.info(f"  - {cat}: {count}個（例: {sample}）")
 
         return classification
 
@@ -175,7 +193,7 @@ class SkillDomainHierarchy:
         力量カテゴリー名をドメインにマッピング
 
         Args:
-            category: 力量カテゴリー名
+            category: 力量カテゴリー名（例: "業務スキル > 開発技術 > システム設計 > 製品要求分析"）
 
         Returns:
             ドメイン名（該当なしの場合はNone）
@@ -183,17 +201,65 @@ class SkillDomainHierarchy:
         category_lower = category.lower()
 
         # カテゴリー名とドメインのマッピング
+        # 階層構造（> 区切り）を考慮してマッピング
         category_mapping = {
-            'プログラミング': ['プログラミング', 'コーディング', '開発', 'python', 'java', 'javascript', 'web', 'アプリ'],
-            'データベース': ['データベース', 'db', 'sql', 'mysql', 'postgresql', 'oracle', 'nosql'],
-            'データ分析': ['データ分析', '分析', 'データサイエンス', '統計', '機械学習', 'ai', 'bi', 'tableau'],
-            'マネジメント': ['マネジメント', '管理', 'プロジェクト', 'リーダー', '組織', '戦略', '計画'],
-            'コミュニケーション': ['コミュニケーション', 'プレゼン', '交渉', '報告', '文書作成', '提案'],
+            'プログラミング': [
+                'プログラミング', 'コーディング', 'ソフト設計', 'ソフト実装', 'ソフトウェア',
+                'ソフト仕様', 'アーキテクチャ設計', '構想設計（ソフト）', 'web', 'アプリ',
+                'python', 'java', 'javascript', 'コード', 'ソフト', 'mbse/mbd',
+                '要求分析（ソフト）', 'ソフトウェア内部設計', 'ハードウェア連携設計'
+            ],
+            'データベース': [
+                'データベース', 'db', 'sql', 'mysql', 'postgresql', 'oracle', 'nosql',
+                'データ管理', 'ストレージ', 'データモデリング'
+            ],
+            'データ分析': [
+                'データ分析', '分析', 'データサイエンス', '統計', '機械学習',
+                'ai', 'bi', 'tableau', '解析', 'データ活用', '解析検証'
+            ],
+            'マネジメント': [
+                'マネジメント', '管理', 'プロジェクト', 'リーダー', '組織', '戦略',
+                '計画', 'pmo', 'ポートフォリオ', '予算', '人材育成', 'マネージャ',
+                '事業', '経営'
+            ],
+            'コミュニケーション': [
+                'コミュニケーション', 'プレゼン', '交渉', '報告', '文書作成',
+                '提案', '折衝', 'ドキュメント', '会議', 'ファシリテーション', 'プレゼンテーション'
+            ],
         }
 
-        for domain, keywords in category_mapping.items():
-            if any(keyword in category_lower for keyword in keywords):
-                return domain
+        # カテゴリー階層の最後の部分（最も詳細な分類）を優先的に使用
+        # 例: "業務スキル > 開発技術 > システム設計 > 製品要求分析" → "製品要求分析"
+        category_parts = [part.strip() for part in category.split('>')]
+
+        # 詳細な分類から順にマッチング（後方から）
+        for part in reversed(category_parts):
+            part_lower = part.lower()
+            for domain, keywords in category_mapping.items():
+                if any(keyword in part_lower for keyword in keywords):
+                    return domain
+
+        # マッチしない場合、第3階層をデフォルトのドメインマッピングに使用
+        # 例: "業務スキル > 開発技術 > システム設計 > ..." → "システム設計"
+        if len(category_parts) >= 3:
+            third_level = category_parts[2].lower()
+
+            # 第3階層の一般的なマッピング
+            default_third_level_mapping = {
+                'プログラミング': ['システム設計', '構想設計', '詳細設計', '設計検証', 'mbse/mbd'],
+                'マネジメント': ['マネジメント', 'プロジェクトマネジメント', '組織マネジメント'],
+                'コミュニケーション': ['コミュニケーション', 'プレゼンテーション'],
+                'データ分析': ['データ分析', '統計', '機械学習'],
+                'データベース': ['データベース', 'データ設計'],
+            }
+
+            for domain, keywords in default_third_level_mapping.items():
+                if any(keyword in third_level for keyword in keywords):
+                    return domain
+
+        # 最終フォールバック: 「開発技術」配下は全てプログラミングとみなす
+        if len(category_parts) >= 2 and '開発技術' in category_parts[1]:
+            return 'プログラミング'
 
         return None
 

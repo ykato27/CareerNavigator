@@ -80,8 +80,12 @@ with st.expander("🔍 デバッグ: データ詳細", expanded=False):
         st.write("**力量カテゴリの分布:**")
         category_dist = competence_master['力量カテゴリ'].value_counts()
         st.dataframe(category_dist)
+    elif '力量カテゴリー名' in competence_master.columns:
+        st.write("**力量カテゴリー名の分布:**")
+        category_dist = competence_master['力量カテゴリー名'].value_counts()
+        st.dataframe(category_dist)
     else:
-        st.warning("⚠️ '力量カテゴリ'列が見つかりません")
+        st.warning("⚠️ '力量カテゴリ'または'力量カテゴリー名'列が見つかりません")
 
     # 力量タイプの分布を確認
     if '力量タイプ' in competence_master.columns:
