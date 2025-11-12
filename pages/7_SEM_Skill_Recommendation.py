@@ -138,10 +138,13 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
 
             # デバッグ: ドメイン階層の詳細を表示
             with st.expander("🔍 デバッグ: ドメイン階層の詳細", expanded=True):
-                st.write(f"**総ドメイン数:** {len(domain_hierarchy.domains)}")
-                st.write(f"**ドメインリスト:**")
-                for domain in domain_hierarchy.domains:
-                    st.write(f"- {domain.domain_name}: Level1={len(domain.level_1_competences)}, Level2={len(domain.level_2_competences)}, Level3={len(domain.level_3_competences)}")
+                st.write(f"**総ドメイン数:** {len(domain_hierarchy.hierarchy)}")
+                st.write(f"**ドメインリスト:**", list(domain_hierarchy.hierarchy.keys()))
+                st.write(f"**分類された力量数:** {len(domain_hierarchy.competence_classification)}")
+                st.write("**各ドメインのスキル数:**")
+                for domain_name in domain_hierarchy.hierarchy.keys():
+                    domain_comps = [c for c, info in domain_hierarchy.competence_classification.items() if info['domain'] == domain_name]
+                    st.write(f"- {domain_name}: {len(domain_comps)}個")
 
             # SEMモデルを学習
             st.info("ステップ2: SEMモデルを学習中...")
