@@ -461,3 +461,211 @@ class CareerPathSEMModel:
             })
 
         return pd.DataFrame(path_data)
+
+    def calculate_path_alignment_score(
+        self,
+        member_code: str,
+        competence_code: str
+    ) -> float:
+        """
+        推薦スキルがパスに沿っているかを評価するスコアを計算
+
+        Path Alignment Score:
+        - 現在のステージのスキル: 1.0（最高優先度）
+        - 次のステージのスキル: 0.8（高優先度）
+        - 2段階先のスキル: 0.5（中優先度）
+        - 過去のステージのスキル: 0.2（低優先度）
+        - パス上にないスキル: 0.0
+
+        Args:
+            member_code: メンバーコード
+            competence_code: 力量コード
+
+        Returns:
+            Path Alignment Score（0.0～1.0）
+        """
+        role, current_stage, progress = self.get_member_position(member_code)
+
+        if role is None or role not in self.sem_models:
+            return 0.0
+
+        # スキルがどのステージに属するか判定
+        skill_stage = None
+        stages = self.career_path_hierarchy.get_role_stages(role)
+
+        for stage_info in stages:
+            stage_num = stage_info['stage']
+            stage_skills = self.career_path_hierarchy.get_skills_by_stage(role, stage_num)
+
+            if competence_code in stage_skills:
+                skill_stage = stage_num
+                break
+
+        if skill_stage is None:
+            # パス上にないスキル
+            return 0.0
+
+        # 現在の段階とスキルの段階の距離
+        stage_distance = skill_stage - current_stage
+
+        # 距離に基づいてスコアを計算
+        if stage_distance == 0:
+            # 現在の段階のスキル → 高スコア
+            base_score = 1.0
+        elif stage_distance == 1:
+            # 次の段階のスキル → 中程度のスコア
+            base_score = 0.8
+        elif stage_distance == 2:
+            # 2段階先のスキル → 低めのスコア
+            base_score = 0.5
+        elif stage_distance < 0:
+            # 過去の段階のスキル（既に通過した段階）→ 最低スコア
+            base_score = 0.2
+        else:
+            # 3段階以上先のスキル → 最低スコア
+            base_score = 0.1
+
+        # 現在の段階の進度で調整
+        # 進度が高いほど、次の段階のスキルが推奨されやすい
+        if stage_distance == 1:
+            progress_adjustment = progress * 0.2
+            base_score = min(1.0, base_score + progress_adjustment)
+
+        # パス係数で調整（次のステージへの因果効果が強い場合、スコアを上げる）
+        if role in self.path_coefficients and stage_distance == 1:
+            path_coefs = self.path_coefficients[role]
+            if current_stage < len(path_coefs):
+                # 現在→次ステージのパス係数
+                path_coef = path_coefs[current_stage]
+                # パス係数が高いほど、次のステージのスキルを推奨
+                path_adjustment = path_coef * 0.1
+                base_score = min(1.0, base_score + path_adjustment)
+
+        return base_score
+
+    def generate_path_explanation(
+        self,
+        member_code: str,
+        competence_code: str
+    ) -> str:
+        """
+        推薦理由を生成
+
+        Args:
+            member_code: メンバーコード
+            competence_code: 力量コード
+
+        Returns:
+            推薦理由の文字列
+        """
+        role, current_stage, progress = self.get_member_position(member_code)
+
+        if role is None:
+            return "推薦理由を生成できませんでした（役職情報なし）。"
+
+        if role not in self.sem_models:
+            return f"推薦理由を生成できませんでした（役職「{role}」のSEMモデルなし）。"
+
+        # スキル情報を取得
+        comp_info = self.competence_master[
+            self.competence_master['力量コード'] == competence_code
+        ]
+
+        if len(comp_info) == 0:
+            skill_name = competence_code
+        else:
+            skill_name = comp_info.iloc[0]['力量名']
+
+        # スキルがどのステージに属するか判定
+        skill_stage = None
+        stages = self.career_path_hierarchy.get_role_stages(role)
+
+        for stage_info in stages:
+            stage_num = stage_info['stage']
+            stage_skills = self.career_path_hierarchy.get_skills_by_stage(role, stage_num)
+
+            if competence_code in stage_skills:
+                skill_stage = stage_num
+                break
+
+        if skill_stage is None:
+            return f"「{skill_name}」はキャリアパス上にありません。"
+
+        # 現在のステージ情報
+        current_stage_info = self.career_path_hierarchy.get_stage_info(role, current_stage)
+        current_stage_name = current_stage_info['name'] if current_stage_info else f'Stage {current_stage}'
+
+        # スキルのステージ情報
+        skill_stage_info = self.career_path_hierarchy.get_stage_info(role, skill_stage)
+        skill_stage_name = skill_stage_info['name'] if skill_stage_info else f'Stage {skill_stage}'
+
+        # 進度パーセント
+        progress_pct = progress * 100
+
+        # 段階間の距離
+        stage_distance = skill_stage - current_stage
+
+        # Path Alignment Score
+        path_score = self.calculate_path_alignment_score(member_code, competence_code)
+
+        # 推薦理由を生成
+        if stage_distance == 0:
+            # 現在の段階のスキル
+            explanation = (
+                f"【キャリアパス因果構造モデル推薦】\n\n"
+                f"あなたは現在、役職「{role}」の{current_stage_name}（進度: {progress_pct:.1f}%）にいます。\n\n"
+                f"「{skill_name}」は{current_stage_name}で習得すべきスキルです。\n"
+                f"この段階を完了することで、次の段階への進出が可能になります。"
+            )
+        elif stage_distance == 1:
+            # 次の段階のスキル
+            # パス係数を取得
+            path_coef = None
+            if role in self.path_coefficients:
+                path_coefs = self.path_coefficients[role]
+                if current_stage < len(path_coefs):
+                    path_coef = path_coefs[current_stage]
+
+            explanation = (
+                f"【キャリアパス因果構造モデル推薦】\n\n"
+                f"あなたは現在、役職「{role}」の{current_stage_name}（進度: {progress_pct:.1f}%）にいます。\n\n"
+                f"「{skill_name}」は次のステップである{skill_stage_name}のスキルです。\n"
+                f"現在の段階の進度が{progress_pct:.1f}%に達しているため、次の段階への準備として推奨します。"
+            )
+
+            if path_coef is not None and path_coef > 0.5:
+                explanation += (
+                    f"\n\n【因果効果】\n"
+                    f"{current_stage_name} → {skill_stage_name}のパス係数: β={path_coef:.3f}\n"
+                    f"現在の段階のスキル習得が、次の段階のスキル習得に強い因果効果を持っています。"
+                )
+
+        elif stage_distance == 2:
+            # 2段階先のスキル
+            explanation = (
+                f"【キャリアパス因果構造モデル推薦】\n\n"
+                f"あなたは現在、役職「{role}」の{current_stage_name}（進度: {progress_pct:.1f}%）にいます。\n\n"
+                f"「{skill_name}」は{skill_stage_name}のスキルで、2段階先のスキルです。\n"
+                f"将来のキャリアを見据えた先行学習として推奨します。"
+            )
+        elif stage_distance > 2:
+            # 3段階以上先のスキル
+            explanation = (
+                f"【キャリアパス因果構造モデル推薦】\n\n"
+                f"あなたは現在、役職「{role}」の{current_stage_name}（進度: {progress_pct:.1f}%）にいます。\n\n"
+                f"「{skill_name}」は{skill_stage_name}のスキルで、{stage_distance}段階先のスキルです。\n"
+                f"長期的なキャリア開発の観点から、先を見据えた学習として推奨します。"
+            )
+        else:
+            # 過去の段階のスキル
+            explanation = (
+                f"【キャリアパス因果構造モデル推薦】\n\n"
+                f"あなたは現在、役職「{role}」の{current_stage_name}（進度: {progress_pct:.1f}%）にいます。\n\n"
+                f"「{skill_name}」は{skill_stage_name}のスキルで、基礎固めに役立ちます。\n"
+                f"基本スキルの補強により、現在の段階での成長が加速します。"
+            )
+
+        # Path Alignment Scoreを追加
+        explanation += f"\n\nPath Alignment Score: {path_score:.2f}（パス親和性: {path_score*100:.0f}%）"
+
+        return explanation
