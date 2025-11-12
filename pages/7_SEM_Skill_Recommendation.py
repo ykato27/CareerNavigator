@@ -10,12 +10,19 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 
-from skillnote_recommendation.ml.skill_domain_hierarchy import SkillDomainHierarchy
-from skillnote_recommendation.ml.skill_domain_sem_model import SkillDomainSEMModel
-from skillnote_recommendation.utils.ui_components import (
-    apply_rich_ui_styles,
-    render_gradient_header
-)
+try:
+    from skillnote_recommendation.ml.skill_domain_hierarchy import SkillDomainHierarchy
+    from skillnote_recommendation.ml.skill_domain_sem_model import SkillDomainSEMModel
+    from skillnote_recommendation.utils.ui_components import (
+        apply_rich_ui_styles,
+        render_gradient_header
+    )
+    IMPORTS_OK = True
+except ImportError as e:
+    st.error(f"❌ インポートエラー: {e}")
+    st.error("このページは現在利用できません。")
+    st.stop()
+    IMPORTS_OK = False
 
 
 # =========================================================
@@ -49,6 +56,21 @@ transformed_data = st.session_state.transformed_data
 competence_master = transformed_data["competence_master"]
 member_competence = transformed_data["member_competence"]
 members_clean = transformed_data["members_clean"]
+
+# デバッグ: データ読み込み状態を確認
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔍 デバッグ情報")
+st.sidebar.write(f"✅ データ読み込み済み")
+st.sidebar.write(f"- competence_master: {len(competence_master)}件")
+st.sidebar.write(f"- member_competence: {len(member_competence)}件")
+st.sidebar.write(f"- members_clean: {len(members_clean)}件")
+
+with st.expander("🔍 デバッグ: データ詳細", expanded=False):
+    st.write("**members_cleanのカラム:**", list(members_clean.columns))
+    st.write("**members_cleanのサンプル（最初の3行）:**")
+    st.dataframe(members_clean.head(3))
+    st.write("**competence_masterのカラム:**", list(competence_master.columns))
+    st.write("**member_competenceのカラム:**", list(member_competence.columns))
 
 
 # =========================================================
@@ -106,6 +128,7 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
     with st.spinner("SEMモデルを学習中..."):
         try:
             # ドメイン階層を構築
+            st.info("ステップ1: ドメイン階層を構築中...")
             domain_hierarchy = SkillDomainHierarchy(competence_master)
 
             # 統計情報を表示
@@ -113,19 +136,36 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
             stats_df = domain_hierarchy.get_domain_statistics()
             st.dataframe(stats_df, use_container_width=True)
 
+            # デバッグ: ドメイン階層の詳細を表示
+            with st.expander("🔍 デバッグ: ドメイン階層の詳細", expanded=True):
+                st.write(f"**総ドメイン数:** {len(domain_hierarchy.domains)}")
+                st.write(f"**ドメインリスト:**")
+                for domain in domain_hierarchy.domains:
+                    st.write(f"- {domain.domain_name}: Level1={len(domain.level_1_competences)}, Level2={len(domain.level_2_competences)}, Level3={len(domain.level_3_competences)}")
+
             # SEMモデルを学習
+            st.info("ステップ2: SEMモデルを学習中...")
             sem_model = SkillDomainSEMModel(
                 member_competence=member_competence,
                 competence_master=competence_master,
                 domain_hierarchy=domain_hierarchy,
             )
 
+            st.info(f"ステップ3: フィッティング開始（min_competences_per_level={int(min_competences_per_level)}）...")
             sem_model.fit(min_competences_per_level=int(min_competences_per_level))
+            st.info(f"ステップ4: フィッティング完了")
 
             # Session stateに保存
             st.session_state.sem_model = sem_model
             st.session_state.domain_hierarchy = domain_hierarchy
             st.session_state.min_current_level_score = min_current_level_score
+
+            # デバッグ: SEMモデルの学習結果を表示
+            with st.expander("🔍 デバッグ: SEMモデル学習結果", expanded=False):
+                st.write(f"**学習済みドメイン数:** {len(sem_model.sem_models)}")
+                st.write(f"**学習済みドメイン:**", list(sem_model.sem_models.keys()))
+                st.write(f"**ドメイン階層統計:**")
+                st.dataframe(stats_df)
 
             st.success(f"✅ SEMモデル学習完了（{len(sem_model.sem_models)}ドメイン）")
             st.rerun()
@@ -166,8 +206,26 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
     )
 
     if selected_member:
+        # デバッグ: メンバーのスキル保有状況を確認
+        member_skills = member_competence[member_competence['メンバーコード'] == selected_member]
+        with st.expander("🔍 デバッグ: メンバースキル情報", expanded=False):
+            st.write(f"**選択メンバー:** {selected_member}")
+            st.write(f"**保有スキル数:** {len(member_skills)}")
+            if len(member_skills) > 0:
+                st.write("**保有スキル（最初の5件）:**")
+                st.dataframe(member_skills.head(5))
+            else:
+                st.warning("このメンバーはスキルデータがありません")
+
         # メンバーのスキルプロファイルを取得
         profile_df = sem_model.get_member_skill_profile(selected_member)
+
+        # デバッグ: プロファイルの内容を確認
+        with st.expander("🔍 デバッグ: プロファイル情報", expanded=False):
+            st.write(f"**プロファイルの行数:** {len(profile_df)}")
+            if len(profile_df) > 0:
+                st.write("**プロファイルの内容:**")
+                st.dataframe(profile_df)
 
         if len(profile_df) > 0:
             st.markdown("### 📈 スキルレベルプロファイル（レーダーチャート）")
