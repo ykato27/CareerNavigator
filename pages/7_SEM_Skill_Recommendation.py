@@ -150,10 +150,19 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
     # メンバー選択
     member_codes = sorted(member_competence["メンバーコード"].unique())
 
+    # メンバーコードと名前のマッピングを作成
+    member_dict = {}
+    for code in member_codes:
+        matched = members_clean[members_clean['メンバーコード'] == code]
+        if len(matched) > 0 and 'メンバー名' in matched.columns:
+            member_dict[code] = f"{code} - {matched['メンバー名'].iloc[0]}"
+        else:
+            member_dict[code] = code
+
     selected_member = st.selectbox(
         "メンバーを選択",
         options=member_codes,
-        format_func=lambda x: f"{x} - {members_clean[members_clean['メンバーコード'] == x]['メンバー名'].values[0] if len(members_clean[members_clean['メンバーコード'] == x]) > 0 else x}"
+        format_func=lambda x: member_dict.get(x, x)
     )
 
     if selected_member:
