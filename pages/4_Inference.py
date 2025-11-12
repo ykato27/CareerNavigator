@@ -2091,40 +2091,18 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                         ref_df = pd.DataFrame(ref_df_data)
                                         st.dataframe(ref_df, use_container_width=True, hide_index=True)
 
-                                # すべてのメンバーをリスト表示
-                                st.markdown("### 📌 この分類に属するすべてのメンバー")
-
-                                if pattern_rec.member_codes and pattern_rec.member_names:
-                                    members_data = []
-                                    for code, name in zip(pattern_rec.member_codes, pattern_rec.member_names):
-                                        # 参考人物かどうかチェック（辞書とオブジェクト両方に対応）
-                                        is_reference = False
-                                        if pattern_rec.reference_persons:
-                                            for ref in pattern_rec.reference_persons:
-                                                ref_name = ref.get('name') if isinstance(ref, dict) else getattr(ref, 'member_name', None)
-                                                if ref_name == name:
-                                                    is_reference = True
-                                                    break
-
-                                        # 類似度を取得（similaritiesが文字列の場合も対応）
-                                        similarity_val = next((sim for c, sim in zip(pattern_rec.member_codes, pattern_rec.similarities) if c == code), 0)
-                                        if isinstance(similarity_val, str):
-                                            try:
-                                                similarity_val = float(similarity_val)
-                                            except (ValueError, TypeError):
-                                                similarity_val = 0
-                                        similarity_str = f"{similarity_val:.3f}"
-
-                                        members_data.append({
-                                            'メンバーコード': code,
-                                            'メンバー名': f"⭐ {name}" if is_reference else name,
-                                            '類似度': similarity_str
-                                        })
-
-                                    members_df = pd.DataFrame(members_data)
-                                    st.dataframe(members_df, use_container_width=True, hide_index=True)
-                                else:
-                                    st.info("このパターンに分類されたメンバーがいません")
+                                # 参考人物の統計情報を表示
+                                if pattern_rec.filtered_count > 0:
+                                    st.markdown("### 📊 パターン統計")
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("パターン内の総メンバー数", f"{pattern_rec.total_count}名")
+                                    with col2:
+                                        st.metric("参考人物数（優秀なメンバー）", f"{pattern_rec.filtered_count}名")
+                                    with col3:
+                                        if pattern_rec.total_count > 0:
+                                            percentage = (pattern_rec.filtered_count / pattern_rec.total_count) * 100
+                                            st.metric("参考人物の割合", f"{percentage:.1f}%")
 
                     else:
                         st.error("キャリアパターン別推薦の結果が見つかりません。")
