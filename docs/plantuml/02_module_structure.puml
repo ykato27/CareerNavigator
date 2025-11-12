@@ -1,0 +1,151 @@
+@startuml モジュール構成図
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam packageBorderColor #333333
+skinparam packageBackgroundColor #F5F5F5
+skinparam componentBackgroundColor #BBDEFB
+skinparam arrowColor #4A90E2
+skinparam defaultFontName "Noto Sans CJK JP, IPAGothic, MS Gothic, sans-serif"
+
+title CareerNavigator モジュール構成図
+
+package "skillnote_recommendation" {
+
+  package "core (コアモジュール)" #E8F5E9 {
+    component "models.py\n[データモデル]" as Models #C8E6C9
+    component "data_loader.py\n[データ読み込み]" as DataLoader #C8E6C9
+    component "data_transformer.py\n[データ変換]" as DataTransformer #C8E6C9
+    component "evaluator.py\n[推薦評価]" as Evaluator #C8E6C9
+    component "reference_persons.py\n[ロールモデル検索]" as RefPersons #C8E6C9
+    component "config.py\n[設定管理]" as Config #C8E6C9
+    component "error_handlers.py\n[エラーハンドリング]" as ErrorHandlers #C8E6C9
+    component "logging_config.py\n[ログ設定]" as LoggingConfig #C8E6C9
+
+    note bottom of Models
+      データモデル定義
+      ・Member
+      ・Competence
+      ・MemberCompetence
+      ・Recommendation
+      ・ReferencePerson
+    end note
+  }
+
+  package "ml (機械学習モジュール)" #FFF3E0 {
+    component "ml_recommender.py\n[ML推薦エンジン]" as MLRecommender #FFE0B2
+    component "matrix_factorization.py\n[NMF実装]" as MatrixFactorization #FFE0B2
+    component "diversity.py\n[多様性再ランキング]" as Diversity #FFE0B2
+    component "hyperparameter_tuning.py\n[ハイパーパラメータ調整]" as HPTuning #FFE0B2
+    component "data_preprocessing.py\n[前処理]" as DataPreprocessing #FFE0B2
+    component "feature_engineering.py\n[特徴量エンジニアリング]" as FeatureEngineering #FFE0B2
+    component "SEM_Skill_Recommendation.py\n[SEM分析]" as SEM #FFE0B2
+    component "early_stopping.py\n[早期停止]" as EarlyStopping #FFE0B2
+
+    note bottom of MLRecommender
+      機械学習ベースの推薦
+      ・協調フィルタリング (NMF)
+      ・多様性再ランキング
+      ・4つの多様性戦略
+        - MMR
+        - カテゴリ多様性
+        - タイプ多様性
+        - ハイブリッド
+    end note
+  }
+
+  package "graph (グラフモジュール)" #E3F2FD {
+    component "knowledge_graph.py\n[知識グラフ構築]" as KnowledgeGraph #BBDEFB
+    component "random_walk.py\n[ランダムウォーク]" as RandomWalk #BBDEFB
+    component "hybrid_recommender.py\n[ハイブリッド推薦]" as HybridRecommender #BBDEFB
+    component "career_path.py\n[キャリアパス分析]" as CareerPath #BBDEFB
+    component "category_hierarchy.py\n[カテゴリ階層管理]" as CategoryHierarchy #BBDEFB
+    component "visualizers/\n[可視化ツール]" as Visualizers #BBDEFB
+    component "hybrid_builder.py\n[ビルダーパターン]" as HybridBuilder #BBDEFB
+
+    note bottom of HybridRecommender
+      ハイブリッドアプローチ
+      ・グラフベース (RWR): 40%
+      ・協調フィルタリング (NMF): 30%
+      ・コンテンツベース: 30%
+    end note
+  }
+
+  package "utils (ユーティリティモジュール)" #F3E5F5 {
+    component "streamlit_helpers.py\n[Streamlitヘルパー]" as StreamlitHelpers #E1BEE7
+    component "visualization.py\n[可視化]" as Visualization #E1BEE7
+    component "data_validators.py\n[データ検証]" as DataValidators #E1BEE7
+    component "ui_components.py\n[UIコンポーネント]" as UIComponents #E1BEE7
+  }
+
+  package "persistence (永続化モジュール)" #FFEBEE {
+    component "repository.py\n[リポジトリパターン]" as Repository #FFCDD2
+    component "models.py\n[ORMモデル]" as ORMModels #FFCDD2
+  }
+}
+
+' モジュール間の依存関係
+
+' ML -> Core
+MLRecommender --> Models : "使用"
+MLRecommender --> DataTransformer : "使用"
+MLRecommender --> Config : "使用"
+MLRecommender --> ErrorHandlers : "使用"
+MatrixFactorization --> Models : "使用"
+Diversity --> Models : "使用"
+HPTuning --> MatrixFactorization : "最適化"
+MLRecommender --> MatrixFactorization : "使用"
+MLRecommender --> Diversity : "使用"
+MLRecommender --> FeatureEngineering : "使用"
+MatrixFactorization --> EarlyStopping : "使用"
+
+' Graph -> Core
+KnowledgeGraph --> Models : "使用"
+KnowledgeGraph --> DataTransformer : "使用"
+RandomWalk --> KnowledgeGraph : "使用"
+HybridRecommender --> Models : "使用"
+HybridRecommender --> Config : "使用"
+CareerPath --> KnowledgeGraph : "使用"
+CategoryHierarchy --> Models : "使用"
+HybridBuilder --> HybridRecommender : "構築"
+
+' Graph -> ML
+HybridRecommender --> RandomWalk : "使用"
+HybridRecommender --> MatrixFactorization : "使用"
+
+' Core internal
+DataTransformer --> DataLoader : "使用"
+DataTransformer --> Models : "使用"
+Evaluator --> Models : "使用"
+RefPersons --> Models : "使用"
+DataLoader --> DataValidators : "使用"
+ErrorHandlers --> LoggingConfig : "使用"
+
+' Utils dependencies
+StreamlitHelpers --> Models : "使用"
+Visualization --> Models : "使用"
+UIComponents --> Visualization : "使用"
+
+' Persistence dependencies
+Repository --> ORMModels : "使用"
+Repository --> Config : "使用"
+
+' Evaluator関係
+Evaluator --> MLRecommender : "評価"
+Evaluator --> HybridRecommender : "評価"
+
+' 外部からの主要な利用
+note top of MLRecommender
+  エントリポイント
+  ・streamlit_app.py
+  ・pages/*.py
+end note
+
+legend right
+  |<#E8F5E9> Core |基盤モジュール |
+  |<#FFF3E0> ML |機械学習モジュール |
+  |<#E3F2FD> Graph |グラフモジュール |
+  |<#F3E5F5> Utils |ユーティリティ |
+  |<#FFEBEE> Persistence |永続化 |
+endlegend
+
+@enduml

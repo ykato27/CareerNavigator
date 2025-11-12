@@ -1,0 +1,209 @@
+@startuml アルゴリズムフロー図
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam activityBackgroundColor #E8F4F8
+skinparam activityBorderColor #333333
+skinparam arrowColor #4A90E2
+skinparam defaultFontName "Noto Sans CJK JP, IPAGothic, MS Gothic, sans-serif"
+
+title CareerNavigator 推薦アルゴリズム処理フロー
+
+|#E8F5E9|データ準備フェーズ|
+start
+:メンバーの既存コンピテンシー取得;
+:対象メンバーのプロファイル分析;
+
+|#E3F2FD|グラフベース推薦 (RWR) - 40%|
+fork
+  :知識グラフ構築;
+  note right
+    ノード: コンピテンシー
+    エッジ: 共起関係、カテゴリ関係
+  end note
+
+  :開始ノード設定\n(既存コンピテンシー);
+
+  repeat
+    :ランダムウォーク実行;
+    :隣接ノードへ遷移;
+    :確率的に開始ノードへ戻る\n(restart_prob = 0.15);
+  repeat while (収束判定) is (未収束)
+  ->収束;
+
+  :各ノードの訪問確率計算;
+  :スコア正規化;
+  :グラフベーススコア出力\nG_score[i] (i=1..N);
+
+|#FFF3E0|協調フィルタリング (NMF) - 30%|
+fork again
+  :メンバー×コンピテンシー行列作成\nMatrix M (m×n);
+  note right
+    m: メンバー数
+    n: コンピテンシー数
+    値: 取得レベル (0-5)
+  end note
+
+  :NMF分解実行\nM ≈ W × H;
+  note right
+    W: メンバー特徴行列 (m×k)
+    H: コンピテンシー特徴行列 (k×n)
+    k: 潜在因子数
+  end note
+
+  repeat
+    :損失関数計算\nFrobenius norm ||M - WH||²;
+    :W, H更新\n(Multiplicative Update);
+    :早期停止チェック;
+  repeat while (収束 or 最大イテレーション) is (継続)
+  ->収束;
+
+  :対象メンバーの行ベクトル w_i 取得;
+  :予測スコア計算\npred = w_i × H;
+  :協調フィルタリングスコア出力\nC_score[i] (i=1..N);
+
+|#F3E5F5|コンテンツベース推薦 - 30%|
+fork again
+  :コンピテンシー特徴抽出;
+  note right
+    ・カテゴリ
+    ・タイプ (SKILL/EDUCATION/LICENSE)
+    ・レベル要件
+    ・前提条件
+  end note
+
+  :対象メンバーのプロファイル作成;
+  :既存コンピテンシーとの類似度計算;
+
+  if (カテゴリが類似?) then (yes)
+    :カテゴリスコア加算;
+  endif
+
+  if (タイプが類似?) then (yes)
+    :タイプスコア加算;
+  endif
+
+  if (前提条件を満たす?) then (yes)
+    :前提条件スコア加算;
+  endif
+
+  :コンテンツベーススコア出力\nCB_score[i] (i=1..N);
+end fork
+
+|#FFE0B2|スコア統合フェーズ|
+:重み付け合成\nFinal_score[i] = 0.4×G_score[i] + 0.3×C_score[i] + 0.3×CB_score[i];
+
+:既存コンピテンシーをフィルタリング;
+note right
+  取得済みのコンピテンシーは除外
+end note
+
+:スコア降順ソート;
+:Top-K候補選択 (K×3);
+
+|#E1BEE7|多様性再ランキングフェーズ|
+
+if (多様性戦略) then (MMR)
+  repeat
+    :最も高スコアの未選択アイテム選択;
+    :既選択アイテムとの類似度計算;
+    :MMRスコア計算\nMMR = λ×relevance - (1-λ)×max_similarity;
+  repeat while (K個選択完了?) is (未完了)
+  ->完了;
+
+else (カテゴリ多様性)
+  repeat
+    :カテゴリ分布を計算;
+    :過少カテゴリの候補を優先;
+    :カテゴリバランスを考慮してスコア調整;
+  repeat while (K個選択完了?) is (未完了)
+  ->完了;
+
+else (タイプ多様性)
+  repeat
+    :タイプ分布を計算\n(SKILL/EDUCATION/LICENSE);
+    :過少タイプの候補を優先;
+    :タイプバランスを考慮してスコア調整;
+  repeat while (K個選択完了?) is (未完了)
+  ->完了;
+
+else (ハイブリッド多様性)
+  :MMR戦略適用 (weight=0.4);
+  :カテゴリ多様性適用 (weight=0.3);
+  :タイプ多様性適用 (weight=0.3);
+  :統合多様性スコア計算;
+  repeat
+    :最高多様性スコアのアイテム選択;
+  repeat while (K個選択完了?) is (未完了)
+  ->完了;
+endif
+
+:多様性考慮済み Top-K 推薦リスト生成;
+
+|#C8E6C9|ロールモデル検索フェーズ|
+partition "各推薦コンピテンシーに対して" {
+  :推薦コンピテンシーを保有するメンバー検索;
+  :対象メンバーとの類似度計算;
+  note right
+    ・共通コンピテンシー数
+    ・役職・等級の類似度
+    ・キャリアパスの類似度
+  end note
+  :類似度上位3名をロールモデルとして選択;
+  :ロールモデル情報を推薦に付加;
+}
+
+|#FFF9C4|推薦理由生成フェーズ|
+partition "各推薦に対して" {
+  if (グラフスコアが高い?) then (yes)
+    :「類似コンピテンシーとの関連性が高い」;
+  endif
+
+  if (協調スコアが高い?) then (yes)
+    :「類似メンバーが取得している」;
+  endif
+
+  if (コンテンツスコアが高い?) then (yes)
+    :「あなたのプロファイルに適合」;
+  endif
+
+  :推薦理由テキスト生成;
+}
+
+|#BBDEFB|最終出力|
+:推薦結果リスト作成;
+note right
+  各推薦には以下を含む:
+  ・コンピテンシー情報
+  ・優先度スコア
+  ・推薦理由
+  ・ロールモデルリスト
+  ・信頼度スコア
+  ・多様性スコア
+end note
+
+stop
+
+legend right
+  |色|フェーズ|重み|
+  |<#E8F5E9>|データ準備|-|
+  |<#E3F2FD>|グラフベース (RWR)|40%|
+  |<#FFF3E0>|協調フィルタリング (NMF)|30%|
+  |<#F3E5F5>|コンテンツベース|30%|
+  |<#FFE0B2>|スコア統合|-|
+  |<#E1BEE7>|多様性再ランキング|-|
+  |<#C8E6C9>|ロールモデル検索|-|
+  |<#FFF9C4>|推薦理由生成|-|
+  |<#BBDEFB>|最終出力|-|
+endlegend
+
+note bottom
+  **ハイブリッド推薦の特徴**
+
+  1. **グラフベース (RWR)**: コンピテンシー間の関係性を活用
+  2. **協調フィルタリング (NMF)**: 類似メンバーのパターンを学習
+  3. **コンテンツベース**: コンピテンシーの属性情報を活用
+  4. **多様性保証**: 4つの戦略で偏りを防止
+  5. **説明可能性**: ロールモデルと推薦理由を提供
+end note
+
+@enduml

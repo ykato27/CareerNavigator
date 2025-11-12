@@ -1,0 +1,173 @@
+@startuml システムアーキテクチャ
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam rectangleBorderColor #333333
+skinparam rectangleBackgroundColor #E8F4F8
+skinparam arrowColor #4A90E2
+skinparam defaultFontName "Noto Sans CJK JP, IPAGothic, MS Gothic, sans-serif"
+
+title CareerNavigator システムアーキテクチャ（レイヤー構造）
+
+package "プレゼンテーション層 (Presentation Layer)" #E3F2FD {
+  [Streamlit Web UI] as WebUI #BBDEFB
+  [メインページ\n(streamlit_app.py)] as MainPage
+  [モデル学習ページ] as TrainingPage
+  [推薦実行ページ] as InferencePage
+  [データ品質監視ページ] as QualityPage
+  [モデル比較ページ] as ComparisonPage
+
+  WebUI -down-> MainPage
+  WebUI -down-> TrainingPage
+  WebUI -down-> InferencePage
+  WebUI -down-> QualityPage
+  WebUI -down-> ComparisonPage
+}
+
+package "アプリケーション層 (Application Layer)" #E8F5E9 {
+  [ビジネスロジック] as BusinessLogic #C8E6C9
+  [推薦エンジン調整器] as Orchestrator
+  [評価システム] as Evaluation
+  [ロールモデル検索] as RoleModel
+  [データ品質監視] as DataQuality
+
+  BusinessLogic -down-> Orchestrator
+  BusinessLogic -down-> Evaluation
+  BusinessLogic -down-> RoleModel
+  BusinessLogic -down-> DataQuality
+}
+
+package "ドメイン層 (Domain Layer)" #FFF3E0 {
+  package "機械学習モジュール (ML)" #FFE0B2 {
+    [ML推薦器\n(ml_recommender.py)] as MLRecommender
+    [行列分解 (NMF)\n(matrix_factorization.py)] as NMF
+    [多様性再ランキング\n(diversity.py)] as Diversity
+    [ハイパーパラメータ調整\n(hyperparameter_tuning.py)] as HPTuning
+    [特徴量エンジニアリング\n(feature_engineering.py)] as FeatureEng
+    [SEM分析\n(SEM models)] as SEM
+  }
+
+  package "グラフモジュール (Graph)" #FFCCBC {
+    [知識グラフ構築\n(knowledge_graph.py)] as KnowledgeGraph
+    [ランダムウォーク (RWR)\n(random_walk.py)] as RandomWalk
+    [ハイブリッド推薦器\n(hybrid_recommender.py)] as HybridRec
+    [キャリアパス分析\n(career_path.py)] as CareerPath
+    [グラフ可視化] as GraphViz
+  }
+
+  package "コアモジュール (Core)" #F3E5F5 {
+    [データモデル\n(models.py)] as Models
+    [評価器\n(evaluator.py)] as Evaluator
+    [参照者検索\n(reference_persons.py)] as RefPersons
+  }
+
+  MLRecommender --> NMF
+  MLRecommender --> Diversity
+  MLRecommender --> FeatureEng
+  NMF --> HPTuning
+
+  HybridRec --> RandomWalk
+  HybridRec --> NMF
+  HybridRec --> KnowledgeGraph
+  RandomWalk --> KnowledgeGraph
+  CareerPath --> KnowledgeGraph
+  KnowledgeGraph --> GraphViz
+
+  MLRecommender --> Models
+  HybridRec --> Models
+  Evaluator --> Models
+  RefPersons --> Models
+}
+
+package "インフラストラクチャ層 (Infrastructure Layer)" #ECEFF1 {
+  package "データ層" #CFD8DC {
+    [データローダー\n(data_loader.py)] as DataLoader
+    [データ変換器\n(data_transformer.py)] as DataTransformer
+    [データ検証器\n(data_validators.py)] as DataValidator
+  }
+
+  package "永続化層" #B0BEC5 {
+    [リポジトリ\n(repository.py)] as Repository
+    [SQLAlchemy ORM] as ORM
+    [SQLite Database] as DB
+    database "ファイルストレージ" as FileStorage {
+      folder "CSV Files" as CSV
+      folder "Trained Models\n(joblib)" as Models_Storage
+      folder "Logs" as Logs
+    }
+  }
+
+  package "共通基盤" #90A4AE {
+    [設定管理\n(config.py)] as Config
+    [構造化ログ\n(logging_config.py)] as Logging
+    [エラーハンドラー\n(error_handlers.py)] as ErrorHandler
+    [ユーティリティ] as Utils
+  }
+
+  DataLoader --> CSV
+  DataLoader --> DataValidator
+  DataTransformer --> DataLoader
+
+  Repository --> ORM
+  ORM --> DB
+  Repository --> Models_Storage
+
+  ErrorHandler --> Logging
+  Logging --> Logs
+}
+
+' レイヤー間の依存関係
+WebUI --> BusinessLogic : "呼び出し"
+MainPage --> DataLoader : "データ読み込み"
+TrainingPage --> MLRecommender : "モデル学習"
+InferencePage --> HybridRec : "推薦生成"
+QualityPage --> DataQuality : "品質チェック"
+
+Orchestrator --> MLRecommender : "ML推薦"
+Orchestrator --> HybridRec : "ハイブリッド推薦"
+Evaluation --> Evaluator : "評価実行"
+RoleModel --> RefPersons : "ロールモデル検索"
+
+MLRecommender --> DataTransformer : "データ取得"
+HybridRec --> DataTransformer : "データ取得"
+Evaluator --> Repository : "結果保存"
+
+BusinessLogic --> Config : "設定取得"
+Orchestrator --> Logging : "ログ記録"
+Orchestrator --> ErrorHandler : "エラー処理"
+
+note right of WebUI
+  ユーザーインターフェース
+  ・Streamlitベース
+  ・インタラクティブ可視化
+  ・CSV アップロード
+end note
+
+note right of BusinessLogic
+  ビジネスロジック
+  ・推薦処理の調整
+  ・評価とフィードバック
+  ・データ品質管理
+end note
+
+note right of MLRecommender
+  ドメインロジック
+  ・機械学習アルゴリズム
+  ・グラフアルゴリズム
+  ・ハイブリッドアプローチ
+end note
+
+note right of DataLoader
+  インフラストラクチャ
+  ・データアクセス
+  ・永続化
+  ・ログと設定
+end note
+
+legend right
+  |<#E3F2FD> プレゼンテーション層 |
+  |<#E8F5E9> アプリケーション層 |
+  |<#FFF3E0> ドメイン層 |
+  |<#ECEFF1> インフラストラクチャ層 |
+endlegend
+
+@enduml

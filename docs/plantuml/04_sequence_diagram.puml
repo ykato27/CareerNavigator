@@ -1,0 +1,159 @@
+@startuml シーケンス図
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceArrowColor #4A90E2
+skinparam sequenceLifeLineBorderColor #333333
+skinparam sequenceParticipantBackgroundColor #E8F4F8
+skinparam defaultFontName "Noto Sans CJK JP, IPAGothic, MS Gothic, sans-serif"
+
+title CareerNavigator 推薦プロセス シーケンス図
+
+actor ユーザー as User
+participant "Streamlit UI" as UI
+participant "HybridRecommender" as Hybrid
+participant "RandomWalkRecommender\n(グラフベース)" as RWR
+participant "MatrixFactorization\n(NMF)" as NMF
+participant "KnowledgeGraph" as Graph
+participant "DiversityStrategy" as Diversity
+participant "ReferencePersonFinder" as RefFinder
+participant "Evaluator" as Evaluator
+database "TransformedData" as Data
+
+== 1. データ読み込みフェーズ ==
+
+User -> UI: CSVファイルをアップロード
+activate UI
+UI -> Data: データ読み込み
+activate Data
+Data --> UI: 読み込み完了
+deactivate Data
+UI --> User: データ読み込み完了通知
+deactivate UI
+
+== 2. モデル学習フェーズ ==
+
+User -> UI: モデル学習を開始
+activate UI
+
+UI -> Hybrid: fit(data)
+activate Hybrid
+
+par 並行学習
+  Hybrid -> RWR: fit(data)
+  activate RWR
+  RWR -> Graph: build_from_data(data)
+  activate Graph
+  Graph -> Graph: コンピテンシーノード追加
+  Graph -> Graph: 共起関係エッジ追加
+  Graph -> Graph: カテゴリ関係エッジ追加
+  Graph --> RWR: グラフ構築完了
+  deactivate Graph
+  RWR --> Hybrid: 学習完了
+  deactivate RWR
+else
+  Hybrid -> NMF: fit(matrix)
+  activate NMF
+  NMF -> NMF: NMFモデル学習
+  NMF -> NMF: W, H行列計算
+  NMF --> Hybrid: 学習完了
+  deactivate NMF
+end
+
+Hybrid --> UI: 学習完了
+deactivate Hybrid
+UI --> User: モデル学習完了通知
+deactivate UI
+
+== 3. 推薦生成フェーズ ==
+
+User -> UI: メンバーを選択\n推薦数を指定
+activate UI
+
+UI -> Hybrid: recommend(member_code, top_k)
+activate Hybrid
+
+Hybrid -> Data: get_member_competences(member_code)
+activate Data
+Data --> Hybrid: 既存コンピテンシーリスト
+deactivate Data
+
+par 並行推薦
+  Hybrid -> RWR: recommend(member_code, top_k)
+  activate RWR
+  RWR -> RWR: ランダムウォーク実行
+  RWR -> Graph: get_neighbors(competences)
+  activate Graph
+  Graph --> RWR: 近傍ノード
+  deactivate Graph
+  RWR --> Hybrid: グラフベーススコア (40%)
+  deactivate RWR
+else
+  Hybrid -> NMF: predict(member_idx)
+  activate NMF
+  NMF -> NMF: 行列演算で予測
+  NMF --> Hybrid: 協調フィルタリングスコア (30%)
+  deactivate NMF
+else
+  Hybrid -> Hybrid: content_based_recommend()
+  Hybrid --> Hybrid: コンテンツベーススコア (30%)
+end
+
+Hybrid -> Hybrid: combine_scores()\nスコア統合（重み付け合成）
+
+Hybrid -> Diversity: rerank(recommendations, top_k)
+activate Diversity
+Diversity -> Diversity: 多様性再ランキング\n(MMR/カテゴリ/タイプ/ハイブリッド)
+Diversity --> Hybrid: 多様性考慮済み推薦リスト
+deactivate Diversity
+
+loop 各推薦コンピテンシー
+  Hybrid -> RefFinder: find_reference_persons(member_code, competence_code)
+  activate RefFinder
+  RefFinder -> Data: 類似メンバー検索
+  activate Data
+  Data --> RefFinder: 類似メンバーリスト
+  deactivate Data
+  RefFinder --> Hybrid: ロールモデルリスト
+  deactivate RefFinder
+  Hybrid -> Hybrid: Recommendationオブジェクト生成
+end
+
+Hybrid --> UI: List[Recommendation]
+deactivate Hybrid
+
+== 4. 結果表示フェーズ ==
+
+UI -> UI: 推薦結果を整形
+UI -> UI: 可視化（テーブル・グラフ）
+UI --> User: 推薦結果を表示
+deactivate UI
+
+== 5. 評価フェーズ（オプション） ==
+
+User -> UI: 推薦結果を評価
+activate UI
+
+UI -> Evaluator: evaluate(recommendations, ground_truth)
+activate Evaluator
+
+Evaluator -> Evaluator: precision_at_k()
+Evaluator -> Evaluator: recall_at_k()
+Evaluator -> Evaluator: ndcg_at_k()
+Evaluator -> Evaluator: calculate_diversity_metrics()
+
+Evaluator --> UI: EvaluationResult
+deactivate Evaluator
+
+UI --> User: 評価結果を表示\n(Precision, Recall, NDCG, etc.)
+deactivate UI
+
+note over User, Data
+  ハイブリッド推薦の特徴:
+  1. 3つのアプローチを並行実行
+  2. スコアを重み付けで統合
+  3. 多様性を考慮した再ランキング
+  4. ロールモデル情報を付加
+  5. 包括的な評価指標
+end note
+
+@enduml
