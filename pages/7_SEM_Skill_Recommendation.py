@@ -133,6 +133,13 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
             st.session_state.domain_hierarchy = domain_hierarchy
             st.session_state.min_current_level_score = min_current_level_score
 
+            # デバッグ: SEMモデルの学習結果を表示
+            with st.expander("🔍 デバッグ: SEMモデル学習結果", expanded=False):
+                st.write(f"**学習済みドメイン数:** {len(sem_model.sem_models)}")
+                st.write(f"**学習済みドメイン:**", list(sem_model.sem_models.keys()))
+                st.write(f"**ドメイン階層統計:**")
+                st.dataframe(stats_df)
+
             st.success(f"✅ SEMモデル学習完了（{len(sem_model.sem_models)}ドメイン）")
             st.rerun()
 
@@ -172,8 +179,26 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
     )
 
     if selected_member:
+        # デバッグ: メンバーのスキル保有状況を確認
+        member_skills = member_competence[member_competence['メンバーコード'] == selected_member]
+        with st.expander("🔍 デバッグ: メンバースキル情報", expanded=False):
+            st.write(f"**選択メンバー:** {selected_member}")
+            st.write(f"**保有スキル数:** {len(member_skills)}")
+            if len(member_skills) > 0:
+                st.write("**保有スキル（最初の5件）:**")
+                st.dataframe(member_skills.head(5))
+            else:
+                st.warning("このメンバーはスキルデータがありません")
+
         # メンバーのスキルプロファイルを取得
         profile_df = sem_model.get_member_skill_profile(selected_member)
+
+        # デバッグ: プロファイルの内容を確認
+        with st.expander("🔍 デバッグ: プロファイル情報", expanded=False):
+            st.write(f"**プロファイルの行数:** {len(profile_df)}")
+            if len(profile_df) > 0:
+                st.write("**プロファイルの内容:**")
+                st.dataframe(profile_df)
 
         if len(profile_df) > 0:
             st.markdown("### 📈 スキルレベルプロファイル（レーダーチャート）")
