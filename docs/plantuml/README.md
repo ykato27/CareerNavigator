@@ -248,12 +248,52 @@ docker run --rm -v $(pwd)/docs/plantuml:/data \
 
 ## 📚 参考資料
 
+### PlantUML 公式ドキュメント
+
 - [PlantUML 公式ドキュメント](https://plantuml.com/ja/)
 - [PlantUML クラス図ガイド](https://plantuml.com/ja/class-diagram)
 - [PlantUML シーケンス図ガイド](https://plantuml.com/ja/sequence-diagram)
 - [PlantUML アクティビティ図ガイド](https://plantuml.com/ja/activity-diagram-beta)
-- [CareerNavigator アーキテクチャドキュメント](../ARCHITECTURE.md)
-- [CareerNavigator コード構造ドキュメント](../CODE_STRUCTURE.md)
+- [PlantUML ユースケース図ガイド](https://plantuml.com/ja/use-case-diagram)
+- [PlantUML コンポーネント図ガイド](https://plantuml.com/ja/component-diagram)
+
+### CareerNavigator アーキテクチャドキュメント
+
+**システム設計・構造**:
+- [アーキテクチャドキュメント](../ARCHITECTURE.md) - システム全体のアーキテクチャ設計
+- [コード構造ドキュメント](../CODE_STRUCTURE.md) - モジュール構成と責務分離
+- [リファクタリングガイド](../REFACTORING_GUIDE.md) - エンタープライズパターンとSOLID原則
+
+**推薦システム技術**:
+- [ML技術詳細](../ML_TECHNICAL_DETAILS.md) - 機械学習アルゴリズムの詳細解説
+- [モデル技術ガイド](../MODELS_TECHNICAL_GUIDE.md) - NMF、多様性戦略の実装
+- [ハイブリッド推薦システム](../HYBRID_RECOMMENDATION_SYSTEM.md) - ハイブリッドアプローチの詳細
+- [SEM実装サマリー](../SEM_IMPLEMENTATION_SUMMARY.md) - 構造方程式モデリング
+- [キャリアパスSEMモデル](../CAREER_PATH_SEM_MODEL.md) - キャリアパス分析
+- [SEM新機能](../NEW_SEM_FEATURES.md) - SEM関連の最新機能
+
+**評価・品質**:
+- [評価ドキュメント](../EVALUATION.md) - 推薦システムの評価手法とメトリクス
+- [テスト設計書](../TEST_DESIGN.md) - テスト戦略とカバレッジ
+
+**ユーザーガイド**:
+- [初心者ガイド](../BEGINNER_GUIDE.md) - **推奨**: 初めての方はここから
+- [クイックスタート](../QUICKSTART.md) - すぐに始めるための手順
+- [Streamlitガイド](../STREAMLIT_GUIDE.md) - Webアプリケーションの使い方
+- [テスト実行ガイド](../TESTING_QUICKSTART.md) - テストの実行方法
+
+**運用・デプロイ**:
+- [Streamlit Cloudセットアップ](../STREAMLIT_CLOUD_SETUP.md) - クラウドデプロイ手順
+- [SEMスケーラビリティ分析](../SEM_SCALABILITY_ANALYSIS.md) - スケーラビリティ考慮事項
+
+**API・開発者向け**:
+- [APIリファレンス](../API_REFERENCE.md) - API仕様とエンドポイント
+- [貢献ガイド](../../CONTRIBUTING.md) - コントリビューション方法
+
+**モジュール別ドキュメント**:
+- [Coreモジュール](../../skillnote_recommendation/core/README.md) - データローダー、変換器、評価器
+- [MLモジュール](../../skillnote_recommendation/ml/README.md) - 機械学習推薦エンジン
+- [Graphモジュール](../../skillnote_recommendation/graph/README.md) - グラフベース推薦
 
 ---
 

@@ -57,11 +57,17 @@ CareerNavigator/
 │   ├── test_feature_engineering.py
 │   └── test_visualization.py
 │
-├── docs/                          # ドキュメント
-│   ├── EVALUATION.md              # 評価ガイド
+├── docs/                          # ドキュメント → [一覧](docs/README.md)
+│   ├── plantuml/                  # PlantUML図（アーキテクチャ可視化）
+│   ├── ARCHITECTURE.md            # システムアーキテクチャ
+│   ├── CODE_STRUCTURE.md          # コード構造ガイド
+│   ├── BEGINNER_GUIDE.md          # 初心者向けガイド
 │   ├── QUICKSTART.md              # クイックスタート
+│   ├── STREAMLIT_GUIDE.md         # Streamlit UIガイド
+│   ├── ML_TECHNICAL_DETAILS.md    # ML技術詳細
+│   ├── EVALUATION.md              # 評価ガイド
 │   ├── TESTING_QUICKSTART.md      # テスト実装ガイド
-│   └── TEST_DESIGN.md             # テスト設計書
+│   └── ... 他多数                 # SEM、ハイブリッド推薦システム等
 │
 ├── pyproject.toml                 # プロジェクト設定
 ├── .gitignore
@@ -501,18 +507,32 @@ uv pip install -e .
 
 ### 📚 開発者向けドキュメント
 
-- **[リファクタリングガイド (REFACTORING_GUIDE.md)](REFACTORING_GUIDE.md)** - エンタープライズグレード機能の実装ガイド
+- **[PlantUML図 (docs/plantuml/)](docs/plantuml/)** ⭐ **視覚的理解に最適！**
+  - システムアーキテクチャ図（4層構造）
+  - モジュール構成図（Core/ML/Graph/Utils）
+  - クラス図（データモデル、推薦エンジン、アルゴリズム）
+  - シーケンス図（推薦プロセスフロー）
+  - ユースケース図（ユーザーロールと機能）
+  - コンポーネント図（技術スタック）
+  - アルゴリズムフロー図（ハイブリッド推薦の処理フロー）
+
+- **[リファクタリングガイド (docs/REFACTORING_GUIDE.md)](docs/REFACTORING_GUIDE.md)** - エンタープライズグレード機能の実装ガイド
   - 構造化ロギング、エラーハンドリング、リトライロジック
   - Config管理、インターフェース定義
   - 入力バリデーション、データ品質チェック
   - マイグレーションガイドと使用例
 
-- **[アーキテクチャドキュメント (ARCHITECTURE.md)](ARCHITECTURE.md)** - システム設計ドキュメント
+- **[アーキテクチャドキュメント (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)** - システム設計ドキュメント
   - アーキテクチャ概要
   - モジュール構成
   - データフロー
 
-- **[APIリファレンス (API_REFERENCE.md)](API_REFERENCE.md)** - API使用方法
+- **[コード構造ガイド (docs/CODE_STRUCTURE.md)](docs/CODE_STRUCTURE.md)** - プロジェクト構造とモジュール説明
+  - Streamlitアプリケーション構造
+  - コーディング規約とパターン
+  - テスト構造と拡張ガイド
+
+- **[APIリファレンス (docs/API_REFERENCE.md)](docs/API_REFERENCE.md)** - API使用方法
   - 構造化ロギング
   - エラーハンドリング
   - Config管理
@@ -551,10 +571,11 @@ uv pip install -e .
   - 評価メトリクス
   - パラメータチューニング
 
-- **[コード構造ガイド (docs/CODE_STRUCTURE.md)](docs/CODE_STRUCTURE.md)** - プロジェクト構造とモジュール説明（技術者向け）
-  - Streamlitアプリケーション構造
-  - コーディング規約とパターン
-  - テスト構造と拡張ガイド
+- **[ハイブリッド推薦システム (docs/HYBRID_RECOMMENDATION_SYSTEM.md)](docs/HYBRID_RECOMMENDATION_SYSTEM.md)** - ハイブリッドアプローチの詳細
+  - グラフベース推薦（RWR）
+  - 協調フィルタリング（NMF）
+  - コンテンツベース推薦
+  - スコア統合と重み付け
 
 - **[データ永続化 (docs/PERSISTENCE.md)](docs/PERSISTENCE.md)** - データベース設計と永続化アーキテクチャ
 
