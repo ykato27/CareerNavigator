@@ -605,9 +605,24 @@ class UnifiedSEMEstimator:
         q = self._count_free_params()
         df = p * (p + 1) // 2 - q
 
-        if df <= 0:
-            logger.warning(f"自由度が非正です (df={df}). モデルが過剰識別されています。")
-            df = 1
+        # 識別可能性の厳密な検証
+        if df < 0:
+            raise ValueError(
+                f"Model is not identified (df={df}). "
+                f"The model has more free parameters ({q}) than available information "
+                f"(p*(p+1)/2={p*(p+1)//2}). "
+                f"Solutions: "
+                f"(1) Reduce the number of parameters by removing paths or fixing parameters, "
+                f"(2) Add equality constraints between parameters, "
+                f"(3) Simplify the model structure."
+            )
+
+        if df == 0:
+            logger.warning(
+                f"Model is just-identified (df=0). "
+                f"The model fits perfectly but has no degrees of freedom for testing. "
+                f"Fit indices (CFI, RMSEA, etc.) may not be meaningful."
+            )
 
         # カイ二乗統計量
         chi_square = (N - 1) * F_min

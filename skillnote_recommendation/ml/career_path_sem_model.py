@@ -3,6 +3,9 @@
 
 役職ごとの標準的なスキル習得パスをSEMでモデル化し、
 メンバーの現在位置を推定して次のステップを推薦します。
+
+注意: このモデルは観測データの共分散構造を説明するものであり、
+因果関係を証明するものではありません。
 """
 
 import numpy as np
@@ -22,16 +25,18 @@ logger = logging.getLogger(__name__)
 
 class CareerPathSEMModel:
     """
-    キャリアパスの因果構造SEMモデル
+    キャリアパスの相関構造SEMモデル
 
-    役職ごとに、キャリアステージの進行を因果構造としてモデル化:
+    役職ごとに、キャリアステージの進行を相関構造としてモデル化:
 
     例（主任の場合）:
         入門期（潜在変数） → [リーダーシップ, チーム運営, 進捗管理]
-            ↓ (β=0.65)
+            ↓ (β=0.65: 相関係数)
         成長期（潜在変数） → [プロジェクト管理, リスク管理, 目標設定]
-            ↓ (β=0.58)
+            ↓ (β=0.58: 相関係数)
         熟達期（潜在変数） → [複数PJ統括, リソース配分, 優先順位]
+
+    注意: β は相関係数であり、因果効果ではありません。
     """
 
     def __init__(
@@ -612,7 +617,7 @@ class CareerPathSEMModel:
         if stage_distance == 0:
             # 現在の段階のスキル
             explanation = (
-                f"【キャリアパス因果構造モデル推薦】\n\n"
+                f"【キャリアパス相関構造モデル推薦】\n\n"
                 f"あなたは現在、役職「{role}」の{current_stage_name}（進度: {progress_pct:.1f}%）にいます。\n\n"
                 f"「{skill_name}」は{current_stage_name}で習得すべきスキルです。\n"
                 f"この段階を完了することで、次の段階への進出が可能になります。"
@@ -627,7 +632,7 @@ class CareerPathSEMModel:
                     path_coef = path_coefs[current_stage]
 
             explanation = (
-                f"【キャリアパス因果構造モデル推薦】\n\n"
+                f"【キャリアパス相関構造モデル推薦】\n\n"
                 f"あなたは現在、役職「{role}」の{current_stage_name}（進度: {progress_pct:.1f}%）にいます。\n\n"
                 f"「{skill_name}」は次のステップである{skill_stage_name}のスキルです。\n"
                 f"現在の段階の進度が{progress_pct:.1f}%に達しているため、次の段階への準備として推奨します。"
@@ -635,15 +640,15 @@ class CareerPathSEMModel:
 
             if path_coef is not None and path_coef > 0.5:
                 explanation += (
-                    f"\n\n【因果効果】\n"
+                    f"\n\n【相関関係】\n"
                     f"{current_stage_name} → {skill_stage_name}のパス係数: β={path_coef:.3f}\n"
-                    f"現在の段階のスキル習得が、次の段階のスキル習得に強い因果効果を持っています。"
+                    f"現在の段階のスキル習得と次の段階のスキル習得には強い相関関係があります。"
                 )
 
         elif stage_distance == 2:
             # 2段階先のスキル
             explanation = (
-                f"【キャリアパス因果構造モデル推薦】\n\n"
+                f"【キャリアパス相関構造モデル推薦】\n\n"
                 f"あなたは現在、役職「{role}」の{current_stage_name}（進度: {progress_pct:.1f}%）にいます。\n\n"
                 f"「{skill_name}」は{skill_stage_name}のスキルで、2段階先のスキルです。\n"
                 f"将来のキャリアを見据えた先行学習として推奨します。"
@@ -651,7 +656,7 @@ class CareerPathSEMModel:
         elif stage_distance > 2:
             # 3段階以上先のスキル
             explanation = (
-                f"【キャリアパス因果構造モデル推薦】\n\n"
+                f"【キャリアパス相関構造モデル推薦】\n\n"
                 f"あなたは現在、役職「{role}」の{current_stage_name}（進度: {progress_pct:.1f}%）にいます。\n\n"
                 f"「{skill_name}」は{skill_stage_name}のスキルで、{stage_distance}段階先のスキルです。\n"
                 f"長期的なキャリア開発の観点から、先を見据えた学習として推奨します。"
@@ -659,7 +664,7 @@ class CareerPathSEMModel:
         else:
             # 過去の段階のスキル
             explanation = (
-                f"【キャリアパス因果構造モデル推薦】\n\n"
+                f"【キャリアパス相関構造モデル推薦】\n\n"
                 f"あなたは現在、役職「{role}」の{current_stage_name}（進度: {progress_pct:.1f}%）にいます。\n\n"
                 f"「{skill_name}」は{skill_stage_name}のスキルで、基礎固めに役立ちます。\n"
                 f"基本スキルの補強により、現在の段階での成長が加速します。"
