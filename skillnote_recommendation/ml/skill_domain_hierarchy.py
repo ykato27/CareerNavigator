@@ -125,12 +125,23 @@ class SkillDomainHierarchy:
         """
         classification = {}
 
+        # デバッグ: カテゴリー名の分布を確認
+        category_counts = {}
+        category_samples = {}
+
         for _, row in self.competence_master.iterrows():
             competence_code = row['力量コード']
             competence_name = row['力量名']
 
             # 力量カテゴリー名がある場合はそれを優先的に使用
             competence_category = row.get('力量カテゴリー名', None)
+
+            # デバッグ情報収集
+            if competence_category and not pd.isna(competence_category):
+                category_str = str(competence_category)
+                category_counts[category_str] = category_counts.get(category_str, 0) + 1
+                if category_str not in category_samples:
+                    category_samples[category_str] = competence_name
 
             # カテゴリーベースでドメインとレベルを判定
             domain, level = self._match_domain_level_with_category(
@@ -143,6 +154,13 @@ class SkillDomainHierarchy:
                     'level': level,
                     'competence_name': competence_name,
                 }
+
+        # デバッグ出力
+        logger.info("\n[DEBUG] 力量カテゴリー名の分布（上位10個）:")
+        sorted_categories = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        for cat, count in sorted_categories:
+            sample = category_samples.get(cat, "N/A")
+            logger.info(f"  - {cat}: {count}個（例: {sample}）")
 
         return classification
 
