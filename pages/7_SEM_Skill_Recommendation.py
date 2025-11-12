@@ -10,12 +10,19 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 
-from skillnote_recommendation.ml.skill_domain_hierarchy import SkillDomainHierarchy
-from skillnote_recommendation.ml.skill_domain_sem_model import SkillDomainSEMModel
-from skillnote_recommendation.utils.ui_components import (
-    apply_rich_ui_styles,
-    render_gradient_header
-)
+try:
+    from skillnote_recommendation.ml.skill_domain_hierarchy import SkillDomainHierarchy
+    from skillnote_recommendation.ml.skill_domain_sem_model import SkillDomainSEMModel
+    from skillnote_recommendation.utils.ui_components import (
+        apply_rich_ui_styles,
+        render_gradient_header
+    )
+    IMPORTS_OK = True
+except ImportError as e:
+    st.error(f"❌ インポートエラー: {e}")
+    st.error("このページは現在利用できません。")
+    st.stop()
+    IMPORTS_OK = False
 
 
 # =========================================================
@@ -50,11 +57,20 @@ competence_master = transformed_data["competence_master"]
 member_competence = transformed_data["member_competence"]
 members_clean = transformed_data["members_clean"]
 
-# デバッグ: members_cleanの構造を確認
-with st.expander("🔍 デバッグ情報", expanded=False):
+# デバッグ: データ読み込み状態を確認
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔍 デバッグ情報")
+st.sidebar.write(f"✅ データ読み込み済み")
+st.sidebar.write(f"- competence_master: {len(competence_master)}件")
+st.sidebar.write(f"- member_competence: {len(member_competence)}件")
+st.sidebar.write(f"- members_clean: {len(members_clean)}件")
+
+with st.expander("🔍 デバッグ: データ詳細", expanded=False):
     st.write("**members_cleanのカラム:**", list(members_clean.columns))
     st.write("**members_cleanのサンプル（最初の3行）:**")
     st.dataframe(members_clean.head(3))
+    st.write("**competence_masterのカラム:**", list(competence_master.columns))
+    st.write("**member_competenceのカラム:**", list(member_competence.columns))
 
 
 # =========================================================
