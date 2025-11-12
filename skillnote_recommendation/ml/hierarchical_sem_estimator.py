@@ -280,6 +280,7 @@ class HierarchicalSEMEstimator:
                 }
 
                 # 結果を取得
+                failed_domains = []
                 for future in as_completed(future_to_domain):
                     domain = future_to_domain[future]
                     try:
@@ -288,8 +289,24 @@ class HierarchicalSEMEstimator:
                         domain_fit_indices[domain.domain_name] = fit
                         logger.info(f"  ✅ {domain.domain_name} 完了 (RMSEA={fit.rmsea:.3f}, CFI={fit.cfi:.3f})")
                     except Exception as e:
-                        logger.error(f"  ❌ {domain.domain_name} でエラー: {e}")
-                        raise
+                        error_msg = str(e)
+                        logger.warning(f"  ⚠️ {domain.domain_name} をスキップ: {error_msg}")
+                        failed_domains.append((domain.domain_name, error_msg))
+                        # 一部のドメインが失敗しても続行
+
+                # すべてのドメインが失敗した場合のみエラー
+                if len(domain_models) == 0:
+                    raise ValueError(
+                        f"すべてのドメインの推定に失敗しました。失敗したドメイン: "
+                        f"{', '.join([f'{name}({msg})' for name, msg in failed_domains])}"
+                    )
+
+                # 失敗したドメインがある場合は警告を表示
+                if failed_domains:
+                    logger.info(
+                        f"\n⚠️ {len(failed_domains)}個のドメインをスキップしました: "
+                        f"{', '.join([name for name, _ in failed_domains])}"
+                    )
 
         return domain_models, domain_fit_indices
 
@@ -318,10 +335,13 @@ class HierarchicalSEMEstimator:
         # データに存在するスキルのみを使用
         available_skills = [s for s in domain.skills if s in data.columns]
 
-        if len(available_skills) < 2:
+        # SEMの識別可能性のために最低3個のスキルが必要
+        # 理由: p=2の場合、観測情報=p*(p+1)/2=3、自由パラメータ=4（λ1, λ2, ψ, θ1, θ2のうち4個）でdf=-1
+        if len(available_skills) < 3:
             raise ValueError(
                 f"ドメイン {domain.domain_name} に十分なスキルがありません "
-                f"(必要: 2個以上, 利用可能: {len(available_skills)}個)"
+                f"(必要: 3個以上, 利用可能: {len(available_skills)}個). "
+                f"SEMの識別可能性のため、最低3個の観測変数が必要です。"
             )
 
         # 測定モデル仕様

@@ -1180,9 +1180,29 @@ elif model_type == "HierarchicalSEM（実データ）":
         # 並列処理設定
         st.markdown("---")
         st.markdown("#### ⚙️ 処理設定")
-        use_parallel = st.checkbox("並列処理を有効化（高速化）", value=True)
+
+        # session_stateで状態を保持（スライダー変更時に他の設定が初期化されるのを防ぐ）
+        if 'hsem_use_parallel' not in st.session_state:
+            st.session_state.hsem_use_parallel = True
+        if 'hsem_n_jobs' not in st.session_state:
+            st.session_state.hsem_n_jobs = 4
+
+        use_parallel = st.checkbox(
+            "並列処理を有効化（高速化）",
+            value=st.session_state.hsem_use_parallel,
+            key="hsem_parallel_checkbox"
+        )
+        st.session_state.hsem_use_parallel = use_parallel
+
         if use_parallel:
-            n_jobs = st.slider("並列ジョブ数", 1, 8, 4, help="CPUコア数に応じて調整してください")
+            n_jobs = st.slider(
+                "並列ジョブ数",
+                1, 8,
+                value=st.session_state.hsem_n_jobs,
+                help="CPUコア数に応じて調整してください",
+                key="hsem_n_jobs_slider"
+            )
+            st.session_state.hsem_n_jobs = n_jobs
         else:
             n_jobs = 1
 
