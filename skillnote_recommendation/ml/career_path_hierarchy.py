@@ -5,7 +5,7 @@
 キャリアの進行段階を階層化します。
 """
 
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 import pandas as pd
 import numpy as np
 import logging
