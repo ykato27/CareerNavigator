@@ -153,7 +153,7 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
     selected_member = st.selectbox(
         "メンバーを選択",
         options=member_codes,
-        format_func=lambda x: f"{x} - {members_clean[members_clean['メンバーコード'] == x]['氏名'].values[0] if len(members_clean[members_clean['メンバーコード'] == x]) > 0 else x}"
+        format_func=lambda x: f"{x} - {members_clean[members_clean['メンバーコード'] == x]['メンバー名'].values[0] if len(members_clean[members_clean['メンバーコード'] == x]) > 0 else x}"
     )
 
     if selected_member:
