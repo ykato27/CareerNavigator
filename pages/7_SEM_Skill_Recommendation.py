@@ -112,6 +112,7 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
     with st.spinner("SEMモデルを学習中..."):
         try:
             # ドメイン階層を構築
+            st.info("ステップ1: ドメイン階層を構築中...")
             domain_hierarchy = SkillDomainHierarchy(competence_master)
 
             # 統計情報を表示
@@ -119,14 +120,24 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
             stats_df = domain_hierarchy.get_domain_statistics()
             st.dataframe(stats_df, use_container_width=True)
 
+            # デバッグ: ドメイン階層の詳細を表示
+            with st.expander("🔍 デバッグ: ドメイン階層の詳細", expanded=True):
+                st.write(f"**総ドメイン数:** {len(domain_hierarchy.domains)}")
+                st.write(f"**ドメインリスト:**")
+                for domain in domain_hierarchy.domains:
+                    st.write(f"- {domain.domain_name}: Level1={len(domain.level_1_competences)}, Level2={len(domain.level_2_competences)}, Level3={len(domain.level_3_competences)}")
+
             # SEMモデルを学習
+            st.info("ステップ2: SEMモデルを学習中...")
             sem_model = SkillDomainSEMModel(
                 member_competence=member_competence,
                 competence_master=competence_master,
                 domain_hierarchy=domain_hierarchy,
             )
 
+            st.info(f"ステップ3: フィッティング開始（min_competences_per_level={int(min_competences_per_level)}）...")
             sem_model.fit(min_competences_per_level=int(min_competences_per_level))
+            st.info(f"ステップ4: フィッティング完了")
 
             # Session stateに保存
             st.session_state.sem_model = sem_model
