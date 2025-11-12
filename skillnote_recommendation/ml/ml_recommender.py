@@ -25,6 +25,7 @@ class MLRecommender:
         diversity_reranker: Optional[DiversityReranker] = None,
         reference_person_finder: Optional[ReferencePersonFinder] = None,
         tuning_results: Optional[dict] = None,
+        skill_domain_sem_model: Optional['SkillDomainSEMModel'] = None,
     ):
         self.mf_model = mf_model
         self.competence_master = competence_master
@@ -34,6 +35,7 @@ class MLRecommender:
         self.reference_person_finder = reference_person_finder
         self._member_acquired_cache = {}
         self.tuning_results = tuning_results  # チューニング結果を保存
+        self.skill_domain_sem_model = skill_domain_sem_model  # SEMモデル（オプション）
 
     # =========================================================
     # 学習
