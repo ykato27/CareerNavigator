@@ -1433,8 +1433,8 @@ elif model_type == "HierarchicalSEM（実データ）":
 
                     # カテゴリー数に応じて高さを動的調整
                     n_categories = len(result.domain_scores.columns)
-                    # 基本: 800px、カテゴリーが多い場合は追加（1カテゴリーあたり40px）
-                    dynamic_height = max(800, 600 + n_categories * 40)
+                    # 基本: 400px、カテゴリーが多い場合は追加（1カテゴリーあたり20px）
+                    dynamic_height = max(400, 300 + n_categories * 20)
 
                     fig = go.Figure()
                     for col in result.domain_scores.columns:
@@ -1492,8 +1492,29 @@ elif model_type == "HierarchicalSEM（実データ）":
                         loading_df = loading_df.sort_values('最大ローディング', ascending=False)
                         loading_df = loading_df.drop(columns=['最大ローディング'])
 
+                        # matplotlibに依存しないシンプルなスタイリング
+                        def color_loading(val):
+                            """ローディング値に応じた色付け（matplotlib不要）"""
+                            if pd.isna(val):
+                                return ''
+                            # 緑（正）から赤（負）のグラデーション
+                            if val > 0.7:
+                                return 'background-color: #90EE90'  # 明るい緑
+                            elif val > 0.4:
+                                return 'background-color: #D4EDA7'  # 薄い緑
+                            elif val > 0.1:
+                                return 'background-color: #FFFFCC'  # 薄い黄色
+                            elif val > -0.1:
+                                return 'background-color: #FFFFFF'  # 白
+                            elif val > -0.4:
+                                return 'background-color: #FFD4D4'  # 薄いピンク
+                            elif val > -0.7:
+                                return 'background-color: #FFB6B6'  # ピンク
+                            else:
+                                return 'background-color: #FF9999'  # 赤
+
                         st.dataframe(
-                            loading_df.style.background_gradient(cmap='RdYlGn', axis=None, vmin=-1, vmax=1),
+                            loading_df.style.applymap(color_loading),
                             use_container_width=True
                         )
 
