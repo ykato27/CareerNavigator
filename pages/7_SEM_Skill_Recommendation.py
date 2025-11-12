@@ -53,6 +53,24 @@ if "transformed_data" not in st.session_state:
 
 transformed_data = st.session_state.transformed_data
 
+# データの型と内容を検証
+if transformed_data is None:
+    st.error("❌ データが正しく読み込まれていません。「データ読み込み」ページからデータを再度読み込んでください。")
+    st.stop()
+
+if not isinstance(transformed_data, dict):
+    st.error(f"❌ データ形式が不正です。expected: dict, actual: {type(transformed_data).__name__}")
+    st.stop()
+
+# 必要なキーの存在確認
+required_keys = ["competence_master", "member_competence", "members_clean"]
+missing_keys = [key for key in required_keys if key not in transformed_data]
+if missing_keys:
+    st.error(f"❌ 必要なデータが不足しています: {', '.join(missing_keys)}")
+    st.info(f"利用可能なキー: {', '.join(transformed_data.keys())}")
+    st.warning("「データ読み込み」ページからデータを再度読み込んでください。")
+    st.stop()
+
 competence_master = transformed_data["competence_master"]
 member_competence = transformed_data["member_competence"]
 members_clean = transformed_data["members_clean"]

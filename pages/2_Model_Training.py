@@ -79,6 +79,19 @@ def build_ml_recommender(
         tuning_random_state: チューニングの乱数シード
         tuning_progress_callback: 進捗コールバック
     """
+    # データの検証
+    if transformed_data is None:
+        raise ValueError("transformed_data が None です。データが正しく読み込まれていません。")
+
+    if not isinstance(transformed_data, dict):
+        raise TypeError(f"transformed_data は dict 型である必要があります。実際の型: {type(transformed_data).__name__}")
+
+    # 必要なキーの存在確認
+    required_keys = ["member_competence", "competence_master", "members_clean"]
+    missing_keys = [key for key in required_keys if key not in transformed_data]
+    if missing_keys:
+        raise KeyError(f"必要なキーが不足しています: {', '.join(missing_keys)}。利用可能なキー: {', '.join(transformed_data.keys())}")
+
     recommender = MLRecommender.build(
         member_competence=transformed_data["member_competence"],
         competence_master=transformed_data["competence_master"],
