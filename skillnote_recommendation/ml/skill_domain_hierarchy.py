@@ -129,8 +129,13 @@ class SkillDomainHierarchy:
             competence_code = row['力量コード']
             competence_name = row['力量名']
 
-            # キーワードマッチングでドメインとレベルを判定
-            domain, level = self._match_domain_level(competence_name)
+            # 力量カテゴリー名がある場合はそれを優先的に使用
+            competence_category = row.get('力量カテゴリー名', None)
+
+            # カテゴリーベースでドメインとレベルを判定
+            domain, level = self._match_domain_level_with_category(
+                competence_name, competence_category
+            )
 
             if domain is not None:
                 classification[competence_code] = {
@@ -141,9 +146,83 @@ class SkillDomainHierarchy:
 
         return classification
 
+    def _match_domain_level_with_category(
+        self, competence_name: str, competence_category: Optional[str]
+    ) -> tuple:
+        """
+        力量カテゴリーと力量名からドメインとレベルを判定
+
+        Args:
+            competence_name: 力量名
+            competence_category: 力量カテゴリー名（存在する場合）
+
+        Returns:
+            (domain, level) または (None, None)
+        """
+        # カテゴリーが存在する場合、カテゴリーベースでドメインを判定
+        if competence_category and not pd.isna(competence_category):
+            domain = self._map_category_to_domain(competence_category)
+            if domain is not None:
+                # レベルは力量名から判定
+                level = self._infer_level_from_name(competence_name)
+                return (domain, level)
+
+        # カテゴリーがない場合、従来のキーワードマッチング
+        return self._match_domain_level(competence_name)
+
+    def _map_category_to_domain(self, category: str) -> Optional[str]:
+        """
+        力量カテゴリー名をドメインにマッピング
+
+        Args:
+            category: 力量カテゴリー名
+
+        Returns:
+            ドメイン名（該当なしの場合はNone）
+        """
+        category_lower = category.lower()
+
+        # カテゴリー名とドメインのマッピング
+        category_mapping = {
+            'プログラミング': ['プログラミング', 'コーディング', '開発', 'python', 'java', 'javascript', 'web', 'アプリ'],
+            'データベース': ['データベース', 'db', 'sql', 'mysql', 'postgresql', 'oracle', 'nosql'],
+            'データ分析': ['データ分析', '分析', 'データサイエンス', '統計', '機械学習', 'ai', 'bi', 'tableau'],
+            'マネジメント': ['マネジメント', '管理', 'プロジェクト', 'リーダー', '組織', '戦略', '計画'],
+            'コミュニケーション': ['コミュニケーション', 'プレゼン', '交渉', '報告', '文書作成', '提案'],
+        }
+
+        for domain, keywords in category_mapping.items():
+            if any(keyword in category_lower for keyword in keywords):
+                return domain
+
+        return None
+
+    def _infer_level_from_name(self, competence_name: str) -> int:
+        """
+        力量名からレベルを推測
+
+        Args:
+            competence_name: 力量名
+
+        Returns:
+            レベル（1～3）
+        """
+        competence_name_lower = competence_name.lower()
+
+        # レベル1: 基礎・入門・初級
+        if any(keyword in competence_name_lower for keyword in ['基礎', '基本', '入門', '初級', '初歩']):
+            return 1
+
+        # レベル3: 上級・専門・設計
+        if any(keyword in competence_name_lower for keyword in ['上級', '専門', '設計', 'アーキテクチャ', '戦略', '統括']):
+            return 3
+
+        # レベル2: 応用・実践・中級（デフォルト）
+        return 2
+
     def _match_domain_level(self, competence_name: str) -> tuple:
         """
-        力量名からドメインとレベルを判定
+        力量名からドメインとレベルを判定（キーワードマッチング）
 
         Args:
             competence_name: 力量名
