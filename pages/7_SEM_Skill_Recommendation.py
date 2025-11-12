@@ -164,14 +164,25 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
             st.session_state.min_current_level_score = min_current_level_score
 
             # デバッグ: SEMモデルの学習結果を表示
-            with st.expander("🔍 デバッグ: SEMモデル学習結果", expanded=False):
+            with st.expander("🔍 デバッグ: SEMモデル学習結果", expanded=True):
                 st.write(f"**学習済みドメイン数:** {len(sem_model.sem_models)}")
                 st.write(f"**学習済みドメイン:**", list(sem_model.sem_models.keys()))
                 st.write(f"**ドメイン階層統計:**")
                 st.dataframe(stats_df)
 
-            st.success(f"✅ SEMモデル学習完了（{len(sem_model.sem_models)}ドメイン）")
-            st.rerun()
+                # 学習済みドメイン数が0の場合は警告を表示
+                if len(sem_model.sem_models) == 0:
+                    st.error("⚠️ SEMモデルが1つも学習できませんでした。")
+                    st.error("**原因:** 各ドメインのスキル数が `min_competences_per_level` の条件を満たしていません。")
+                    st.error("**対策:** `各レベルで最低限必要な力量数` を **1** に下げてください。")
+
+            if len(sem_model.sem_models) > 0:
+                st.success(f"✅ SEMモデル学習完了（{len(sem_model.sem_models)}ドメイン）")
+            else:
+                st.warning(f"⚠️ SEMモデル学習完了（0ドメイン）- 推薦はできません")
+
+            # rerun()を削除してデバッグ情報を確認できるようにする
+            # st.rerun()
 
         except Exception as e:
             st.error(f"❌ SEMモデル学習エラー: {e}")
