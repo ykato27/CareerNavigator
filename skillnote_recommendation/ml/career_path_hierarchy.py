@@ -214,7 +214,7 @@ class CareerPathHierarchy:
             competence_name: 力量名
 
         Returns:
-            ステージ番号（分類できない場合はNone）
+            ステージ番号（分類できない場合は0を返す）
         """
         stages = self.get_role_stages(role)
 
@@ -238,6 +238,10 @@ class CareerPathHierarchy:
             if match_count > best_match_score:
                 best_match_score = match_count
                 best_match = stage_info['stage']
+
+        # キーワードにマッチしなかった場合は、Stage 0（入門期）に割り当て
+        if best_match is None and stages:
+            best_match = 0
 
         return best_match
 
