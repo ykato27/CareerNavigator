@@ -435,7 +435,41 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
                     st.write(f"    - career_hierarchy.competence_master件数: {len(career_hierarchy.competence_master)}")
                     st.write(f"    - 同じオブジェクト: {competence_master is career_hierarchy.competence_master}")
 
+                    # career_sem_modelが使っているcareer_path_hierarchyもチェック
+                    st.write(f"  - career_path_hierarchyの同一性チェック:")
+                    st.write(f"    - UIのcareer_hierarchy: {id(career_hierarchy)}")
+                    st.write(f"    - career_sem_model.career_path_hierarchy: {id(career_sem_model.career_path_hierarchy)}")
+                    st.write(f"    - 同じオブジェクト: {career_hierarchy is career_sem_model.career_path_hierarchy}")
+                    st.write(f"    - career_sem_model.career_path_hierarchy.competence_master件数: {len(career_sem_model.career_path_hierarchy.competence_master)}")
+
+                    # career_sem_model.career_path_hierarchyでもスキル検索してみる
+                    st.write(f"  - サンプルスキルコード (最初の3個) - career_sem_model.career_path_hierarchy.competence_master:")
+                    for j, comp_code in enumerate(next_stage_skills[:3]):
+                        comp_info = career_sem_model.career_path_hierarchy.competence_master[
+                            career_sem_model.career_path_hierarchy.competence_master['力量コード'] == comp_code
+                        ]
+                        match_status = "✅ 見つかった" if len(comp_info) > 0 else "❌ 見つからない"
+                        comp_name = comp_info.iloc[0]['力量名'] if len(comp_info) > 0 else "N/A"
+                        st.write(f"    - {comp_code}: {match_status}, 力量名: {comp_name}")
+
             st.write(f"**推薦結果数:** {len(recommendations)}")
+
+            # 直接career_sem_model.career_path_hierarchyでget_next_stage_skillsを呼び出してみる
+            if role:
+                st.write(f"  - 直接get_next_stage_skillsを呼び出してテスト:")
+                try:
+                    test_recommendations = career_sem_model.career_path_hierarchy.get_next_stage_skills(
+                        selected_member, role, 3
+                    )
+                    st.write(f"    - 結果数: {len(test_recommendations)}")
+                    if len(test_recommendations) > 0:
+                        st.write(f"    - 最初の推薦: {test_recommendations[0]}")
+                    else:
+                        st.write(f"    - ❌ 空のリストが返された")
+                except Exception as e:
+                    st.write(f"    - ❌ エラー発生: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
 
         if len(recommendations) > 0:
             st.success(f"✅ {len(recommendations)}件の推薦を生成しました")
