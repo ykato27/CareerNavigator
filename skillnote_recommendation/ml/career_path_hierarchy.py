@@ -395,12 +395,29 @@ class CareerPathHierarchy:
         # 力量情報を付加
         recommendations = []
 
-        for comp_code in next_stage_skills[:top_n]:
+        # デバッグ: スキル数をログ出力
+        logger.debug(f"次のステージ({next_stage})のスキル数: {len(next_stage_skills)}")
+        logger.debug(f"top_n: {top_n}")
+        logger.debug(f"処理対象スキル数: {min(len(next_stage_skills), top_n)}")
+
+        for i, comp_code in enumerate(next_stage_skills[:top_n]):
             comp_info = self.competence_master[
                 self.competence_master['力量コード'] == comp_code
             ]
 
             if len(comp_info) == 0:
+                # デバッグ: マッチしなかった力量コードをログ出力
+                logger.warning(
+                    f"力量コード '{comp_code}' (type: {type(comp_code).__name__}) が "
+                    f"competence_masterに見つかりません"
+                )
+                # competence_masterの力量コードの最初の5個をサンプルとして出力
+                if i == 0:  # 最初の1回だけ
+                    sample_codes = self.competence_master['力量コード'].head().tolist()
+                    logger.warning(
+                        f"competence_masterの力量コードサンプル: {sample_codes} "
+                        f"(type: {type(sample_codes[0]).__name__ if sample_codes else 'N/A'})"
+                    )
                 continue
 
             stage_info = self.get_stage_info(role, next_stage)
@@ -413,6 +430,7 @@ class CareerPathHierarchy:
                 'reason': self._generate_reason(role, current_stage, next_stage, progress),
             })
 
+        logger.debug(f"推薦結果数: {len(recommendations)}")
         return recommendations
 
     def _generate_reason(
