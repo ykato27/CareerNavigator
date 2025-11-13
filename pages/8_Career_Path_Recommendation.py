@@ -387,6 +387,36 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
                     )
                     st.write(f"  - Stage {i} ({stages[i]['name']}): {len(stage_skills)}個")
 
+                # 次のステージのスキルの詳細をチェック
+                if progress >= 0.8 and current_stage < len(stages) - 1:
+                    next_stage = current_stage + 1
+                else:
+                    next_stage = current_stage
+
+                next_stage_skills = career_hierarchy.get_skills_by_stage(
+                    role, next_stage, acquired_skills
+                )
+
+                st.write(f"**次のステージ({next_stage})のスキル詳細:**")
+                st.write(f"  - 未習得スキル数: {len(next_stage_skills)}")
+
+                if len(next_stage_skills) > 0:
+                    # 最初の3個のスキルコードをチェック
+                    st.write(f"  - サンプルスキルコード (最初の3個):")
+                    for j, comp_code in enumerate(next_stage_skills[:3]):
+                        # competence_masterで検索
+                        comp_info = competence_master[
+                            competence_master['力量コード'] == comp_code
+                        ]
+                        match_status = "✅ 見つかった" if len(comp_info) > 0 else "❌ 見つからない"
+                        st.write(f"    - {comp_code} (type: {type(comp_code).__name__}): {match_status}")
+
+                    # competence_masterのサンプルも表示
+                    st.write(f"  - competence_masterの力量コードサンプル (最初の3個):")
+                    sample_codes = competence_master['力量コード'].head(3).tolist()
+                    for sc in sample_codes:
+                        st.write(f"    - {sc} (type: {type(sc).__name__})")
+
             st.write(f"**推薦結果数:** {len(recommendations)}")
 
         if len(recommendations) > 0:
