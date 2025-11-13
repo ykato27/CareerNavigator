@@ -471,6 +471,12 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
                     import traceback
                     st.code(traceback.format_exc())
 
+                # SEMモデルの学習状況をチェック
+                st.write(f"  - SEMモデルの学習状況:")
+                st.write(f"    - 学習済み役職: {list(career_sem_model.sem_models.keys())}")
+                st.write(f"    - 役職「{role}」は学習済み: {role in career_sem_model.sem_models}")
+                st.write(f"    - 学習済み役職数: {len(career_sem_model.sem_models)}")
+
         if len(recommendations) > 0:
             st.success(f"✅ {len(recommendations)}件の推薦を生成しました")
 
