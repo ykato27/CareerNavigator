@@ -197,7 +197,7 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
     selected_member = st.selectbox(
         "メンバーを選択",
         options=member_codes,
-        format_func=lambda x: f"{x} - {member_master[member_master['メンバーコード'] == x]['氏名'].values[0] if len(member_master[member_master['メンバーコード'] == x]) > 0 else x}"
+        format_func=lambda x: f"{x} - {member_master[member_master['メンバーコード'] == x]['メンバー名'].values[0] if len(member_master[member_master['メンバーコード'] == x]) > 0 else x}"
     )
 
     if selected_member:
