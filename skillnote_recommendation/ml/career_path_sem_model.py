@@ -346,7 +346,7 @@ class CareerPathSEMModel:
         """
         role, current_stage, progress = self.get_member_position(member_code)
 
-        if role is None or role not in self.sem_models:
+        if role is None:
             return []
 
         # 次のステージのスキルを取得
@@ -354,8 +354,8 @@ class CareerPathSEMModel:
             member_code, role, top_n
         )
 
-        # パス係数情報を付加
-        if role in self.path_coefficients:
+        # パス係数情報を付加（SEMモデルが学習済みの場合のみ）
+        if role in self.sem_models and role in self.path_coefficients:
             path_coefs = self.path_coefficients[role]
 
             for rec in recommendations:
@@ -366,6 +366,10 @@ class CareerPathSEMModel:
                     rec['path_coefficient'] = path_coefs[rec_stage - 1]
                 else:
                     rec['path_coefficient'] = 0.0
+        else:
+            # SEMモデルが学習されていない場合は、パス係数を0.0に設定
+            for rec in recommendations:
+                rec['path_coefficient'] = 0.0
 
         return recommendations
 
