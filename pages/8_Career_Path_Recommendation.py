@@ -360,6 +360,35 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
                 top_n=int(top_n_career)
             )
 
+        # デバッグ情報を表示
+        with st.expander("🔍 デバッグ情報", expanded=False):
+            st.write(f"**選択メンバー:** {selected_member}")
+            st.write(f"**役職:** {role}")
+            st.write(f"**現在ステージ:** {current_stage}")
+            st.write(f"**進捗率:** {progress:.2%}")
+
+            # メンバーの習得スキル数
+            member_skills = member_competence[
+                member_competence['メンバーコード'] == selected_member
+            ]
+            st.write(f"**習得スキル数:** {len(member_skills)}")
+
+            # 役職のステージ情報
+            stages = career_hierarchy.get_role_stages(role) if role else []
+            st.write(f"**役職のステージ数:** {len(stages)}")
+
+            # 各ステージのスキル数をカウント
+            if role and stages:
+                st.write("**各ステージのスキル数（未習得のみ）:**")
+                acquired_skills = set(member_skills['力量コード'].tolist())
+                for i in range(len(stages)):
+                    stage_skills = career_hierarchy.get_skills_by_stage(
+                        role, i, acquired_skills
+                    )
+                    st.write(f"  - Stage {i} ({stages[i]['name']}): {len(stage_skills)}個")
+
+            st.write(f"**推薦結果数:** {len(recommendations)}")
+
         if len(recommendations) > 0:
             st.success(f"✅ {len(recommendations)}件の推薦を生成しました")
 
