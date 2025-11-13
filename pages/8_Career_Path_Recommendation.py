@@ -402,20 +402,38 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
 
                 if len(next_stage_skills) > 0:
                     # 最初の3個のスキルコードをチェック
-                    st.write(f"  - サンプルスキルコード (最初の3個):")
+                    st.write(f"  - サンプルスキルコード (最初の3個) - UIのcompetence_master:")
                     for j, comp_code in enumerate(next_stage_skills[:3]):
-                        # competence_masterで検索
+                        # UIのcompetence_masterで検索
                         comp_info = competence_master[
                             competence_master['力量コード'] == comp_code
                         ]
                         match_status = "✅ 見つかった" if len(comp_info) > 0 else "❌ 見つからない"
-                        st.write(f"    - {comp_code} (type: {type(comp_code).__name__}): {match_status}")
+                        comp_name = comp_info.iloc[0]['力量名'] if len(comp_info) > 0 else "N/A"
+                        st.write(f"    - {comp_code}: {match_status}, 力量名: {comp_name}")
+
+                    # career_hierarchy.competence_masterでも同じチェック
+                    st.write(f"  - サンプルスキルコード (最初の3個) - career_hierarchy.competence_master:")
+                    for j, comp_code in enumerate(next_stage_skills[:3]):
+                        # career_hierarchyのcompetence_masterで検索
+                        comp_info = career_hierarchy.competence_master[
+                            career_hierarchy.competence_master['力量コード'] == comp_code
+                        ]
+                        match_status = "✅ 見つかった" if len(comp_info) > 0 else "❌ 見つからない"
+                        comp_name = comp_info.iloc[0]['力量名'] if len(comp_info) > 0 else "N/A"
+                        st.write(f"    - {comp_code}: {match_status}, 力量名: {comp_name}")
 
                     # competence_masterのサンプルも表示
                     st.write(f"  - competence_masterの力量コードサンプル (最初の3個):")
                     sample_codes = competence_master['力量コード'].head(3).tolist()
                     for sc in sample_codes:
                         st.write(f"    - {sc} (type: {type(sc).__name__})")
+
+                    # career_hierarchy.competence_masterとUIのcompetence_masterが同じか確認
+                    st.write(f"  - competence_masterの同一性チェック:")
+                    st.write(f"    - UIのcompetence_master件数: {len(competence_master)}")
+                    st.write(f"    - career_hierarchy.competence_master件数: {len(career_hierarchy.competence_master)}")
+                    st.write(f"    - 同じオブジェクト: {competence_master is career_hierarchy.competence_master}")
 
             st.write(f"**推薦結果数:** {len(recommendations)}")
 
