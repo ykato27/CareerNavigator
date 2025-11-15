@@ -134,6 +134,7 @@ class AcquisitionOrderSEMModel:
         """
         # 測定モデルを定義（各ステージの潜在変数）
         measurement_models = []
+        used_skills = set()  # 既に使用したスキルを記録
 
         for stage_id in range(1, self.n_stages + 1):
             stage_name = self.acquisition_hierarchy.get_stage_name(stage_id)
@@ -148,24 +149,34 @@ class AcquisitionOrderSEMModel:
                 )
                 continue
 
-            # 力量名に変換
+            # 力量名に変換（既に使用されたスキルは除外）
             skill_names = []
             failed_codes = []
+            duplicated_codes = []
             for code in stage_skills:
+                if code in used_skills:
+                    duplicated_codes.append(code)
+                    continue
+
                 comp_info = self.competence_master[
                     self.competence_master["力量コード"] == code
                 ]
                 if not comp_info.empty:
                     skill_names.append(comp_info.iloc[0]["力量名"])
+                    used_skills.add(code)
                 else:
                     failed_codes.append(code)
 
             logger.info(
-                f"  Stage {stage_id}: 変換成功={len(skill_names)}個, 変換失敗={len(failed_codes)}個"
+                f"  Stage {stage_id}: 変換成功={len(skill_names)}個, 変換失敗={len(failed_codes)}個, 重複除外={len(duplicated_codes)}個"
             )
             if failed_codes:
                 logger.warning(
                     f"  ⚠️ Stage {stage_id}で力量名変換失敗: {failed_codes[:5]}"
+                )
+            if duplicated_codes:
+                logger.info(
+                    f"  ℹ️ Stage {stage_id}で重複スキル除外: {duplicated_codes[:5]}"
                 )
 
             if len(skill_names) >= 2:
