@@ -275,22 +275,34 @@ class UnifiedSEMEstimator:
         theta_0 = self._get_initial_params(data_subset)
 
         # 目的関数の定義
+        iteration_count = [0]  # mutable カウンター
+
         def objective(theta):
+            iteration_count[0] += 1
             try:
                 Sigma_theta = self._compute_model_covariance(theta)
-                return self._fit_function(S, Sigma_theta, self.method)
+                result_val = self._fit_function(S, Sigma_theta, self.method)
+                if iteration_count[0] % 10 == 0:
+                    logger.debug(f"  反復 {iteration_count[0]}: objective = {result_val:.6f}")
+                return result_val
             except np.linalg.LinAlgError:
                 return 1e10  # 逆行列が存在しない場合は大きなペナルティ
 
         # 最適化
         logger.info(f"最尤推定を開始します (変数数: {len(self.observed_vars)}, サンプルサイズ: {self.n_obs})")
+        logger.info(f"パラメータ数: {len(theta_0)}")
 
         result = minimize(
             objective,
             theta_0,
             method='L-BFGS-B',
             bounds=self._get_param_bounds(),
-            options={'maxiter': 1000, 'ftol': 1e-6}
+            options={
+                'maxiter': 200,  # 1000 → 200 に削減（多くの場合50-100で収束）
+                'ftol': 1e-4,     # 1e-6 → 1e-4 に緩和（精度と速度のバランス）
+                'gtol': 1e-5,     # 勾配ノルム停止条件を追加
+                'disp': False     # ログ出力を抑制
+            }
         )
 
         if not result.success:
