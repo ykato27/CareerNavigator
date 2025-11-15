@@ -155,7 +155,7 @@ if st.button("🚀 キャリアパスSEMモデルを学習", type="primary"):
             # 統計情報を表示
             st.markdown("### 📊 キャリアパスの統計")
             stats_df = career_hierarchy.get_career_path_statistics()
-            st.dataframe(stats_df, use_container_width=True)
+            st.dataframe(stats_df, width="stretch")
 
             # SEMモデルを学習
             career_sem_model = CareerPathSEMModel(
@@ -329,12 +329,12 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
                     hovermode='closest'
                 )
 
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             # 役職のキャリアパスサマリー
             with st.expander("📋 役職別キャリアパス詳細", expanded=False):
                 path_summary_df = career_sem_model.get_role_path_summary(role)
-                st.dataframe(path_summary_df, use_container_width=True)
+                st.dataframe(path_summary_df, width="stretch")
 
         else:
             st.warning("⚠️ このメンバーの役職情報がありません")
@@ -513,7 +513,7 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
                 'reason': '推薦理由',
             })
 
-            st.dataframe(display_rec_df, use_container_width=True)
+            st.dataframe(display_rec_df, width="stretch")
 
             # 各推薦の詳細を展開可能にする
             st.markdown("#### 📝 推薦の詳細説明")
@@ -565,7 +565,7 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
             )
 
             fig_stage.update_layout(height=400, showlegend=False)
-            st.plotly_chart(fig_stage, use_container_width=True)
+            st.plotly_chart(fig_stage, width="stretch")
 
             # パス係数の分布
             if 'path_coefficient' in rec_df.columns:
@@ -582,7 +582,7 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
                     )
 
                     fig_coef.update_layout(height=400)
-                    st.plotly_chart(fig_coef, use_container_width=True)
+                    st.plotly_chart(fig_coef, width="stretch")
 
                     st.info(
                         "💡 **パス係数（β）の解釈**:\n"
@@ -630,7 +630,7 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
             st.markdown(f"### 📋 {selected_role}のキャリアパス")
 
             path_summary_df = career_sem_model.get_role_path_summary(selected_role)
-            st.dataframe(path_summary_df, use_container_width=True)
+            st.dataframe(path_summary_df, width="stretch")
 
             # この役職のメンバー分布
             st.markdown(f"### 📊 {selected_role}メンバーのステージ分布")
@@ -672,4 +672,4 @@ if "career_sem_model" in st.session_state and st.session_state.career_sem_model.
                 )
 
                 fig_dist.update_layout(height=400, showlegend=False)
-                st.plotly_chart(fig_dist, use_container_width=True)
+                st.plotly_chart(fig_dist, width="stretch")

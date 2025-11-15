@@ -732,7 +732,7 @@ def display_positioning_maps(
                 "総合スキルレベル", "保有力量数",
                 "総合スキルレベル vs 保有力量数"
             )
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, width="stretch")
 
     with tab2:
         st.markdown("### 平均レベル vs 保有力量数")
@@ -755,7 +755,7 @@ def display_positioning_maps(
                 "保有力量数", "平均レベル",
                 "スキルの幅 vs 深さ"
             )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width="stretch")
 
     with tab3:
         st.markdown("### 潜在因子マップ（NMF空間）")
@@ -806,7 +806,7 @@ def display_positioning_maps(
                 selected_x_factor, selected_y_factor,
                 f"{selected_x_factor} vs {selected_y_factor}"
             )
-        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(fig3, width="stretch")
 
         # 潜在因子についての説明
         st.markdown("---")
@@ -829,7 +829,7 @@ def display_positioning_maps(
         display_df = prepare_positioning_display_dataframe(
             position_df, target_code, reference_codes
         )
-        st.dataframe(display_df, use_container_width=True, height=400)
+        st.dataframe(display_df, width="stretch", height=400)
 
 
 # =========================================================
@@ -1067,7 +1067,7 @@ rwr_weight = 0.5  # グラフとNMFを同等に評価
 
 st.markdown("---")
 
-if st.button("🚀 推薦を実行する", type="primary", use_container_width=True):
+if st.button("🚀 推薦を実行する", type="primary", width="stretch"):
     # recommender を session_state に保存（ボタン外からのアクセスを可能にする）
     st.session_state["recommender"] = recommender
 
@@ -1246,7 +1246,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                     comparison_data.append(row)
 
                 comparison_df = pd.DataFrame(comparison_data)
-                st.dataframe(comparison_df, use_container_width=True, height=400)
+                st.dataframe(comparison_df, width="stretch", height=400)
 
             # 実行時間の比較
             st.markdown("### ⏱️ 実行時間の比較")
@@ -1826,7 +1826,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                         target_member_code=target_for_filtering
                                     )
                                     if timeline_fig:
-                                        st.plotly_chart(timeline_fig, use_container_width=True)
+                                        st.plotly_chart(timeline_fig, width="stretch")
                                         if role_name == selected_member_role:
                                             st.caption("💡 【職種フィルター】凡例の職種名をクリックして表示/非表示を切替。【力量タイプフィルター】上部のマルチセレクトで選択。マーカー形状で力量タイプを区別（●=スキル、■=教育、◆=資格）。**あなたが未習得のスキルのみ表示されています。**")
                                         else:
@@ -1841,7 +1841,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                     # 段階別チャートを作成
                                     stages_fig = create_growth_path_stages_chart(growth_path, role_name)
                                     if stages_fig:
-                                        st.plotly_chart(stages_fig, use_container_width=True)
+                                        st.plotly_chart(stages_fig, width="stretch")
                                         st.caption("💡 成長パス上のスキルを、早期（初級）・中期（中級）・後期（上級）の3段階に分類して表示しています。")
 
                             st.markdown("---")
@@ -2093,7 +2093,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                                     if ref_df_data:
                                         ref_df = pd.DataFrame(ref_df_data)
-                                        st.dataframe(ref_df, use_container_width=True, hide_index=True)
+                                        st.dataframe(ref_df, width="stretch", hide_index=True)
 
                                 # 参考人物の統計情報を表示
                                 if pattern_rec.filtered_count > 0:
@@ -2263,7 +2263,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                             target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code),
                                             phase_info=phase_info if phase_info else None
                                         )
-                                        st.plotly_chart(fig, use_container_width=True)
+                                        st.plotly_chart(fig, width="stretch")
 
                                         # エクスポートボタン
                                         if st.button(f"📥 HTMLとしてエクスポート", key=f"export_{idx}"):
@@ -2351,7 +2351,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                             target_member_name=member_name,
                                             target_competence_name=hybrid_rec.competence_info.get('力量名', hybrid_rec.competence_code)
                                         )
-                                        st.plotly_chart(fig, use_container_width=True)
+                                        st.plotly_chart(fig, width="stretch")
 
                                         # エクスポートボタン
                                         if st.button(f"📥 HTMLとしてエクスポート", key=f"export_{idx}"):
@@ -2369,7 +2369,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                 # テーブル表示
                 st.markdown("---")
                 st.markdown("### 📊 推薦結果一覧")
-                st.dataframe(df_result, use_container_width=True)
+                st.dataframe(df_result, width="stretch")
 
                 # SEM分析の表示（SEMが有効な場合）
                 if hasattr(recommender, 'sem_model') and recommender.sem_model:
@@ -2583,12 +2583,12 @@ if st.session_state.get("last_recommendations_df") is not None:
                     with tab2:
                         # ロードマップを表示
                         roadmap_fig = visualizer.create_roadmap(career_path, target_member_name)
-                        st.plotly_chart(roadmap_fig, use_container_width=True)
+                        st.plotly_chart(roadmap_fig, width="stretch")
 
                     with tab3:
                         # 到達度ゲージを表示
                         gauge_fig = visualizer.create_progress_gauge(career_path.estimated_completion_rate)
-                        st.plotly_chart(gauge_fig, use_container_width=True)
+                        st.plotly_chart(gauge_fig, width="stretch")
 
                         # 詳細情報（リッチなメトリクスカード）
                         col_a, col_b, col_c = st.columns(3)
@@ -2617,7 +2617,7 @@ if st.session_state.get("last_recommendations_df") is not None:
                     with tab4:
                         # カテゴリー別分析を表示
                         category_fig = visualizer.create_category_breakdown(career_path)
-                        st.plotly_chart(category_fig, use_container_width=True)
+                        st.plotly_chart(category_fig, width="stretch")
 
                 except Exception as e:
                     st.error(f"❌ キャリアパス分析エラー: {str(e)}")

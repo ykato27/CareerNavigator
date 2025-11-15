@@ -166,7 +166,7 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
             # 統計情報を表示
             st.markdown("### 📊 スキル取得順序の統計")
             stats_df = acquisition_hierarchy.get_statistics()
-            st.dataframe(stats_df, use_container_width=True)
+            st.dataframe(stats_df, width="stretch")
 
             # デバッグ: 階層の詳細を表示
             with st.expander("🔍 デバッグ: 取得順序階層の詳細", expanded=True):
@@ -314,7 +314,7 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
                 showlegend=False
             )
 
-            st.plotly_chart(fig_stages, use_container_width=True)
+            st.plotly_chart(fig_stages, width="stretch")
 
             # テーブル表示
             st.markdown("#### 📋 ステージ詳細")
@@ -327,7 +327,7 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
                 })
 
             profile_df = pd.DataFrame(profile_data)
-            st.dataframe(profile_df, use_container_width=True)
+            st.dataframe(profile_df, width="stretch")
 
         else:
             st.warning("⚠️ このメンバーの潜在変数スコアが取得できませんでした")
@@ -382,7 +382,7 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
             display_rec_df['平均取得順序'] = display_rec_df['平均取得順序'].round(1)
             display_rec_df['優先度スコア'] = display_rec_df['優先度スコア'].round(3)
 
-            st.dataframe(display_rec_df, use_container_width=True)
+            st.dataframe(display_rec_df, width="stretch")
 
             # ステージ別の推薦数を可視化
             st.markdown("#### 📊 ステージ別推薦数")
@@ -400,7 +400,7 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
             )
 
             fig_stage.update_layout(height=400, showlegend=False)
-            st.plotly_chart(fig_stage, use_container_width=True)
+            st.plotly_chart(fig_stage, width="stretch")
 
             # カテゴリー別の推薦数を可視化
             if 'category' in rec_df.columns and rec_df['category'].notna().any():
@@ -418,7 +418,7 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
                 )
 
                 fig_category.update_layout(height=400, showlegend=False)
-                st.plotly_chart(fig_category, use_container_width=True)
+                st.plotly_chart(fig_category, width="stretch")
 
             # CSVダウンロード
             st.markdown("#### 📥 推薦結果のダウンロード")
@@ -474,7 +474,7 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
                 })
 
             path_df = pd.DataFrame(path_data)
-            st.dataframe(path_df, use_container_width=True)
+            st.dataframe(path_df, width="stretch")
 
             # パス係数を可視化
             fig_path = go.Figure()
@@ -501,7 +501,7 @@ if "sem_model" in st.session_state and st.session_state.sem_model.is_fitted:
                 showlegend=False
             )
 
-            st.plotly_chart(fig_path, use_container_width=True)
+            st.plotly_chart(fig_path, width="stretch")
 
         # SEMモデルの適合度指標
         if hasattr(sem_model.sem_model, 'fit_info') and sem_model.sem_model.fit_info:

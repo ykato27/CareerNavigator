@@ -338,10 +338,14 @@ class UnifiedSEMEstimator:
         # Theta (測定誤差分散)
         for obs_var in self.observed_vars:
             var_data = data[obs_var].var()
-            # 初期値: 分散の半分
-            theta.append(var_data * 0.5)
+            # NaN または 0 分散の場合はデフォルト値を使用
+            if pd.isna(var_data) or var_data == 0:
+                error_variance = 1.0
+            else:
+                error_variance = float(var_data * 0.5)
+            theta.append(error_variance)
 
-        return np.array(theta)
+        return np.array(theta, dtype=float)
 
     def _get_param_bounds(self) -> List[Tuple[Optional[float], Optional[float]]]:
         """パラメータの境界を設定"""
