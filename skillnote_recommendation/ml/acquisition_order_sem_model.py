@@ -132,9 +132,35 @@ class AcquisitionOrderSEMModel:
         Returns:
             (学習済みSEMモデル, パス係数リスト)
         """
+        # まずデータマッピングを準備（力量コード → 力量名）
+        competence_name_map = dict(
+            zip(
+                self.competence_master["力量コード"],
+                self.competence_master["力量名"],
+            )
+        )
+
+        # メンバー×力量のデータフレームを作成
+        skill_matrix = self.member_competence.pivot_table(
+            index="メンバーコード",
+            columns="力量コード",
+            values="正規化レベル",
+            fill_value=0.0,
+        )
+
+        # 力量名でリネーム
+        renamed_columns = {
+            code: competence_name_map.get(code, code) for code in skill_matrix.columns
+        }
+        skill_matrix_renamed = skill_matrix.rename(columns=renamed_columns)
+
+        # 利用可能な力量名（リネーム後のカラム名）を記録
+        available_skill_names = set(skill_matrix_renamed.columns)
+        logger.info(f"  利用可能な力量数: {len(available_skill_names)}")
+
         # 測定モデルを定義（各ステージの潜在変数）
         measurement_models = []
-        used_skills = set()  # 既に使用したスキルを記録
+        used_skills = set()  # 既に使用したスキルコードを記録
 
         for stage_id in range(1, self.n_stages + 1):
             stage_name = self.acquisition_hierarchy.get_stage_name(stage_id)
@@ -149,30 +175,43 @@ class AcquisitionOrderSEMModel:
                 )
                 continue
 
-            # 力量名に変換（既に使用されたスキルは除外）
+            # 力量名に変換（既に使用されたスキルは除外、かつデータに存在するものだけ）
             skill_names = []
             failed_codes = []
             duplicated_codes = []
+            unavailable_codes = []
+
             for code in stage_skills:
                 if code in used_skills:
                     duplicated_codes.append(code)
                     continue
 
-                comp_info = self.competence_master[
-                    self.competence_master["力量コード"] == code
-                ]
-                if not comp_info.empty:
-                    skill_names.append(comp_info.iloc[0]["力量名"])
-                    used_skills.add(code)
-                else:
+                skill_name = competence_name_map.get(code)
+                if skill_name is None:
                     failed_codes.append(code)
+                    continue
+
+                # データに実際に存在するか確認
+                if skill_name not in available_skill_names:
+                    unavailable_codes.append((code, skill_name))
+                    continue
+
+                skill_names.append(skill_name)
+                used_skills.add(code)
 
             logger.info(
-                f"  Stage {stage_id}: 変換成功={len(skill_names)}個, 変換失敗={len(failed_codes)}個, 重複除外={len(duplicated_codes)}個"
+                f"  Stage {stage_id}: 利用可能={len(skill_names)}個, "
+                f"力量マスタ不在={len(failed_codes)}個, "
+                f"データ不在={len(unavailable_codes)}個, "
+                f"重複除外={len(duplicated_codes)}個"
             )
             if failed_codes:
                 logger.warning(
-                    f"  ⚠️ Stage {stage_id}で力量名変換失敗: {failed_codes[:5]}"
+                    f"  ⚠️ Stage {stage_id}で力量マスタに不在: {failed_codes[:5]}"
+                )
+            if unavailable_codes:
+                logger.warning(
+                    f"  ⚠️ Stage {stage_id}でメンバーデータに不在: {unavailable_codes[:5]}"
                 )
             if duplicated_codes:
                 logger.info(
@@ -213,27 +252,6 @@ class AcquisitionOrderSEMModel:
             structural_models.append(
                 StructuralModelSpec(from_latent=from_var, to_latent=to_var)
             )
-
-        # メンバー×力量のデータフレームを作成
-        skill_matrix = self.member_competence.pivot_table(
-            index="メンバーコード",
-            columns="力量コード",
-            values="正規化レベル",
-            fill_value=0.0,
-        )
-
-        # 力量名でリネーム
-        competence_name_map = dict(
-            zip(
-                self.competence_master["力量コード"],
-                self.competence_master["力量名"],
-            )
-        )
-
-        renamed_columns = {
-            code: competence_name_map.get(code, code) for code in skill_matrix.columns
-        }
-        skill_matrix_renamed = skill_matrix.rename(columns=renamed_columns)
 
         # SEMモデルを学習
         try:
