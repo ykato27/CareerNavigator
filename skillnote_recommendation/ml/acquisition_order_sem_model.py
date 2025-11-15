@@ -250,10 +250,15 @@ class AcquisitionOrderSEMModel:
 
         unique_vars = set(all_observed_vars)
         logger.info(f"  全Stage合計: 観測変数数={len(all_observed_vars)}, ユニーク数={len(unique_vars)}")
+        logger.info(f"  観測変数リスト: {all_observed_vars}")
 
         if len(all_observed_vars) > len(unique_vars):
             duplicated_vars = [v for v in all_observed_vars if all_observed_vars.count(v) > 1]
             logger.error(f"  ❌ 観測変数重複検出: {set(duplicated_vars)}")
+            logger.error(f"  重複の詳細:")
+            for var in set(duplicated_vars):
+                count = all_observed_vars.count(var)
+                logger.error(f"    '{var}': {count}回出現")
             logger.error(f"  測定モデルの詳細:")
             for i, mm in enumerate(measurement_models):
                 logger.error(f"    Stage {i + 1}: {mm.observed_vars}")

@@ -220,9 +220,21 @@ class UnifiedSEMEstimator:
     def _build_var_lists(self):
         """観測変数と潜在変数のリストを構築"""
         self.latent_vars = [spec.latent_name for spec in self.measurement_specs]
+        # 観測変数のリストを作成（重複を許さない）
+        # 順序を保持しながら重複を除外
         self.observed_vars = []
+        seen = set()
         for spec in self.measurement_specs:
-            self.observed_vars.extend(spec.observed_vars)
+            for var in spec.observed_vars:
+                if var not in seen:
+                    self.observed_vars.append(var)
+                    seen.add(var)
+                else:
+                    # 重複を検出したら警告を出す（実装の問題を指摘）
+                    logger.warning(
+                        f"⚠️ 観測変数'{var}'は複数の測定モデルに出現しています。"
+                        f"SEMでは1つの観測変数は1つの潜在変数にのみ属する必要があります。"
+                    )
 
     def fit(self, data: pd.DataFrame) -> 'UnifiedSEMEstimator':
         """
