@@ -2008,7 +2008,9 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
 
                                     ref_person_names = []
                                     for ref_person in pattern_rec.reference_persons:
-                                        name_with_sim = f"{ref_person['name']} (類似度: {ref_person['similarity']})"
+                                        name = ref_person['name']
+                                        code = ref_person.get('member_code', ref_person.get('code', 'N/A'))
+                                        name_with_sim = f"{name}({code}) (類似度: {ref_person['similarity']})"
                                         ref_person_names.append(name_with_sim)
 
                                     st.markdown("、".join(ref_person_names))
@@ -2064,6 +2066,7 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                         # 辞書形式とオブジェクト形式の両方に対応
                                         if isinstance(ref_person, dict):
                                             name = ref_person.get('name', 'N/A')
+                                            member_code = ref_person.get('member_code', ref_person.get('code', 'N/A'))
                                             # similarityが文字列の場合は変換、数値の場合はそのままフォーマット
                                             similarity_val = ref_person.get('similarity', 0)
                                             if isinstance(similarity_val, str):
@@ -2078,11 +2081,12 @@ if st.button("🚀 推薦を実行する", type="primary", use_container_width=T
                                         else:
                                             # ReferencePerson オブジェクトの場合
                                             name = ref_person.member_name
+                                            member_code = ref_person.member_code if hasattr(ref_person, 'member_code') else 'N/A'
                                             similarity_str = f"{ref_person.similarity_score:.3f}"
                                             skill_count = len(ref_person.unique_competences) if hasattr(ref_person, 'unique_competences') else 'N/A'
 
                                         ref_df_data.append({
-                                            'メンバー名': name,
+                                            'メンバー名（メンバーコード）': f"{name}({member_code})",
                                             '類似度': similarity_str,
                                             'スキル数': skill_count
                                         })
