@@ -205,7 +205,7 @@ class AcquisitionOrderSEMModel:
                 f"  Stage {stage_id}: 利用可能={len(skill_names)}個, "
                 f"力量マスタ不在={len(failed_codes)}個, "
                 f"データ不在={len(unavailable_codes)}個, "
-                f"重複除外={len(duplicated_codes)}個"
+                f"重複除外={len(duplicated_names)}個"
             )
             if failed_codes:
                 logger.warning(
@@ -215,9 +215,9 @@ class AcquisitionOrderSEMModel:
                 logger.warning(
                     f"  ⚠️ Stage {stage_id}でメンバーデータに不在: {unavailable_codes[:5]}"
                 )
-            if duplicated_codes:
+            if duplicated_names:
                 logger.info(
-                    f"  ℹ️ Stage {stage_id}で重複スキル除外: {duplicated_codes[:5]}"
+                    f"  ℹ️ Stage {stage_id}で重複スキル除外: {duplicated_names[:5]}"
                 )
 
             if len(skill_names) >= 2:
