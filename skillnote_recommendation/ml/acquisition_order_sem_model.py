@@ -232,7 +232,7 @@ class AcquisitionOrderSEMModel:
             logger.info(f"  - データ形状: {skill_matrix_renamed.shape}")
 
             sem_model = UnifiedSEMEstimator(
-                measurement_model=measurement_models, structural_model=structural_models
+                measurement_specs=measurement_models, structural_specs=structural_models
             )
             logger.info(f"  UnifiedSEMEstimator初期化完了")
 
