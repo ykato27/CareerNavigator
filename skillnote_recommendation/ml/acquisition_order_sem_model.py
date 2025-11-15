@@ -160,7 +160,7 @@ class AcquisitionOrderSEMModel:
 
         # 測定モデルを定義（各ステージの潜在変数）
         measurement_models = []
-        used_skills = set()  # 既に使用したスキルコードを記録
+        used_skill_names = set()  # 既に使用した「力量名」を記録（重要：コードではなく名前）
 
         for stage_id in range(1, self.n_stages + 1):
             stage_name = self.acquisition_hierarchy.get_stage_name(stage_id)
@@ -175,20 +175,22 @@ class AcquisitionOrderSEMModel:
                 )
                 continue
 
-            # 力量名に変換（既に使用されたスキルは除外、かつデータに存在するものだけ）
+            # 力量名に変換（既に使用された「力量名」は除外、かつデータに存在するものだけ）
             skill_names = []
             failed_codes = []
-            duplicated_codes = []
+            duplicated_names = []  # 力量名重複
             unavailable_codes = []
 
             for code in stage_skills:
-                if code in used_skills:
-                    duplicated_codes.append(code)
-                    continue
-
                 skill_name = competence_name_map.get(code)
                 if skill_name is None:
                     failed_codes.append(code)
+                    continue
+
+                # **絶対に重要：力量名で重複チェック**
+                if skill_name in used_skill_names:
+                    duplicated_names.append(skill_name)
+                    logger.warning(f"  ⚠️ Stage {stage_id}: '{skill_name}'は既に使用済み（前のStageで使用）")
                     continue
 
                 # データに実際に存在するか確認
@@ -197,7 +199,7 @@ class AcquisitionOrderSEMModel:
                     continue
 
                 skill_names.append(skill_name)
-                used_skills.add(code)
+                used_skill_names.add(skill_name)  # 力量名を記録
 
             logger.info(
                 f"  Stage {stage_id}: 利用可能={len(skill_names)}個, "
