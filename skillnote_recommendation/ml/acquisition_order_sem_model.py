@@ -171,8 +171,8 @@ class AcquisitionOrderSEMModel:
             if len(skill_names) >= 2:
                 measurement_models.append(
                     MeasurementModelSpec(
-                        latent_variable=f"Stage_{stage_id}_{stage_name}",
-                        indicators=skill_names,
+                        latent_name=f"Stage_{stage_id}_{stage_name}",
+                        observed_vars=skill_names,
                         reference_indicator=skill_names[0],
                     )
                 )
@@ -196,11 +196,11 @@ class AcquisitionOrderSEMModel:
         structural_models = []
 
         for i in range(len(measurement_models) - 1):
-            from_var = measurement_models[i].latent_variable
-            to_var = measurement_models[i + 1].latent_variable
+            from_var = measurement_models[i].latent_name
+            to_var = measurement_models[i + 1].latent_name
 
             structural_models.append(
-                StructuralModelSpec(from_variable=from_var, to_variable=to_var)
+                StructuralModelSpec(from_latent=from_var, to_latent=to_var)
             )
 
         # メンバー×力量のデータフレームを作成
@@ -244,7 +244,7 @@ class AcquisitionOrderSEMModel:
             path_coefs = []
             for structural_spec in structural_models:
                 param_name = (
-                    f"β_{structural_spec.from_variable}→{structural_spec.to_variable}"
+                    f"β_{structural_spec.from_latent}→{structural_spec.to_latent}"
                 )
                 if param_name in sem_model.params:
                     path_coefs.append(sem_model.params[param_name].value)
