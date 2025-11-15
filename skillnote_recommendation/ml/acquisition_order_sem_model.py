@@ -238,7 +238,29 @@ class AcquisitionOrderSEMModel:
 
         # 全メンバーの潜在変数スコアを計算
         try:
-            latent_scores_df = self.sem_model.get_latent_scores()
+            # メンバー×力量のデータフレームを作成（学習時と同じデータで推定）
+            skill_matrix = self.member_competence.pivot_table(
+                index="メンバーコード",
+                columns="力量コード",
+                values="正規化レベル",
+                fill_value=0.0,
+            )
+
+            # 力量名でリネーム
+            competence_name_map = dict(
+                zip(
+                    self.competence_master["力量コード"],
+                    self.competence_master["力量名"],
+                )
+            )
+
+            renamed_columns = {
+                code: competence_name_map.get(code, code) for code in skill_matrix.columns
+            }
+            skill_matrix_renamed = skill_matrix.rename(columns=renamed_columns)
+
+            # predict_latent_scores()を使用して潜在変数スコアを推定
+            latent_scores_df = self.sem_model.predict_latent_scores(skill_matrix_renamed)
 
             # メンバーごとにステージ別スコアを格納
             for member_code in latent_scores_df.index:
