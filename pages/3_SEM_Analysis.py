@@ -803,27 +803,51 @@ if model_type == "UnifiedSEM（実データ）":
                     max_edges = len(temp_edges)
 
                     with col_edge:
-                        # スライダーで表示する接続数を調整（session_state で状態保持）
-                        slider_key = "unified_sem_skill_network_edge_limit"
+                        # スライダーで表示する接続数の範囲を調整（session_state で状態保持）
+                        slider_start_key = "unified_sem_skill_network_edge_start"
+                        slider_end_key = "unified_sem_skill_network_edge_end"
 
                         # max_edges が変更された場合、スライダーの値を調整
-                        if slider_key not in st.session_state:
-                            st.session_state[slider_key] = min(20, max_edges) if max_edges > 0 else 1
+                        if slider_start_key not in st.session_state:
+                            st.session_state[slider_start_key] = 1 if max_edges > 0 else 1
+
+                        if slider_end_key not in st.session_state:
+                            st.session_state[slider_end_key] = min(20, max_edges) if max_edges > 0 else 1
 
                         # max_edges を超えないようにvalidate
-                        if st.session_state[slider_key] > max_edges and max_edges > 0:
-                            st.session_state[slider_key] = max_edges
+                        if st.session_state[slider_end_key] > max_edges and max_edges > 0:
+                            st.session_state[slider_end_key] = max_edges
 
-                        edge_limit = st.slider(
-                            "表示接続数（強度順）",
+                        st.markdown("##### 接続範囲指定（関係性が強い順）")
+
+                        # 開始位置スライダー
+                        edge_start = st.slider(
+                            "開始位置（番目から）",
                             min_value=1,
                             max_value=max(1, max_edges),
-                            value=min(st.session_state[slider_key], max(1, max_edges)),
+                            value=st.session_state[slider_start_key],
                             step=1,
-                            help=f"接続の強度が強い順に表示します。最大：{max_edges}接続",
-                            key=slider_key,
+                            help=f"最小: 1、最大: {max_edges}",
+                            key=slider_start_key,
                         )
-                        st.caption(f"表示中: {edge_limit}/{max_edges}接続")
+
+                        # 終了位置スライダー
+                        edge_end = st.slider(
+                            "終了位置（番目まで）",
+                            min_value=1,
+                            max_value=max(1, max_edges),
+                            value=min(st.session_state[slider_end_key], max_edges),
+                            step=1,
+                            help=f"開始位置以上の値で指定してください。最大: {max_edges}",
+                            key=slider_end_key,
+                        )
+
+                        # 開始位置が終了位置より大きい場合は調整
+                        if edge_start > edge_end:
+                            edge_start, edge_end = edge_end, edge_start
+                            st.warning(f"開始位置が終了位置より大きいため、自動調整しました: {edge_start}～{edge_end}")
+
+                        st.caption(f"表示中: {edge_start}～{edge_end}番目 （全 {max_edges} 接続）")
 
                     st.markdown("---")
 
@@ -833,7 +857,8 @@ if model_type == "UnifiedSEM（実データ）":
                         observed_vars=sem.observed_vars,
                         skill_name_mapping=skill_code_to_name,
                         loading_threshold=loading_threshold,
-                        edge_limit=edge_limit,
+                        edge_limit_start=edge_start,
+                        edge_limit_end=edge_end,
                         acquired_skills=acquired_skills,
                     )
                     st.plotly_chart(fig_skill_network, use_container_width=True)

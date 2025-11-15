@@ -201,6 +201,8 @@ class SEMNetworkVisualizer:
         skill_name_mapping: Optional[Dict[str, str]] = None,
         loading_threshold: float = 0.3,
         edge_limit: Optional[int] = None,
+        edge_limit_start: Optional[int] = None,
+        edge_limit_end: Optional[int] = None,
         acquired_skills: Optional[set] = None,
     ) -> go.Figure:
         """
@@ -216,7 +218,9 @@ class SEMNetworkVisualizer:
             observed_vars: 観測変数名（スキルコード）
             skill_name_mapping: スキルコード → スキル名（日本語）のマッピング
             loading_threshold: 接続判定閾値
-            edge_limit: 表示するエッジの最大本数（Noneの場合は全て表示）
+            edge_limit: 表示するエッジの最大本数（従来の引数、後方互換性のため保持）
+            edge_limit_start: 表示範囲の開始位置（関係性が強い順の何番目から）
+            edge_limit_end: 表示範囲の終了位置（関係性が強い順の何番目まで）
             acquired_skills: 取得済みスキルのセット（メンバー別表示用）
 
         Returns:
@@ -275,8 +279,15 @@ class SEMNetworkVisualizer:
         # エッジを強度でソート（強い順）
         all_edges.sort(key=lambda x: x['weight'], reverse=True)
 
-        # edge_limit が指定されていれば、上位のみを使用
-        if edge_limit is not None:
+        # 範囲指定フィルタリング（新規パラメータ優先）
+        if edge_limit_start is not None and edge_limit_end is not None:
+            # edge_limit_start と edge_limit_end は1から始まるため、インデックスに変換
+            # 例: 10～30番目 → インデックス 9～29
+            start_idx = max(0, edge_limit_start - 1)
+            end_idx = min(len(all_edges), edge_limit_end)
+            all_edges = all_edges[start_idx:end_idx]
+        elif edge_limit is not None:
+            # 従来の edge_limit パラメータを使用（後方互換性）
             all_edges = all_edges[:edge_limit]
 
         # グラフにエッジを追加
