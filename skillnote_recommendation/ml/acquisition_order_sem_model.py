@@ -92,21 +92,26 @@ class AcquisitionOrderSEMModel:
 
         try:
             # SEMモデルを構築・学習
+            logger.info("_fit_sem()を実行中...")
             sem_model, path_coefs = self._fit_sem(min_competences_per_stage)
+            logger.info(f"_fit_sem()完了: sem_model={sem_model is not None}, path_coefs={path_coefs}")
 
             if sem_model is not None:
                 self.sem_model = sem_model
                 self.path_coefficients = path_coefs
                 logger.info("✅ SEMモデル学習完了")
                 logger.info(f"   パス係数: {[f'{c:.3f}' for c in path_coefs]}")
+
+                # 潜在変数スコアを推定
+                logger.info("_estimate_latent_scores()を実行中...")
+                self._estimate_latent_scores()
+                logger.info("_estimate_latent_scores()完了")
+
+                self.is_fitted = True
+                logger.info("is_fitted = True を設定")
             else:
                 logger.warning("⚠️ SEMモデル学習失敗（データ不足）")
                 return
-
-            # 潜在変数スコアを推定
-            self._estimate_latent_scores()
-
-            self.is_fitted = True
 
             logger.info("\n" + "=" * 60)
             logger.info("✅ スキル取得順序SEMモデルの学習完了")
@@ -204,11 +209,19 @@ class AcquisitionOrderSEMModel:
 
         # SEMモデルを学習
         try:
+            logger.info(f"  UnifiedSEMEstimatorを初期化中...")
+            logger.info(f"  - 測定モデル数: {len(measurement_models)}")
+            logger.info(f"  - 構造モデル数: {len(structural_models)}")
+            logger.info(f"  - データ形状: {skill_matrix_renamed.shape}")
+
             sem_model = UnifiedSEMEstimator(
                 measurement_model=measurement_models, structural_model=structural_models
             )
+            logger.info(f"  UnifiedSEMEstimator初期化完了")
 
+            logger.info(f"  SEMモデルをfit中...")
             sem_model.fit(skill_matrix_renamed)
+            logger.info(f"  SEMモデルfitは成功しました: is_fitted={sem_model.is_fitted}")
 
             # パス係数を抽出
             path_coefs = []
@@ -221,10 +234,11 @@ class AcquisitionOrderSEMModel:
                 else:
                     path_coefs.append(0.0)
 
+            logger.info(f"  パス係数抽出完了: {path_coefs}")
             return sem_model, path_coefs
 
         except Exception as e:
-            logger.error(f"  ❌ SEMモデル学習エラー: {e}")
+            logger.error(f"  ❌ SEMモデル学習エラー: {e}", exc_info=True)
             return None, []
 
     def _estimate_latent_scores(self):
