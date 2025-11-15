@@ -139,6 +139,8 @@ class AcquisitionOrderSEMModel:
             stage_name = self.acquisition_hierarchy.get_stage_name(stage_id)
             stage_skills = self.acquisition_hierarchy.get_skills_by_stage(stage_id)
 
+            logger.info(f"  Stage {stage_id}の処理開始: {len(stage_skills)}個のスキル")
+
             if len(stage_skills) < min_competences_per_stage:
                 logger.warning(
                     f"  ⚠️ Stage {stage_id}のスキル数不足: "
@@ -148,12 +150,23 @@ class AcquisitionOrderSEMModel:
 
             # 力量名に変換
             skill_names = []
+            failed_codes = []
             for code in stage_skills:
                 comp_info = self.competence_master[
                     self.competence_master["力量コード"] == code
                 ]
                 if not comp_info.empty:
                     skill_names.append(comp_info.iloc[0]["力量名"])
+                else:
+                    failed_codes.append(code)
+
+            logger.info(
+                f"  Stage {stage_id}: 変換成功={len(skill_names)}個, 変換失敗={len(failed_codes)}個"
+            )
+            if failed_codes:
+                logger.warning(
+                    f"  ⚠️ Stage {stage_id}で力量名変換失敗: {failed_codes[:5]}"
+                )
 
             if len(skill_names) >= 2:
                 measurement_models.append(
@@ -165,7 +178,11 @@ class AcquisitionOrderSEMModel:
                 )
 
                 logger.info(
-                    f"  Stage {stage_id} ({stage_name}): {len(skill_names)}個のスキル"
+                    f"  Stage {stage_id} ({stage_name}): {len(skill_names)}個のスキル → 測定モデル追加"
+                )
+            else:
+                logger.warning(
+                    f"  ⚠️ Stage {stage_id}: スキル数不足（{len(skill_names)}個 < 2個）"
                 )
 
         if len(measurement_models) < 2:
