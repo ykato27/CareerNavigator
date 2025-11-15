@@ -135,6 +135,8 @@ class AcquisitionOrderHierarchy:
         """
         スキルを平均取得順序でステージ分割
 
+        各スキルは正確に1つのステージにのみ割り当てられる（重複なし）
+
         Returns:
             {stage_id: [スキルコードリスト]}
         """
@@ -151,6 +153,7 @@ class AcquisitionOrderHierarchy:
         skills_per_stage = total_skills // self.n_stages
 
         stage_classifications = {}
+        assigned_skills = set()  # 割り当てられたスキルを記録（重複防止）
 
         for stage_id in range(self.n_stages):
             start_idx = stage_id * skills_per_stage
@@ -162,14 +165,28 @@ class AcquisitionOrderHierarchy:
                 end_idx = (stage_id + 1) * skills_per_stage
 
             stage_skills = sorted_skills[start_idx:end_idx]
-            stage_classifications[stage_id + 1] = [skill[0] for skill in stage_skills]
+
+            # 重複チェック：既に割り当てられたスキルを除外
+            unique_skills = []
+            for skill_code, skill_info in stage_skills:
+                if skill_code not in assigned_skills:
+                    unique_skills.append(skill_code)
+                    assigned_skills.add(skill_code)
+
+            stage_classifications[stage_id + 1] = unique_skills
 
             # ステージ情報をログ出力
-            avg_orders = [skill[1]["avg_order"] for skill in stage_skills]
-            logger.info(
-                f"  Stage {stage_id + 1}: {len(stage_skills)}個のスキル "
-                f"(平均取得順序: {min(avg_orders):.1f}～{max(avg_orders):.1f})"
-            )
+            if unique_skills:
+                avg_orders = [
+                    self.skill_acquisition_stats[code]["avg_order"]
+                    for code in unique_skills
+                ]
+                logger.info(
+                    f"  Stage {stage_id + 1}: {len(unique_skills)}個のスキル "
+                    f"(平均取得順序: {min(avg_orders):.1f}～{max(avg_orders):.1f})"
+                )
+            else:
+                logger.warning(f"  Stage {stage_id + 1}: スキルなし")
 
         return stage_classifications
 
