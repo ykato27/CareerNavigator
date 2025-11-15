@@ -350,11 +350,20 @@ class UnifiedSEMEstimator:
         # Theta (測定誤差分散)
         for obs_var in self.observed_vars:
             var_data = data[obs_var].var()
+            # Series が返される可能性があるため、スカラー値に変換
+            if isinstance(var_data, pd.Series):
+                var_data = var_data.iloc[0] if len(var_data) > 0 else np.nan
+
             # NaN または 0 分散の場合はデフォルト値を使用
-            if pd.isna(var_data) or var_data == 0:
+            try:
+                if pd.isna(var_data) or float(var_data) == 0:
+                    error_variance = 1.0
+                else:
+                    error_variance = float(var_data * 0.5)
+            except (TypeError, ValueError):
+                # 型変換に失敗した場合
                 error_variance = 1.0
-            else:
-                error_variance = float(var_data * 0.5)
+
             theta.append(error_variance)
 
         return np.array(theta, dtype=float)
