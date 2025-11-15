@@ -154,14 +154,15 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
                 st.error("❌ member_competenceに '取得日' 列が存在しません。")
                 st.stop()
 
-            # 取得順序階層を構築
-            st.info("ステップ1: 取得順序階層を構築中...")
-            acquisition_hierarchy = AcquisitionOrderHierarchy(
-                member_competence=member_competence,
-                competence_master=competence_master,
-                n_stages=int(n_stages),
-                min_acquisition_count=int(min_acquisition_count)
-            )
+            # ステップ1: 取得順序階層を構築
+            with st.spinner("📊 ステップ1: 取得順序階層を構築中..."):
+                acquisition_hierarchy = AcquisitionOrderHierarchy(
+                    member_competence=member_competence,
+                    competence_master=competence_master,
+                    n_stages=int(n_stages),
+                    min_acquisition_count=int(min_acquisition_count)
+                )
+            st.success("✅ ステップ1: 取得順序階層の構築完了")
 
             # 統計情報を表示
             st.markdown("### 📊 スキル取得順序の統計")
@@ -178,18 +179,51 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
                     stage_name = acquisition_hierarchy.get_stage_name(stage_id)
                     st.write(f"- Stage {stage_id} ({stage_name}): {len(stage_skills)}個")
 
-            # SEMモデルを学習
-            st.info("ステップ2: SEMモデルを学習中...")
-            sem_model = AcquisitionOrderSEMModel(
-                member_competence=member_competence,
-                competence_master=competence_master,
-                acquisition_hierarchy=acquisition_hierarchy,
-                n_stages=int(n_stages)
-            )
+            # ステップ2: SEMモデルを初期化
+            with st.spinner("🧮 ステップ2: SEMモデルを初期化中..."):
+                sem_model = AcquisitionOrderSEMModel(
+                    member_competence=member_competence,
+                    competence_master=competence_master,
+                    acquisition_hierarchy=acquisition_hierarchy,
+                    n_stages=int(n_stages)
+                )
+            st.success("✅ ステップ2: SEMモデル初期化完了")
 
-            st.info(f"ステップ3: フィッティング開始（min_competences_per_stage={int(min_competences_per_stage)}）...")
-            sem_model.fit(min_competences_per_stage=int(min_competences_per_stage))
-            st.info(f"ステップ4: フィッティング完了")
+            # ステップ3: フィッティング（プログレス表示付き）
+            st.markdown("### ⚙️ ステップ3: 最尤推定フィッティング")
+            st.write(f"最小スキル数: {int(min_competences_per_stage)}")
+
+            # プログレスバーを作成
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            # フィッティング実行時のステータス表示
+            try:
+                status_text.write("📊 ステップ3.1: データ準備中...")
+                progress_bar.progress(10)
+
+                status_text.write("🔍 ステップ3.2: 測定モデル構築中...")
+                progress_bar.progress(30)
+
+                status_text.write("⚙️ ステップ3.3: 最尤推定を実行中（⏳ 1-2分かかります）...")
+                progress_bar.progress(50)
+
+                # フィッティング実行（最も時間がかかる処理）
+                with st.spinner("🔄 最適化アルゴリズム実行中..."):
+                    sem_model.fit(min_competences_per_stage=int(min_competences_per_stage))
+
+                status_text.write("📈 ステップ3.4: 適合度指標を計算中...")
+                progress_bar.progress(90)
+
+                status_text.write("✅ ステップ3: フィッティング完了")
+                progress_bar.progress(100)
+
+            except Exception as e:
+                status_text.error(f"❌ フィッティング中にエラーが発生しました: {e}")
+                progress_bar.progress(100)
+                raise
+
+            st.success(f"✅ ステップ3: フィッティング完了")
 
             # Session stateに保存
             st.session_state.sem_model = sem_model
