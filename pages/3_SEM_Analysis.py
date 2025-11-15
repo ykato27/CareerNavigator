@@ -319,7 +319,7 @@ if model_type == "UnifiedSEM（実データ）":
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            if st.button("🎯 バランス型（推奨）", use_container_width=True):
+            if st.button("🎯 バランス型（推奨）", width="stretch"):
                 # スキル数が50-150個になるようなセットを自動選択
                 target_skills = 100
                 threshold = 50
@@ -337,7 +337,7 @@ if model_type == "UnifiedSEM（実データ）":
                     st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
 
         with col2:
-            if st.button("📚 大規模型", use_container_width=True):
+            if st.button("📚 大規模型", width="stretch"):
                 # スキル数が150-250個になるようなセットを自動選択
                 selected = []
                 total = 0
@@ -353,7 +353,7 @@ if model_type == "UnifiedSEM（実データ）":
                     st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
 
         with col3:
-            if st.button("⚡ コンパクト型", use_container_width=True):
+            if st.button("⚡ コンパクト型", width="stretch"):
                 # スキル数が20-50個になるようなセットを自動選択
                 selected = []
                 total = 0
@@ -377,13 +377,13 @@ if model_type == "UnifiedSEM（実データ）":
             # 全件選択ボタン（チェックボックスではなくボタンで実装）
             col_a, col_b = st.columns([1, 3])
             with col_a:
-                if st.button("🌍 全件選択", key="unified_select_all_btn", use_container_width=True):
+                if st.button("🌍 全件選択", key="unified_select_all_btn", width="stretch"):
                     # 全カテゴリーを選択してsession_stateに保存
                     st.session_state['unified_selected_categories'] = available_categories[:]
                     st.success(f"✅ 全{len(available_categories)}カテゴリーを選択しました")
 
             with col_b:
-                if st.button("🗑️ 選択解除", key="unified_clear_all_btn", use_container_width=True):
+                if st.button("🗑️ 選択解除", key="unified_clear_all_btn", width="stretch"):
                     # 選択を解除
                     if 'unified_selected_categories' in st.session_state:
                         del st.session_state['unified_selected_categories']
@@ -639,7 +639,7 @@ if model_type == "UnifiedSEM（実データ）":
                 ]
             })
 
-            st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+            st.dataframe(metrics_df, width="stretch", hide_index=True)
 
             # 総合判定
             if fit.is_excellent_fit():
@@ -656,7 +656,7 @@ if model_type == "UnifiedSEM（実データ）":
             if len(relationships) > 0:
                 st.dataframe(
                     relationships[['from_skill', 'to_skill', 'coefficient', 'p_value', 'is_significant']],
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True
                 )
 
@@ -679,7 +679,7 @@ if model_type == "UnifiedSEM（実データ）":
                     height=300,
                 )
 
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             else:
                 st.info("構造パスが定義されていません")
 
@@ -708,7 +708,7 @@ if model_type == "UnifiedSEM（実データ）":
         )
         fig.update_layout(height=400)
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # ============================================
         # ネットワークグラフ可視化
@@ -861,7 +861,7 @@ if model_type == "UnifiedSEM（実データ）":
                         edge_limit_end=edge_end,
                         acquired_skills=acquired_skills,
                     )
-                    st.plotly_chart(fig_skill_network, use_container_width=True)
+                    st.plotly_chart(fig_skill_network, width="stretch")
 
                 with tab2:
                     st.markdown(
@@ -928,7 +928,7 @@ if model_type == "UnifiedSEM（実データ）":
                         path_significance=path_significance,
                         skill_name_mapping=skill_code_to_name,
                     )
-                    st.plotly_chart(fig_combined, use_container_width=True)
+                    st.plotly_chart(fig_combined, width="stretch")
 
                 with tab2:
                     st.markdown(
@@ -978,7 +978,7 @@ if model_type == "UnifiedSEM（実データ）":
                         loading_threshold=0.2,
                         skill_name_mapping=skill_code_to_name,
                     )
-                    st.plotly_chart(fig_measurement, use_container_width=True)
+                    st.plotly_chart(fig_measurement, width="stretch")
 
                 with tab3:
                     st.markdown(
@@ -1031,7 +1031,7 @@ if model_type == "UnifiedSEM（実データ）":
                         latent_vars=sem.latent_vars,
                         path_significance=path_significance,
                     )
-                    st.plotly_chart(fig_structural, use_container_width=True)
+                    st.plotly_chart(fig_structural, width="stretch")
 
                 st.success("✅ ネットワークグラフを生成しました")
 
@@ -1044,18 +1044,18 @@ if model_type == "UnifiedSEM（実データ）":
         # 詳細データ
         with st.expander("📋 詳細データ"):
             st.markdown("#### ファクターローディング")
-            st.dataframe(loading_df, use_container_width=True)
+            st.dataframe(loading_df, width="stretch")
 
             st.markdown("#### 構造係数行列 B")
             st.dataframe(
                 pd.DataFrame(sem.B, index=sem.latent_vars, columns=sem.latent_vars),
-                use_container_width=True
+                width="stretch"
             )
 
             st.markdown("#### 潜在変数の分散 Ψ")
             st.dataframe(
                 pd.DataFrame(sem.Psi, index=sem.latent_vars, columns=sem.latent_vars),
-                use_container_width=True
+                width="stretch"
             )
 
 # =========================================================
@@ -1084,7 +1084,7 @@ elif model_type == "HierarchicalSEM（実データ）":
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            if st.button("🎯 標準型（推奨）", use_container_width=True, key="hier_standard"):
+            if st.button("🎯 標準型（推奨）", width="stretch", key="hier_standard"):
                 # スキル数が200-400個になるようなセットを自動選択
                 selected = []
                 total = 0
@@ -1100,7 +1100,7 @@ elif model_type == "HierarchicalSEM（実データ）":
                     st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
 
         with col2:
-            if st.button("📚 大規模型", use_container_width=True, key="hier_large"):
+            if st.button("📚 大規模型", width="stretch", key="hier_large"):
                 # スキル数が400-800個になるようなセットを自動選択
                 selected = []
                 total = 0
@@ -1116,7 +1116,7 @@ elif model_type == "HierarchicalSEM（実データ）":
                     st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
 
         with col3:
-            if st.button("🌍 全カテゴリー", use_container_width=True, key="hier_all"):
+            if st.button("🌍 全カテゴリー", width="stretch", key="hier_all"):
                 # 全カテゴリーを選択
                 selected = available_categories[:]
                 total = sum(category_counts.get(cat, 0) for cat in selected)
@@ -1132,13 +1132,13 @@ elif model_type == "HierarchicalSEM（実データ）":
             # 全件選択ボタン（チェックボックスではなくボタンで実装）
             col_a, col_b = st.columns([1, 3])
             with col_a:
-                if st.button("🌍 全件選択", key="hier_select_all_btn", use_container_width=True):
+                if st.button("🌍 全件選択", key="hier_select_all_btn", width="stretch"):
                     # 全カテゴリーを選択してsession_stateに保存
                     st.session_state['hierarchical_selected_categories'] = available_categories[:]
                     st.success(f"✅ 全{len(available_categories)}カテゴリーを選択しました")
 
             with col_b:
-                if st.button("🗑️ 選択解除", key="hier_clear_all_btn", use_container_width=True):
+                if st.button("🗑️ 選択解除", key="hier_clear_all_btn", width="stretch"):
                     # 選択を解除
                     if 'hierarchical_selected_categories' in st.session_state:
                         del st.session_state['hierarchical_selected_categories']
@@ -1434,7 +1434,7 @@ elif model_type == "HierarchicalSEM（実データ）":
                     })
 
                 domain_fit_df = pd.DataFrame(domain_fit_data)
-                st.dataframe(domain_fit_df, use_container_width=True, hide_index=True)
+                st.dataframe(domain_fit_df, width="stretch", hide_index=True)
 
                 # ドメインスコア
                 if result.domain_scores is not None:
@@ -1451,7 +1451,7 @@ elif model_type == "HierarchicalSEM（実データ）":
                     score_stats = result.domain_scores.describe().T
                     score_stats = score_stats[['mean', 'std', 'min', 'max']]
                     score_stats.columns = ['平均', '標準偏差', '最小値', '最大値']
-                    st.dataframe(score_stats, use_container_width=True)
+                    st.dataframe(score_stats, width="stretch")
 
                     # ドメインスコアの分布（改善版）
                     st.markdown("#### カテゴリー別スコア分布")
@@ -1489,7 +1489,7 @@ elif model_type == "HierarchicalSEM（実データ）":
                     # X軸のラベルを斜めに表示
                     fig.update_xaxes(tickangle=-45)
 
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
 
                 # 詳細データ
                 with st.expander("📋 詳細データ"):
@@ -1499,7 +1499,7 @@ elif model_type == "HierarchicalSEM（実データ）":
                         st.markdown("##### 構造係数（カテゴリー間の関連パス）")
                         relationships = result.integration_model.get_skill_relationships()
                         if len(relationships) > 0:
-                            st.dataframe(relationships, use_container_width=True, hide_index=True)
+                            st.dataframe(relationships, width="stretch", hide_index=True)
                         else:
                             st.info("💡 構造パスが定義されていません（カテゴリー間に関連性を仮定していないモデルです）")
 
@@ -1540,7 +1540,7 @@ elif model_type == "HierarchicalSEM（実データ）":
 
                         st.dataframe(
                             loading_df.style.applymap(color_loading),
-                            use_container_width=True
+                            width="stretch"
                         )
 
                         st.markdown("""
@@ -1569,7 +1569,7 @@ elif model_type == "HierarchicalSEM（実データ）":
                             ))
                             loading_df.index = [skill_code_to_name.get(code, code) for code in loading_df.index]
 
-                            st.dataframe(loading_df, use_container_width=True)
+                            st.dataframe(loading_df, width="stretch")
 
             except Exception as e:
                 st.error(f"❌ 推定エラー: {e}")
