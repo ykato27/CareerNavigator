@@ -219,21 +219,43 @@ class AcquisitionOrderSEMModel:
                 )
 
             if len(skill_names) >= 2:
+                # 重要：skill_names内の重複チェック
+                unique_skill_names = list(dict.fromkeys(skill_names))  # 順序保持しながら重複除外
+
+                logger.info(f"  Stage {stage_id}: 処理前={len(skill_names)}個, 重複除外後={len(unique_skill_names)}個")
+                logger.info(f"  Stage {stage_id}の力量名: {unique_skill_names[:10]}")
+
                 measurement_models.append(
                     MeasurementModelSpec(
                         latent_name=f"Stage_{stage_id}_{stage_name}",
-                        observed_vars=skill_names,
-                        reference_indicator=skill_names[0],
+                        observed_vars=unique_skill_names,
+                        reference_indicator=unique_skill_names[0],
                     )
                 )
 
                 logger.info(
-                    f"  Stage {stage_id} ({stage_name}): {len(skill_names)}個のスキル → 測定モデル追加"
+                    f"  Stage {stage_id} ({stage_name}): {len(unique_skill_names)}個のスキル → 測定モデル追加"
                 )
             else:
                 logger.warning(
                     f"  ⚠️ Stage {stage_id}: スキル数不足（{len(skill_names)}個 < 2個）"
                 )
+
+        # 全measurement_modelsの観測変数の重複チェック（最後の砦）
+        all_observed_vars = []
+        for mm in measurement_models:
+            all_observed_vars.extend(mm.observed_vars)
+
+        unique_vars = set(all_observed_vars)
+        logger.info(f"  全Stage合計: 観測変数数={len(all_observed_vars)}, ユニーク数={len(unique_vars)}")
+
+        if len(all_observed_vars) > len(unique_vars):
+            duplicated_vars = [v for v in all_observed_vars if all_observed_vars.count(v) > 1]
+            logger.error(f"  ❌ 観測変数重複検出: {set(duplicated_vars)}")
+            logger.error(f"  測定モデルの詳細:")
+            for i, mm in enumerate(measurement_models):
+                logger.error(f"    Stage {i + 1}: {mm.observed_vars}")
+            return None, []
 
         if len(measurement_models) < 2:
             logger.warning(
