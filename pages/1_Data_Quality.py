@@ -327,12 +327,12 @@ def main():
             with chart_col1:
                 severity_chart = create_severity_distribution_chart(report)
                 if severity_chart:
-                    st.plotly_chart(severity_chart, width="stretch")
+                    st.plotly_chart(severity_chart, use_container_width=True)
 
             with chart_col2:
                 category_chart = create_category_distribution_chart(report.issues)
                 if category_chart:
-                    st.plotly_chart(category_chart, width="stretch")
+                    st.plotly_chart(category_chart, use_container_width=True)
 
             # 問題一覧
             st.markdown("---")

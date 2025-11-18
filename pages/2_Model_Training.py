@@ -353,7 +353,7 @@ else:
                     yaxis_title='再構成誤差',
                     height=400
                 )
-                chart_placeholder.plotly_chart(fig, width="stretch")
+                chart_placeholder.plotly_chart(fig, use_container_width=True)
 
                 # メトリクスを表示
                 col1, col2, col3 = metrics_placeholder.columns(3)
@@ -587,7 +587,7 @@ if st.session_state.get("model_trained", False):
             # 上位試行のサマリーテーブル
             with st.expander("🏆 上位10試行の詳細", expanded=False):
                 best_trials_df = get_best_trials_summary(study, top_n=10)
-                st.dataframe(best_trials_df, width="stretch")
+                st.dataframe(best_trials_df, use_container_width=True)
                 st.download_button(
                     label="📥 上位試行データをダウンロード（CSV）",
                     data=best_trials_df.to_csv(index=False).encode('utf-8-sig'),
@@ -616,7 +616,7 @@ if st.session_state.get("model_trained", False):
 
             with tab1:
                 if 'optimization_history' in visualizations:
-                    st.plotly_chart(visualizations['optimization_history'], width="stretch")
+                    st.plotly_chart(visualizations['optimization_history'], use_container_width=True)
                     st.markdown("""
                     **最適化履歴**: 各試行の目的関数値の推移を表示します。
                     青線は各試行の値、赤線は最良値の更新を示します。
@@ -626,7 +626,7 @@ if st.session_state.get("model_trained", False):
 
             with tab2:
                 if 'param_importances' in visualizations:
-                    st.plotly_chart(visualizations['param_importances'], width="stretch")
+                    st.plotly_chart(visualizations['param_importances'], use_container_width=True)
                     st.markdown("""
                     **パラメータ重要度**: 各ハイパーパラメータが目的関数に与える影響度を表示します。
                     重要度が高いパラメータほど、最適化において重要な役割を果たしています。
@@ -636,7 +636,7 @@ if st.session_state.get("model_trained", False):
 
             with tab3:
                 if 'parallel_coordinate' in visualizations:
-                    st.plotly_chart(visualizations['parallel_coordinate'], width="stretch")
+                    st.plotly_chart(visualizations['parallel_coordinate'], use_container_width=True)
                     st.markdown("""
                     **パラレル座標プロット**: すべてのパラメータと目的関数の関係を同時に可視化します。
                     各線は1つの試行を表し、色は目的関数値を示します（青=良い、赤=悪い）。
@@ -646,7 +646,7 @@ if st.session_state.get("model_trained", False):
 
             with tab4:
                 if 'contour' in visualizations:
-                    st.plotly_chart(visualizations['contour'], width="stretch")
+                    st.plotly_chart(visualizations['contour'], use_container_width=True)
                     st.markdown("""
                     **等高線図**: 2つのパラメータ間の相互作用と目的関数値の関係を表示します。
                     色が濃い領域ほど目的関数値が低い（良い）ことを示します。
@@ -656,7 +656,7 @@ if st.session_state.get("model_trained", False):
 
             with tab5:
                 if 'slice' in visualizations:
-                    st.plotly_chart(visualizations['slice'], width="stretch")
+                    st.plotly_chart(visualizations['slice'], use_container_width=True)
                     st.markdown("""
                     **スライスプロット**: 各パラメータが目的関数に与える個別の影響を表示します。
                     他のパラメータを固定した状態で、1つのパラメータのみを変化させた場合の効果を確認できます。
@@ -666,7 +666,7 @@ if st.session_state.get("model_trained", False):
 
             with tab6:
                 if 'edf' in visualizations:
-                    st.plotly_chart(visualizations['edf'], width="stretch")
+                    st.plotly_chart(visualizations['edf'], use_container_width=True)
                     st.markdown("""
                     **経験分布関数（EDF）**: 目的関数値の累積分布を表示します。
                     探索がどの範囲の値に集中しているかを確認できます。
@@ -771,11 +771,11 @@ if st.session_state.get("model_trained", False):
                 )
                 # y軸の順序を逆にして、重みが大きいものが上に来るようにする
                 fig.update_layout(height=400, yaxis={'categoryorder': 'total ascending'})
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
 
             with col2:
                 # テーブル（重みが大きい順に表示）
-                st.dataframe(df_factor, width="stretch", height=400)
+                st.dataframe(df_factor, use_container_width=True, height=400)
 
     # メンバーの潜在因子分布
     with st.expander("👥 メンバーの潜在因子分布"):
@@ -838,7 +838,7 @@ if st.session_state.get("model_trained", False):
                 color_continuous_scale="Blues"
             )
             fig_name.update_layout(height=500)
-            st.plotly_chart(fig_name, width="stretch")
+            st.plotly_chart(fig_name, use_container_width=True)
 
         with tab2:
             # メンバーコードでのヒートマップ
@@ -880,7 +880,7 @@ if st.session_state.get("model_trained", False):
                 height=500,
                 yaxis=dict(type='category')  # カテゴリデータとして扱う
             )
-            st.plotly_chart(fig_code, width="stretch")
+            st.plotly_chart(fig_code, use_container_width=True)
 
     # 力量の潜在因子分布
     with st.expander("💡 力量の潜在因子分布"):
@@ -933,7 +933,7 @@ if st.session_state.get("model_trained", False):
             color_continuous_scale="Greens"
         )
         fig.update_layout(height=500)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
 
     # モデル評価指標
     with st.expander("📉 モデル評価指標"):
@@ -1103,12 +1103,12 @@ if st.session_state.get("model_trained", False):
             try:
                 fig_history = tuner.plot_optimization_history()
                 if fig_history:
-                    st.plotly_chart(fig_history, width="stretch")
+                    st.plotly_chart(fig_history, use_container_width=True)
 
                 st.markdown("### 🔍 パラメータの重要度")
                 fig_importance = tuner.plot_param_importances()
                 if fig_importance:
-                    st.plotly_chart(fig_importance, width="stretch")
+                    st.plotly_chart(fig_importance, use_container_width=True)
 
                 st.info("""
                 **パラメータの重要度**は、各パラメータが再構成誤差に与える影響の大きさを示しています。
@@ -1143,7 +1143,7 @@ if st.session_state.get("model_trained", False):
 
                 if stats_data:
                     stats_df = pd.DataFrame(stats_data)
-                    st.dataframe(stats_df, width="stretch")
+                    st.dataframe(stats_df, use_container_width=True)
 
                     st.info("""
                     **探索範囲の統計**は、Optunaが実際に試したパラメータの範囲を示しています。
@@ -1191,7 +1191,7 @@ if st.session_state.get("model_trained", False):
                         )
 
                     fig.update_layout(height=600, showlegend=False, title_text="パラメータ分布（全トライアル）")
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
 
                     st.info("""
                     **ヒストグラム**で、Optunaが各パラメータをどれだけ広く探索したか確認できます。
@@ -1217,7 +1217,7 @@ if st.session_state.get("model_trained", False):
                         display_df = trials_df[available_cols].sort_values('value')
                         st.dataframe(
                             display_df,
-                            width="stretch",
+                            use_container_width=True,
                             height=400
                         )
 
@@ -1227,7 +1227,7 @@ if st.session_state.get("model_trained", False):
                         st.success(f"✨ 最良トライアル: #{int(best_trial_num)} (再構成誤差: {best_value:.6f})")
 
                     else:
-                        st.dataframe(trials_df, width="stretch", height=400)
+                        st.dataframe(trials_df, use_container_width=True, height=400)
 
                     st.info("""
                     **user_attrs_random_state**: 各トライアルで使用されたrandom_state（異なる値で探索）
