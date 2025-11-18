@@ -127,7 +127,6 @@ class NMFHyperparameterTuner:
             "alpha_W": (0.001, 0.5),  # メンバー因子の正則化強度
             "alpha_H": (0.001, 0.5),  # 力量因子の正則化強度
             "l1_ratio": (0.0, 1.0),  # L1正則化の割合
-            "n_init": (1, 5),  # 初期化試行回数（複数の初期値から最良を選択）
         }
 
         # max_iterは自動計算（データサイズと行列密度に基づく）
@@ -510,13 +509,6 @@ class NMFHyperparameterTuner:
         if "l1_ratio" in self.search_space:
             min_val, max_val = self.search_space["l1_ratio"]
             params["l1_ratio"] = trial.suggest_float("l1_ratio", min_val, max_val)
-
-        # n_init: 初期化試行回数（整数型、1～5）
-        if "n_init" in self.search_space:
-            min_val, max_val = self.search_space["n_init"]
-            params["n_init"] = trial.suggest_int("n_init", min_val, max_val)
-        else:
-            params["n_init"] = 1  # デフォルト値
 
         # max_iter: 自動計算値を使用（探索対象外）
         params["max_iter"] = self.max_iter

@@ -318,11 +318,13 @@ else:
                 'best_value': study.best_value
             })
 
-            # プログレスバーを更新
-            progress_pct = (trial.number + 1) / int(n_trials) if use_tuning else 1.0
+            # プログレスバーを更新（callback_counterを使用して正確な進捗を計算）
+            progress_pct = callback_counter[0] / int(n_trials) if use_tuning else 1.0
+            # 進捗値を0.0-1.0の範囲に制限（既存の試行がある場合に備えて）
+            progress_pct = min(progress_pct, 1.0)
             progress_placeholder.progress(
                 progress_pct,
-                text=f"Trial {trial.number + 1}/{int(n_trials) if use_tuning else 1} - 現在の誤差: {trial.value:.6f} - 最良: {study.best_value:.6f}"
+                text=f"Trial {callback_counter[0]}/{int(n_trials) if use_tuning else 1} - 現在の誤差: {trial.value:.6f} - 最良: {study.best_value:.6f}"
             )
 
             # グラフを更新（毎回更新）
@@ -1052,7 +1054,6 @@ if st.session_state.get("model_trained", False):
                 - **alpha_W**: メンバー因子の正則化強度（0.001-0.5、対数スケール）
                 - **alpha_H**: 力量因子の正則化強度（0.001-0.5、対数スケール）
                 - **l1_ratio**: L1正則化の割合（0.0-1.0）
-                - **n_init**: 初期化試行回数（1-5、複数初期値から最良を選択）
 
                 **自動設定パラメータ:**
                 - **max_iter**: データ特性から自動計算（{tuner.max_iter}）
@@ -1076,7 +1077,7 @@ if st.session_state.get("model_trained", False):
                 st.markdown("#### デフォルトパラメータ")
                 default_params = tuning_results['default_params']
                 for key, value in default_params.items():
-                    if key in ['n_components', 'max_iter', 'alpha_W', 'alpha_H', 'l1_ratio', 'n_init']:
+                    if key in ['n_components', 'max_iter', 'alpha_W', 'alpha_H', 'l1_ratio']:
                         st.text(f"{key}: {value}")
 
             with col2:
