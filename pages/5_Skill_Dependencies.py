@@ -217,7 +217,7 @@ if 'skill_dependencies' in st.session_state:
 
         if graph_data.get('edges'):
             fig = create_dependency_graph(graph_data)
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("依存関係が見つかりませんでした。分析設定を調整してみてください。")
 
@@ -263,7 +263,7 @@ if 'skill_dependencies' in st.session_state:
                 })
 
             df_paths = pd.DataFrame(path_data)
-            st.dataframe(df_paths, width="stretch", height=400)
+            st.dataframe(df_paths, use_container_width=True, height=400)
 
             st.markdown(f"**表示中:** {len(filtered_paths)} / {len(learning_paths)} スキル")
         else:
@@ -325,7 +325,7 @@ if 'skill_dependencies' in st.session_state:
                 st.markdown("---")
                 st.markdown("#### ⏱️ 学習タイムライン")
                 timeline_fig = create_learning_path_timeline(selected_path)
-                st.plotly_chart(timeline_fig, width="stretch")
+                st.plotly_chart(timeline_fig, use_container_width=True)
             else:
                 st.success("✨ このスキルは前提知識不要で学習可能です！")
 
@@ -355,7 +355,7 @@ if 'skill_dependencies' in st.session_state:
                 graph_data,
                 highlight_competence=selected_code
             )
-            st.plotly_chart(highlight_fig, width="stretch")
+            st.plotly_chart(highlight_fig, use_container_width=True)
 
 else:
     st.info("👆 上の「依存関係を分析」ボタンをクリックして分析を開始してください")
