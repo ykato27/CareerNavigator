@@ -162,11 +162,11 @@ with tab1:
         st.caption("選択したメンバーの保有スキル（青）と推奨スキル周辺の因果関係")
 
         # 表示設定
-        col_g1, col_g2 = st.columns(2)
+        col_g1, col_g2, col_g3 = st.columns(3)
         with col_g1:
             graph_threshold = st.slider(
                 "表示閾値",
-                0.01, 0.3, 0.05, 0.01,
+                0.01, 1.0, 0.05, 0.01,
                 key="ego_threshold",
                 help="この値以上の因果係数を持つエッジのみ表示"
             )
@@ -176,6 +176,13 @@ with tab1:
                 value=True,
                 key="ego_physics",
                 help="ノードの自動配置（重い場合はOFF推奨）"
+            )
+        with col_g3:
+            show_negative_ego = st.checkbox(
+                "負の因果も表示",
+                value=False,
+                key="ego_show_negative",
+                help="赤線（負の因果関係）も表示する"
             )
 
         # エゴネットワークの可視化
