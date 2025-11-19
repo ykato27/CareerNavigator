@@ -154,7 +154,29 @@ with tab1:
                     with col3:
                         st.metric("将来性", f"{details['utility_score']:.2f}")
                     
+                    
                     st.info(rec['explanation'])
+                    
+                    # 詳細な理由を表示
+                    with st.expander("📋 詳細な推薦理由"):
+                        details = rec['details']
+                        
+                        st.markdown("**🟢 準備度（Readiness）**: なぜこのスキルが推奨されるか")
+                        if details['readiness_reasons']:
+                            st.markdown("あなたの以下の保有スキルが、このスキルの習得を後押しします:")
+                            for skill, effect in details['readiness_reasons'][:5]:
+                                st.write(f"- **{skill}** → 因果効果: {effect:.3f}")
+                        else:
+                            st.write("保有スキルからの直接的な因果関係は検出されませんでした。")
+                        
+                        st.markdown("**🔵 将来性（Utility）**: このスキルを習得すると何ができるか")
+                        if details['utility_reasons']:
+                            st.markdown("このスキルを習得すると、以下のスキル習得がスムーズになります:")
+                            for skill, effect in details['utility_reasons'][:5]:
+                                st.write(f"- **{skill}** ← 因果効果: {effect:.3f}")
+                        else:
+                            st.write("将来のスキルへの直接的な因果関係は検出されませんでした。")
+                    
                     st.markdown("---")
         
         # グラフ表示用の推奨スキル選択
