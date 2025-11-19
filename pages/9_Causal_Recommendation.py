@@ -161,14 +161,14 @@ with tab1:
         st.markdown("### 🔗 関連因果グラフ")
         st.caption("選択した推奨スキルを中心とした因果関係")
         
-        # 推奨スキルから選択（上位5個まで）
+        # 推奨スキルから選択（上位10個まで）
         skill_options = [f"{i+1}. {rec['competence_name']} (スコア: {rec['score']:.2f})" 
-                        for i, rec in enumerate(recommendations[:5])]
+                        for i, rec in enumerate(recommendations[:10])]
         selected_skill_idx = st.selectbox(
             "グラフを表示する推奨スキルを選択",
-            range(min(5, len(recommendations))),
+            range(min(10, len(recommendations))),
             format_func=lambda x: skill_options[x],
-            help="上位5個の推奨スキルから選択できます。パフォーマンスのため、上位5個のみ表示します。"
+            help="上位10個の推奨スキルから選択できます。"
         )
 
         # 表示設定
