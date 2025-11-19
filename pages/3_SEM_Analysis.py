@@ -182,14 +182,250 @@ if missing_keys:
     st.info("データ読み込みページで再度データをアップロードしてください。")
     st.stop()
 
-member_competence = td["member_competence"]
+member_competence_all = td["member_competence"]
 competence_master = td["competence_master"]
 members_clean = td["members_clean"]
 
+# =========================================================
+# メンバーフィルタリング機能
+# =========================================================
+
+st.markdown("---")
+st.subheader("👥 メンバーフィルタリング")
+
+with st.expander("🔍 対象メンバーの選択", expanded=False):
+    st.markdown("""
+    分析対象とするメンバーを絞り込むことができます。
+
+    - **全メンバー**: すべてのメンバーを対象にします（デフォルト）
+    - **ユーザー選択**: 特定のメンバーを個別に選択します
+    - **組織選択**: 組織別にメンバーをフィルタリングします
+    - **役職選択**: 役職別にメンバーをフィルタリングします
+    """)
+
+    # フィルタリングモード選択
+    filter_mode = st.radio(
+        "フィルタリングモード",
+        options=["全メンバー", "ユーザー選択", "組織選択", "役職選択", "詳細フィルタ（複合条件）"],
+        index=0,
+        help="分析対象のメンバーを絞り込む方法を選択してください"
+    )
+
+    # フィルタリング対象のメンバーコードを保存するリスト
+    filtered_member_codes = None
+
+    if filter_mode == "全メンバー":
+        st.info("✅ 全メンバーを対象に分析します")
+        filtered_member_codes = members_clean['メンバーコード'].tolist()
+
+    elif filter_mode == "ユーザー選択":
+        st.markdown("#### 👤 対象ユーザーの選択")
+
+        # メンバー名とコードのマッピング
+        member_options = [
+            f"{row['メンバー名']} ({row['メンバーコード']})"
+            for _, row in members_clean.iterrows()
+        ]
+
+        selected_members = st.multiselect(
+            "メンバーを選択",
+            options=member_options,
+            help="分析対象とするメンバーを選択してください（複数選択可）"
+        )
+
+        if selected_members:
+            # 選択されたメンバーのコードを抽出
+            filtered_member_codes = [
+                member.split("(")[-1].rstrip(")")
+                for member in selected_members
+            ]
+            st.success(f"✅ {len(filtered_member_codes)}名のメンバーを選択しました")
+        else:
+            st.warning("⚠️ メンバーを選択してください")
+
+    elif filter_mode == "組織選択":
+        st.markdown("#### 🏢 組織別フィルタリング")
+
+        # 組織カラムを動的に検出
+        org_column = None
+        for col in members_clean.columns:
+            if "組織" in col or "部署" in col or "所属" in col:
+                org_column = col
+                break
+
+        if org_column:
+            # 組織の一覧を取得
+            org_values = members_clean[org_column].dropna().unique().tolist()
+
+            selected_orgs = st.multiselect(
+                f"{org_column}を選択",
+                options=org_values,
+                help="分析対象とする組織を選択してください（複数選択可）"
+            )
+
+            if selected_orgs:
+                filtered_members = members_clean[
+                    members_clean[org_column].isin(selected_orgs)
+                ]
+                filtered_member_codes = filtered_members['メンバーコード'].tolist()
+                st.success(f"✅ {len(filtered_member_codes)}名のメンバーを選択しました")
+            else:
+                st.warning("⚠️ 組織を選択してください")
+        else:
+            st.error("❌ 組織に関するカラムが見つかりません。「職種」での絞り込みをお試しください。")
+            st.info(f"利用可能なカラム: {list(members_clean.columns)}")
+
+    elif filter_mode == "役職選択":
+        st.markdown("#### 💼 役職別フィルタリング")
+
+        # 役職カラムを確認
+        if "役職" in members_clean.columns:
+            # 役職の一覧を取得
+            position_values = members_clean["役職"].dropna().unique().tolist()
+
+            selected_positions = st.multiselect(
+                "役職を選択",
+                options=position_values,
+                help="分析対象とする役職を選択してください（複数選択可）"
+            )
+
+            if selected_positions:
+                filtered_members = members_clean[
+                    members_clean["役職"].isin(selected_positions)
+                ]
+                filtered_member_codes = filtered_members['メンバーコード'].tolist()
+                st.success(f"✅ {len(filtered_member_codes)}名のメンバーを選択しました")
+            else:
+                st.warning("⚠️ 役職を選択してください")
+        else:
+            st.error("❌ 「役職」カラムが見つかりません")
+            st.info(f"利用可能なカラム: {list(members_clean.columns)}")
+
+    elif filter_mode == "詳細フィルタ（複合条件）":
+        st.markdown("#### 🔧 詳細フィルタ（複合条件）")
+        st.info("複数の条件を組み合わせてメンバーをフィルタリングできます")
+
+        # フィルタリング条件を保存するリスト
+        filter_conditions = []
+
+        # ユーザー選択
+        with st.container():
+            st.markdown("##### 👤 ユーザー選択")
+            use_member_filter = st.checkbox("ユーザーで絞り込む")
+
+            if use_member_filter:
+                member_options = [
+                    f"{row['メンバー名']} ({row['メンバーコード']})"
+                    for _, row in members_clean.iterrows()
+                ]
+
+                selected_members = st.multiselect(
+                    "メンバーを選択",
+                    options=member_options,
+                    help="分析対象とするメンバーを選択してください（複数選択可）",
+                    key="detail_members"
+                )
+
+                if selected_members:
+                    selected_member_codes = [
+                        member.split("(")[-1].rstrip(")")
+                        for member in selected_members
+                    ]
+                    filter_conditions.append(
+                        members_clean['メンバーコード'].isin(selected_member_codes)
+                    )
+
+        # 組織選択
+        with st.container():
+            st.markdown("##### 🏢 組織選択")
+
+            # 組織カラムを動的に検出
+            org_column = None
+            for col in members_clean.columns:
+                if "組織" in col or "部署" in col or "所属" in col:
+                    org_column = col
+                    break
+
+            if org_column:
+                use_org_filter = st.checkbox(f"{org_column}で絞り込む")
+
+                if use_org_filter:
+                    org_values = members_clean[org_column].dropna().unique().tolist()
+
+                    selected_orgs = st.multiselect(
+                        f"{org_column}を選択",
+                        options=org_values,
+                        help="分析対象とする組織を選択してください（複数選択可）",
+                        key="detail_orgs"
+                    )
+
+                    if selected_orgs:
+                        filter_conditions.append(
+                            members_clean[org_column].isin(selected_orgs)
+                        )
+            else:
+                st.caption("組織に関するカラムが見つかりません")
+
+        # 役職選択
+        with st.container():
+            st.markdown("##### 💼 役職選択")
+
+            if "役職" in members_clean.columns:
+                use_position_filter = st.checkbox("役職で絞り込む")
+
+                if use_position_filter:
+                    position_values = members_clean["役職"].dropna().unique().tolist()
+
+                    selected_positions = st.multiselect(
+                        "役職を選択",
+                        options=position_values,
+                        help="分析対象とする役職を選択してください（複数選択可）",
+                        key="detail_positions"
+                    )
+
+                    if selected_positions:
+                        filter_conditions.append(
+                            members_clean["役職"].isin(selected_positions)
+                        )
+            else:
+                st.caption("「役職」カラムが見つかりません")
+
+        # フィルタ条件を適用
+        if filter_conditions:
+            # すべての条件をANDで結合
+            combined_filter = filter_conditions[0]
+            for condition in filter_conditions[1:]:
+                combined_filter = combined_filter & condition
+
+            filtered_members = members_clean[combined_filter]
+            filtered_member_codes = filtered_members['メンバーコード'].tolist()
+            st.success(f"✅ {len(filtered_member_codes)}名のメンバーが条件に一致しました")
+        else:
+            st.warning("⚠️ 少なくとも1つの条件を設定してください")
+
+# フィルタリング後のデータを作成
+if filtered_member_codes is not None and len(filtered_member_codes) > 0:
+    member_competence = member_competence_all[
+        member_competence_all['メンバーコード'].isin(filtered_member_codes)
+    ]
+    members_clean_filtered = members_clean[
+        members_clean['メンバーコード'].isin(filtered_member_codes)
+    ]
+    st.session_state['sem_filtered_member_codes'] = filtered_member_codes
+else:
+    # フィルタが設定されていない場合は全データを使用
+    member_competence = member_competence_all
+    members_clean_filtered = members_clean
+    filtered_member_codes = members_clean['メンバーコード'].tolist()
+    st.session_state['sem_filtered_member_codes'] = filtered_member_codes
+
 # データサイズの表示
+st.markdown("---")
+st.subheader("📊 データ概要")
+
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric("メンバー数", len(members_clean))
+    st.metric("対象メンバー数", len(members_clean_filtered))
 with col2:
     n_skills = len(competence_master)
     st.metric("スキル数", n_skills)
@@ -197,7 +433,7 @@ with col3:
     n_records = len(member_competence)
     st.metric("習得記録数", n_records)
 with col4:
-    avg_skills = n_records / len(members_clean) if len(members_clean) > 0 else 0
+    avg_skills = n_records / len(members_clean_filtered) if len(members_clean_filtered) > 0 else 0
     st.metric("平均習得数", f"{avg_skills:.1f}")
 
 # =========================================================
@@ -746,8 +982,9 @@ if model_type == "UnifiedSEM（実データ）":
 
                     # メンバー選択
                     st.markdown("##### 👤 メンバー別表示（オプション）")
-                    member_names = td["members_clean"]['メンバー名'].tolist()
-                    member_codes = td["members_clean"]['メンバーコード'].tolist()
+                    # フィルタリング後のメンバーを使用
+                    member_names = members_clean_filtered['メンバー名'].tolist()
+                    member_codes = members_clean_filtered['メンバーコード'].tolist()
 
                     member_options = ["（全体表示）"] + [f"{name} ({code})" for name, code in zip(member_names, member_codes)]
 
