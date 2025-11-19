@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 @dataclass
@@ -32,8 +32,8 @@ class ModelConfig:
 @dataclass
 class AppConfig:
     """Main application configuration."""
-    paths: PathConfig = PathConfig()
-    model: ModelConfig = ModelConfig()
+    paths: PathConfig = field(default_factory=PathConfig)
+    model: ModelConfig = field(default_factory=ModelConfig)
     
     APP_TITLE: str = "CareerNavigator"
     VERSION: str = "1.0.0"
