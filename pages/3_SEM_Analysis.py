@@ -199,14 +199,14 @@ with st.expander("🔍 対象メンバーの選択", expanded=False):
 
     - **全メンバー**: すべてのメンバーを対象にします（デフォルト）
     - **ユーザー選択**: 特定のメンバーを個別に選択します
-    - **組織選択**: 組織別にメンバーをフィルタリングします
+    - **職能・等級選択**: 職能・等級、職種などで分類してフィルタリングします
     - **役職選択**: 役職別にメンバーをフィルタリングします
     """)
 
     # フィルタリングモード選択
     filter_mode = st.radio(
         "フィルタリングモード",
-        options=["全メンバー", "ユーザー選択", "組織選択", "役職選択", "詳細フィルタ（複合条件）"],
+        options=["全メンバー", "ユーザー選択", "職能・等級選択", "役職選択", "詳細フィルタ（複合条件）"],
         index=0,
         help="分析対象のメンバーを絞り込む方法を選択してください"
     )
@@ -243,24 +243,24 @@ with st.expander("🔍 対象メンバーの選択", expanded=False):
         else:
             st.warning("⚠️ メンバーを選択してください")
 
-    elif filter_mode == "組織選択":
-        st.markdown("#### 🏢 組織別フィルタリング")
+    elif filter_mode == "職能・等級選択":
+        st.markdown("#### 📊 職能・等級選択")
 
-        # 組織カラムを動的に検出
-        org_column = None
-        org_keywords = ["組織", "部署", "所属", "部門", "課", "グループ", "チーム", "職種", "職能"]
+        # カラムを動的に検出（職能・等級を優先）
+        classification_column = None
+        classification_keywords = ["職能", "等級", "職種", "組織", "部署", "所属", "部門", "課", "グループ", "チーム"]
 
         for col in members_clean.columns:
-            for keyword in org_keywords:
+            for keyword in classification_keywords:
                 if keyword in col:
-                    org_column = col
+                    classification_column = col
                     break
-            if org_column:
+            if classification_column:
                 break
 
-        # 組織カラムが自動検出できない場合、ユーザーに選択させる
-        if not org_column:
-            st.info("💡 組織カラムを自動検出できませんでした。使用するカラムを選択してください。")
+        # カラムが自動検出できない場合、ユーザーに選択させる
+        if not classification_column:
+            st.info("💡 カラムを自動検出できませんでした。使用するカラムを選択してください。")
 
             # メンバーコードとメンバー名以外のカラムを候補として表示
             exclude_cols = ["メンバーコード", "メンバー名", "ログインコード", "パスワード",
@@ -268,7 +268,7 @@ with st.expander("🔍 対象メンバーの選択", expanded=False):
             available_cols = [col for col in members_clean.columns if col not in exclude_cols]
 
             if available_cols:
-                org_column = st.selectbox(
+                classification_column = st.selectbox(
                     "フィルタリングに使用するカラムを選択",
                     options=available_cols,
                     help="職種、職能・等級、社員区分などを選択できます"
@@ -277,24 +277,24 @@ with st.expander("🔍 対象メンバーの選択", expanded=False):
                 st.error("❌ 利用可能なカラムがありません")
                 st.stop()
 
-        if org_column:
-            st.success(f"✅ 使用するカラム: **{org_column}**")
+        if classification_column:
+            st.success(f"✅ 使用するカラム: **{classification_column}**")
 
-            # 組織の一覧を取得
-            org_values = members_clean[org_column].dropna().unique().tolist()
+            # 値の一覧を取得
+            classification_values = members_clean[classification_column].dropna().unique().tolist()
 
-            if len(org_values) == 0:
-                st.warning(f"⚠️ {org_column}に有効な値がありません")
+            if len(classification_values) == 0:
+                st.warning(f"⚠️ {classification_column}に有効な値がありません")
             else:
-                selected_orgs = st.multiselect(
-                    f"{org_column}を選択",
-                    options=org_values,
+                selected_values = st.multiselect(
+                    f"{classification_column}を選択",
+                    options=classification_values,
                     help="分析対象とする値を選択してください（複数選択可）"
                 )
 
-                if selected_orgs:
+                if selected_values:
                     filtered_members = members_clean[
-                        members_clean[org_column].isin(selected_orgs)
+                        members_clean[classification_column].isin(selected_values)
                     ]
                     filtered_member_codes = filtered_members['メンバーコード'].tolist()
                     st.success(f"✅ {len(filtered_member_codes)}名のメンバーを選択しました")
@@ -361,57 +361,57 @@ with st.expander("🔍 対象メンバーの選択", expanded=False):
                         members_clean['メンバーコード'].isin(selected_member_codes)
                     )
 
-        # 組織選択
+        # 職能・等級選択
         with st.container():
-            st.markdown("##### 🏢 組織選択")
+            st.markdown("##### 📊 職能・等級選択")
 
-            # 組織カラムを動的に検出
-            org_column = None
-            org_keywords = ["組織", "部署", "所属", "部門", "課", "グループ", "チーム", "職種", "職能"]
+            # カラムを動的に検出（職能・等級を優先）
+            classification_column = None
+            classification_keywords = ["職能", "等級", "職種", "組織", "部署", "所属", "部門", "課", "グループ", "チーム"]
 
             for col in members_clean.columns:
-                for keyword in org_keywords:
+                for keyword in classification_keywords:
                     if keyword in col:
-                        org_column = col
+                        classification_column = col
                         break
-                if org_column:
+                if classification_column:
                     break
 
-            # 組織カラムが自動検出できない場合、ユーザーに選択させる
-            if not org_column:
+            # カラムが自動検出できない場合、ユーザーに選択させる
+            if not classification_column:
                 # メンバーコードとメンバー名以外のカラムを候補として表示
                 exclude_cols = ["メンバーコード", "メンバー名", "ログインコード", "パスワード",
                               "メールアドレス", "よみがな", "生年月日", "SSOマッチングコード"]
                 available_cols = [col for col in members_clean.columns if col not in exclude_cols]
 
                 if available_cols:
-                    org_column = st.selectbox(
+                    classification_column = st.selectbox(
                         "フィルタリングに使用するカラムを選択",
                         options=available_cols,
                         help="職種、職能・等級、社員区分などを選択できます",
-                        key="detail_org_column_select"
+                        key="detail_classification_column_select"
                     )
 
-            if org_column:
-                use_org_filter = st.checkbox(f"{org_column}で絞り込む")
+            if classification_column:
+                use_classification_filter = st.checkbox(f"{classification_column}で絞り込む")
 
-                if use_org_filter:
-                    org_values = members_clean[org_column].dropna().unique().tolist()
+                if use_classification_filter:
+                    classification_values = members_clean[classification_column].dropna().unique().tolist()
 
-                    if len(org_values) > 0:
-                        selected_orgs = st.multiselect(
-                            f"{org_column}を選択",
-                            options=org_values,
+                    if len(classification_values) > 0:
+                        selected_values = st.multiselect(
+                            f"{classification_column}を選択",
+                            options=classification_values,
                             help="分析対象とする値を選択してください（複数選択可）",
-                            key="detail_orgs"
+                            key="detail_classifications"
                         )
 
-                        if selected_orgs:
+                        if selected_values:
                             filter_conditions.append(
-                                members_clean[org_column].isin(selected_orgs)
+                                members_clean[classification_column].isin(selected_values)
                             )
             else:
-                st.caption("組織に関するカラムが見つかりません")
+                st.caption("職能・等級に関するカラムが見つかりません")
 
         # 役職選択
         with st.container():
