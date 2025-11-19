@@ -15,6 +15,8 @@ import numpy as np
 import networkx as nx
 from typing import Dict, List, Optional, Tuple, Union
 import logging
+from pyvis.network import Network
+import os
 import tempfile
 import os
 
@@ -122,6 +124,125 @@ class CausalGraphVisualizer:
         # サブクラス作成して可視化
         sub_visualizer = CausalGraphVisualizer(sub_matrix)
         return sub_visualizer.visualize(threshold=threshold, highlight_nodes=[center_node])
+
+    def visualize_interactive(
+        self,
+        output_path: str = "temp_graph.html",
+        threshold: float = 0.1,
+        top_n: int = 50,
+        height: str = "600px",
+        width: str = "100%",
+        notebook: bool = False
+    ) -> str:
+        """
+        PyVisを用いてインタラクティブなHTMLグラフを生成し、パスを返す。
+        
+        Args:
+            output_path: 出力HTMLファイルのパス
+            threshold: エッジを表示する最小の係数（絶対値）
+            top_n: 表示する最大ノード数（中心性に基づく）
+            height: グラフの高さ
+            width: グラフの幅
+            notebook: Notebook環境かどうか
+            
+        Returns:
+            str: 生成されたHTMLファイルのパス
+        """
+        # PyVisネットワークの初期化
+        net = Network(height=height, width=width, bgcolor="#ffffff", font_color="#333333", notebook=notebook)
+        # 物理演算の調整（安定化のため）
+        net.force_atlas_2based()
+        
+        # 1. ノードのフィルタリング（次数中心性で上位N個を選択）
+        # 隣接行列の絶対値を使用
+        abs_adj = self.adj_matrix.abs()
+        
+        # 次数（入次数 + 出次数）を計算
+        degrees = abs_adj.sum(axis=0) + abs_adj.sum(axis=1)
+        
+        # 上位N個のノードを取得
+        top_nodes = degrees.sort_values(ascending=False).head(top_n).index.tolist()
+        
+        # 2. ノードの追加
+        for node in top_nodes:
+            # ノードのサイズを次数に比例させる
+            size = 10 + degrees[node] * 2
+            net.add_node(node, label=node, title=node, size=size, color="#2E7D32") # Green theme
+            
+        # 3. エッジの追加
+        # 上位ノード間のエッジのみ追加
+        for from_node in top_nodes:
+            for to_node in top_nodes:
+                if from_node == to_node:
+                    continue
+                
+                weight = self.adj_matrix.loc[from_node, to_node]
+                
+                if abs(weight) >= threshold:
+                    # エッジの太さと色
+                    width_val = max(1, abs(weight) * 5)
+                    color = "#333333" if weight > 0 else "#DC3545" # Black for positive, Red for negative
+                    title = f"{from_node} -> {to_node}: {weight:.2f}"
+                    
+                    net.add_edge(
+                        from_node, 
+                        to_node, 
+                        value=abs(weight), 
+                        title=title, 
+                        color=color,
+                        width=width_val,
+                        arrowStrikethrough=False
+                    )
+        
+        # オプション設定（操作パネルを表示しない、物理演算を少し落ち着かせる）
+        net.set_options("""
+        var options = {
+          "physics": {
+            "forceAtlas2Based": {
+              "gravitationalConstant": -50,
+              "centralGravity": 0.01,
+              "springLength": 100,
+              "springConstant": 0.08
+            },
+            "maxVelocity": 50,
+            "solver": "forceAtlas2Based",
+            "timestep": 0.35,
+            "stabilization": {
+              "enabled": true,
+              "iterations": 150
+            }
+          },
+          "nodes": {
+            "font": {
+              "size": 14,
+              "face": "sans-serif"
+            }
+          },
+          "edges": {
+            "arrows": {
+              "to": {
+                "enabled": true,
+                "scaleFactor": 0.5
+              }
+            },
+            "smooth": {
+              "type": "continuous"
+            }
+          }
+        }
+        """)
+        
+        # 保存
+        # Streamlit Cloudなど書き込み権限の問題を回避するため、絶対パスを使用することを推奨
+        try:
+            net.save_graph(output_path)
+            return output_path
+        except Exception as e:
+            logger.error(f"グラフの保存に失敗しました: {e}")
+            # フォールバック: カレントディレクトリ
+            fallback_path = "temp_network.html"
+            net.save_graph(fallback_path)
+            return fallback_path
 
     def _filter_nodes_by_centrality(
         self,

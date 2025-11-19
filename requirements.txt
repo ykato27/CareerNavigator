@@ -15,5 +15,6 @@ lingam>=1.8.0
 graphviz>=0.20.0
 node2vec>=0.4.0
 python-pptx>=0.6.21
+pyvis>=0.3.2
 python-louvain>=0.16
 pyvis>=0.3.2
