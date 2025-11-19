@@ -13,6 +13,9 @@ try:
     PGMPY_AVAILABLE = True
 except ImportError:
     PGMPY_AVAILABLE = False
+    # ダミー型定義（型ヒント用）
+    BayesianNetwork = Any
+    VariableElimination = Any
     logger.warning("pgmpy not found. Bayesian Network features will be disabled.")
 
 class BayesianNetworkRecommender:
