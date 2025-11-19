@@ -8,12 +8,14 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import logging
 
 from skillnote_recommendation.ml.causal_structure_learner import CausalStructureLearner
+from skillnote_recommendation.config import config
+from skillnote_recommendation.utils.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 class CausalGraphRecommender:
     """
@@ -30,7 +32,7 @@ class CausalGraphRecommender:
         self,
         member_competence: pd.DataFrame,
         competence_master: pd.DataFrame,
-        learner_params: Optional[Dict] = None
+        learner_params: Optional[Dict[str, Any]] = None
     ):
         """
         Args:
@@ -42,15 +44,27 @@ class CausalGraphRecommender:
         self.competence_master = competence_master
         
         params = learner_params or {}
+        # デフォルトパラメータをconfigから取得してマージすることも可能
+        if 'random_state' not in params:
+            params['random_state'] = config.model.RANDOM_STATE
+            
         self.learner = CausalStructureLearner(**params)
         
         self.is_fitted = False
-        self.skill_matrix_ = None
-        self.total_effects_ = None
+        self.skill_matrix_: Optional[pd.DataFrame] = None
+        self.total_effects_: Optional[Dict[str, Dict[str, float]]] = None
+        self.code_to_name: Dict[str, str] = {}
+        self.name_to_code: Dict[str, str] = {}
 
-    def fit(self, min_members_per_skill: int = 5):
+    def fit(self, min_members_per_skill: int = 5) -> 'CausalGraphRecommender':
         """
         モデルを学習
+        
+        Args:
+            min_members_per_skill: 学習に含めるスキルの最小保持人数
+            
+        Returns:
+            self
         """
         logger.info("因果グラフ推薦モデルの学習開始")
         
@@ -71,12 +85,12 @@ class CausalGraphRecommender:
         self.name_to_code = {v: k for k, v in self.code_to_name.items()}
         
         # カラム名を力量名に変換（可読性のため）
-        # 注意: 重複がある場合はコードを付与するなど対策が必要だが、ここでは単純化
         renamed_cols = {}
         for code in skill_matrix.columns:
-            name = self.code_to_name.get(code, code)
+            name = self.code_to_name.get(code, str(code))
+            # 重複回避
             if name in renamed_cols.values():
-                name = f"{name}_{code}" # 重複回避
+                name = f"{name}_{code}" 
             renamed_cols[code] = name
             
         skill_matrix_renamed = skill_matrix.rename(columns=renamed_cols)
@@ -101,9 +115,16 @@ class CausalGraphRecommender:
         
         return self
 
-    def recommend(self, member_code: str, top_n: int = 10) -> List[Dict]:
+    def recommend(self, member_code: str, top_n: int = 10) -> List[Dict[str, Any]]:
         """
         メンバーへのスキル推薦
+        
+        Args:
+            member_code: メンバーID
+            top_n: 推薦件数
+            
+        Returns:
+            推薦結果のリスト
         """
         if not self.is_fitted:
             logger.warning("モデルが学習されていません")
@@ -182,9 +203,8 @@ class CausalGraphRecommender:
             return 0.0
         return self.total_effects_.get(cause, {}).get(effect, 0.0)
 
-    def _generate_explanation(self, item: Dict) -> str:
+    def _generate_explanation(self, item: Dict[str, Any]) -> str:
         """推薦理由のテキスト生成"""
-        skill_name = item['skill_name']
         readiness = item['readiness_reasons']
         utility = item['utility_reasons']
         

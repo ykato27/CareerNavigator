@@ -8,9 +8,18 @@ from skillnote_recommendation.ml.matrix_factorization import MatrixFactorization
 from skillnote_recommendation.ml.diversity import DiversityReranker
 from skillnote_recommendation.ml.ml_recommender import MLRecommender
 from skillnote_recommendation.ml.exceptions import ColdStartError, MLModelNotTrainedError
-from skillnote_recommendation.ml.enhanced_graph_recommender import (
-    EnhancedSkillTransitionGraphRecommender,
-)
+from skillnote_recommendation.ml.causal_structure_learner import CausalStructureLearner
+from skillnote_recommendation.ml.causal_graph_recommender import CausalGraphRecommender
+from skillnote_recommendation.ml.unified_sem_estimator import UnifiedSEMEstimator
+
+# Optional dependencies
+try:
+    from skillnote_recommendation.ml.enhanced_graph_recommender import (
+        EnhancedSkillTransitionGraphRecommender,
+    )
+    _HAS_NODE2VEC = True
+except ImportError:
+    _HAS_NODE2VEC = False
 
 __all__ = [
     "MatrixFactorizationModel",
@@ -18,5 +27,10 @@ __all__ = [
     "MLRecommender",
     "ColdStartError",
     "MLModelNotTrainedError",
-    "EnhancedSkillTransitionGraphRecommender",
+    "CausalStructureLearner",
+    "CausalGraphRecommender",
+    "UnifiedSEMEstimator",
 ]
+
+if _HAS_NODE2VEC:
+    __all__.append("EnhancedSkillTransitionGraphRecommender")

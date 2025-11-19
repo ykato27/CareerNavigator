@@ -29,7 +29,10 @@ from scipy.optimize import minimize
 from scipy.linalg import inv
 from numpy.linalg import slogdet
 
-logger = logging.getLogger(__name__)
+from skillnote_recommendation.config import config
+from skillnote_recommendation.utils.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 @dataclass

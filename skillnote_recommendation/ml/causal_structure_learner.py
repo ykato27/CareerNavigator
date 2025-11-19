@@ -12,9 +12,12 @@ import networkx as nx
 import lingam
 from typing import Dict, List, Optional, Tuple, Union
 import logging
-from sklearn.preprocessing import StandardScaler
+import community.community_louvain as community_louvain
 
-logger = logging.getLogger(__name__)
+from skillnote_recommendation.config import config
+from skillnote_recommendation.utils.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 class CausalStructureLearner:
     """
@@ -30,7 +33,7 @@ class CausalStructureLearner:
         self, 
         correlation_threshold: float = 0.2,
         min_cluster_size: int = 3,
-        random_state: int = 42
+        random_state: int = config.model.RANDOM_STATE
     ):
         """
         Args:
@@ -49,19 +52,22 @@ class CausalStructureLearner:
         
         self.is_fitted = False
 
-    def fit(self, skill_matrix: pd.DataFrame):
+    def fit(self, skill_matrix: pd.DataFrame) -> 'CausalStructureLearner':
         """
         因果構造を学習
         
         Args:
             skill_matrix: メンバー×スキルのデータフレーム (数値データ)
+            
+        Returns:
+            self
         """
         logger.info("=" * 60)
         logger.info("因果構造学習 (LiNGAM) 開始")
         logger.info(f"データサイズ: {skill_matrix.shape}")
         logger.info("=" * 60)
         
-        # 欠損値処理（念のため）
+        # 欠損値処理
         if skill_matrix.isnull().any().any():
             logger.warning("欠損値が含まれています。0で埋めます。")
             skill_matrix = skill_matrix.fillna(0)
@@ -91,10 +97,10 @@ class CausalStructureLearner:
         total_edges = 0
         for i, cluster_features in enumerate(self.clusters_):
             if len(cluster_features) < self.min_cluster_size:
-                logger.info(f"  Cluster {i+1}: スキル数 {len(cluster_features)} (スキップ: サイズ不足)")
+                logger.debug(f"  Cluster {i+1}: スキル数 {len(cluster_features)} (スキップ: サイズ不足)")
                 continue
                 
-            logger.info(f"  Cluster {i+1}: スキル数 {len(cluster_features)} -> LiNGAM実行中...")
+            logger.debug(f"  Cluster {i+1}: スキル数 {len(cluster_features)} -> LiNGAM実行中...")
             
             try:
                 # クラスタ内のデータ抽出
@@ -104,12 +110,10 @@ class CausalStructureLearner:
                 model = lingam.DirectLiNGAM(random_state=self.random_state)
                 model.fit(cluster_data)
                 
-                # 隣接行列の取得 (行:原因 -> 列:結果 の形式に変換が必要)
+                # 隣接行列の取得
                 # lingamのadjacency_matrix_は [to, from] の形式 (B_{ij} is coeff from j to i)
-                # つまり 行i, 列j は j -> i の係数
                 adj_matrix = model.adjacency_matrix_
                 
-                # 結果を全体の隣接行列に統合
                 # DataFrameにして扱いやすくする
                 cluster_adj_df = pd.DataFrame(
                     adj_matrix,
@@ -117,13 +121,8 @@ class CausalStructureLearner:
                     columns=cluster_features
                 )
                 
-                # 転置して [from, to] 形式にするのが一般的だが、
-                # ここでは lingam の定義 (row=to, col=from) を一旦そのまま受け取り、
-                # 格納時に [from, to] に変換するか、統一する。
-                # ネットワーク分析では通常 adj[i][j] は i -> j を表すことが多いが、
-                # SEM/LiNGAMの慣習では x = Bx + e なので B[i][j] は j -> i。
-                # ここでは「行=原因(From), 列=結果(To)」の形式（networkx形式）に変換して保存する。
-                
+                # 全体行列に統合
+                # ここでは networkx形式 (行=From, 列=To) に変換して保存する
                 # B[i, j] は j -> i なので、B.T [j, i] が j -> i
                 adj_matrix_nx = cluster_adj_df.T
                 
@@ -132,7 +131,6 @@ class CausalStructureLearner:
                 
                 n_edges = np.count_nonzero(adj_matrix)
                 total_edges += n_edges
-                logger.info(f"    -> 完了: {n_edges}個の因果関係を発見")
                 
             except Exception as e:
                 logger.error(f"    -> 失敗 Cluster {i+1}: {e}")
@@ -165,12 +163,19 @@ class CausalStructureLearner:
                 if weight > self.correlation_threshold:
                     G.add_edge(u, v, weight=weight)
         
-        # コミュニティ検出 (Greedy Modularity)
-        # Louvain法が使えればベストだが、標準ライブラリ依存を減らすためnetworkx標準のものを使用
+        # コミュニティ検出 (Louvain法)
         try:
-            communities = nx.community.greedy_modularity_communities(G, weight='weight')
-            # frozensetをlistに変換
-            return [list(c) for c in communities]
+            partition = community_louvain.best_partition(G, random_state=self.random_state)
+            
+            # クラスタごとにリスト化
+            clusters = {}
+            for node, cluster_id in partition.items():
+                if cluster_id not in clusters:
+                    clusters[cluster_id] = []
+                clusters[cluster_id].append(node)
+                
+            return list(clusters.values())
+            
         except Exception as e:
             logger.warning(f"コミュニティ検出に失敗: {e}. 全体を1つのクラスタとして扱います。")
             return [features]
