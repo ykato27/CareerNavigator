@@ -1022,7 +1022,7 @@ if model_type == "UnifiedSEM（実データ）":
                 with tab1:
                     st.markdown(
                         "### スキル間ネットワーク\n"
-                        "同じ力量カテゴリーに統話するスキル同士の関連性"
+                        "同じ力量カテゴリーに属するスキル同士の関連性"
                     )
 
                     # スキルコード → スキル名（日本語）のマッピングを作成
@@ -1031,8 +1031,82 @@ if model_type == "UnifiedSEM（実データ）":
                         competence_master['力量名']
                     ))
 
+                    # スキルコード → カテゴリー名のマッピングを作成
+                    skill_code_to_category = dict(zip(
+                        competence_master['力量コード'],
+                        competence_master['力量カテゴリー名']
+                    ))
+
                     # 設定エリア
                     st.markdown("#### ⚙️ 表示設定")
+
+                    # ネットワーク表示モード選択
+                    st.markdown("##### 🎯 表示モード")
+                    network_display_mode = st.radio(
+                        "ネットワークの範囲を選択",
+                        options=["全スキル表示", "カテゴリー別表示", "個別スキル選択"],
+                        index=0,
+                        help="表示するスキルの範囲を選択してください",
+                        key="unified_network_display_mode",
+                        horizontal=True
+                    )
+
+                    # フィルタリング対象のスキルコードリスト
+                    filtered_skill_codes = sem.observed_vars.copy()
+
+                    if network_display_mode == "カテゴリー別表示":
+                        st.markdown("##### 📂 カテゴリー選択")
+                        # 分析に使用されているカテゴリーのみを抽出
+                        categories_in_analysis = set()
+                        for skill_code in sem.observed_vars:
+                            category = skill_code_to_category.get(skill_code)
+                            if category:
+                                categories_in_analysis.add(category)
+
+                        categories_list = sorted(list(categories_in_analysis))
+
+                        if len(categories_list) > 0:
+                            selected_category = st.selectbox(
+                                "表示するカテゴリーを選択",
+                                options=categories_list,
+                                help="選択したカテゴリーに属するスキルのみを表示します"
+                            )
+
+                            # 選択されたカテゴリーに属するスキルのみをフィルタ
+                            filtered_skill_codes = [
+                                code for code in sem.observed_vars
+                                if skill_code_to_category.get(code) == selected_category
+                            ]
+
+                            st.info(f"✅ {selected_category}: {len(filtered_skill_codes)}個のスキル")
+                        else:
+                            st.warning("⚠️ カテゴリー情報が見つかりません")
+
+                    elif network_display_mode == "個別スキル選択":
+                        st.markdown("##### 🔍 スキル選択")
+
+                        # スキル名のリストを作成（コード付き）
+                        skill_options = [
+                            f"{skill_code_to_name.get(code, code)} ({code})"
+                            for code in sem.observed_vars
+                        ]
+
+                        selected_skills = st.multiselect(
+                            "表示するスキルを選択",
+                            options=skill_options,
+                            help="選択したスキルとその関連スキルのみを表示します（最大20個推奨）"
+                        )
+
+                        if selected_skills:
+                            # 選択されたスキルのコードを抽出
+                            filtered_skill_codes = [
+                                skill.split("(")[-1].rstrip(")")
+                                for skill in selected_skills
+                            ]
+                            st.info(f"✅ {len(filtered_skill_codes)}個のスキルを選択")
+                        else:
+                            st.warning("⚠️ スキルを選択してください")
+                            filtered_skill_codes = []
 
                     # メンバー選択
                     st.markdown("##### 👤 メンバー別表示（オプション）")
@@ -1140,17 +1214,30 @@ if model_type == "UnifiedSEM（実データ）":
 
                     st.markdown("---")
 
-                    fig_skill_network = visualizer.visualize_skill_network(
-                        lambda_matrix=sem.Lambda,
-                        latent_vars=sem.latent_vars,
-                        observed_vars=sem.observed_vars,
-                        skill_name_mapping=skill_code_to_name,
-                        loading_threshold=loading_threshold,
-                        edge_limit_start=edge_start,
-                        edge_limit_end=edge_end,
-                        acquired_skills=acquired_skills,
-                    )
-                    st.plotly_chart(fig_skill_network, use_container_width=True)
+                    # フィルタリングされたスキルに対応するLambda行列の行インデックスを取得
+                    if len(filtered_skill_codes) > 0:
+                        filtered_indices = [
+                            i for i, code in enumerate(sem.observed_vars)
+                            if code in filtered_skill_codes
+                        ]
+
+                        # フィルタリングされた行のみを抽出
+                        import numpy as np
+                        filtered_lambda = sem.Lambda[filtered_indices, :]
+
+                        fig_skill_network = visualizer.visualize_skill_network(
+                            lambda_matrix=filtered_lambda,
+                            latent_vars=sem.latent_vars,
+                            observed_vars=filtered_skill_codes,
+                            skill_name_mapping=skill_code_to_name,
+                            loading_threshold=loading_threshold,
+                            edge_limit_start=edge_start,
+                            edge_limit_end=edge_end,
+                            acquired_skills=acquired_skills,
+                        )
+                        st.plotly_chart(fig_skill_network, use_container_width=True)
+                    else:
+                        st.warning("⚠️ 表示するスキルがありません。スキルを選択してください。")
 
                 with tab2:
                     st.markdown(
@@ -1829,11 +1916,53 @@ elif model_type == "HierarchicalSEM（実データ）":
                                 selected_domain = st.selectbox(
                                     "表示するカテゴリーを選択",
                                     options=domain_names,
-                                    help="各カテゴリー内のスキル間ネットワークを表示します"
+                                    help="各カテゴリー内のスキル間ネットワークを表示します",
+                                    key="hier_sem_domain_select"
                                 )
 
                                 # 選択されたドメインのモデルを取得
                                 domain_model = result.domain_models[selected_domain]
+
+                                # ネットワーク表示モード選択
+                                st.markdown("##### 🎯 表示モード")
+                                network_display_mode_hier = st.radio(
+                                    "ネットワークの範囲を選択",
+                                    options=["全スキル表示", "個別スキル選択"],
+                                    index=0,
+                                    help="このカテゴリー内で表示するスキルの範囲を選択してください",
+                                    key=f"hier_network_display_mode_{selected_domain}",
+                                    horizontal=True
+                                )
+
+                                # フィルタリング対象のスキルコードリスト
+                                filtered_skill_codes_hier = domain_model.observed_vars.copy()
+
+                                if network_display_mode_hier == "個別スキル選択":
+                                    st.markdown("##### 🔍 スキル選択")
+
+                                    # スキル名のリストを作成（コード付き）
+                                    skill_options_hier = [
+                                        f"{skill_code_to_name.get(code, code)} ({code})"
+                                        for code in domain_model.observed_vars
+                                    ]
+
+                                    selected_skills_hier = st.multiselect(
+                                        "表示するスキルを選択",
+                                        options=skill_options_hier,
+                                        help="選択したスキルとその関連スキルのみを表示します（最大20個推奨）",
+                                        key=f"hier_skill_select_{selected_domain}"
+                                    )
+
+                                    if selected_skills_hier:
+                                        # 選択されたスキルのコードを抽出
+                                        filtered_skill_codes_hier = [
+                                            skill.split("(")[-1].rstrip(")")
+                                            for skill in selected_skills_hier
+                                        ]
+                                        st.info(f"✅ {len(filtered_skill_codes_hier)}個のスキルを選択")
+                                    else:
+                                        st.warning("⚠️ スキルを選択してください")
+                                        filtered_skill_codes_hier = []
 
                                 # メンバー選択
                                 st.markdown("##### 👤 メンバー別表示（オプション）")
@@ -1936,20 +2065,33 @@ elif model_type == "HierarchicalSEM（実データ）":
 
                                 st.markdown("---")
 
-                                if max_edges_hier > 0:
-                                    fig_skill_network_hier = visualizer.visualize_skill_network(
-                                        lambda_matrix=domain_model.Lambda,
-                                        latent_vars=domain_model.latent_vars,
-                                        observed_vars=domain_model.observed_vars,
-                                        skill_name_mapping=skill_code_to_name,
-                                        loading_threshold=loading_threshold_hier,
-                                        edge_limit_start=edge_start_hier,
-                                        edge_limit_end=edge_end_hier,
-                                        acquired_skills=acquired_skills_hier,
-                                    )
-                                    st.plotly_chart(fig_skill_network_hier, use_container_width=True)
+                                # フィルタリングされたスキルに対応するLambda行列の行インデックスを取得
+                                if len(filtered_skill_codes_hier) > 0:
+                                    filtered_indices_hier = [
+                                        i for i, code in enumerate(domain_model.observed_vars)
+                                        if code in filtered_skill_codes_hier
+                                    ]
+
+                                    # フィルタリングされた行のみを抽出
+                                    import numpy as np
+                                    filtered_lambda_hier = domain_model.Lambda[filtered_indices_hier, :]
+
+                                    if max_edges_hier > 0:
+                                        fig_skill_network_hier = visualizer.visualize_skill_network(
+                                            lambda_matrix=filtered_lambda_hier,
+                                            latent_vars=domain_model.latent_vars,
+                                            observed_vars=filtered_skill_codes_hier,
+                                            skill_name_mapping=skill_code_to_name,
+                                            loading_threshold=loading_threshold_hier,
+                                            edge_limit_start=edge_start_hier,
+                                            edge_limit_end=edge_end_hier,
+                                            acquired_skills=acquired_skills_hier,
+                                        )
+                                        st.plotly_chart(fig_skill_network_hier, use_container_width=True)
+                                    else:
+                                        st.info(f"💡 {selected_domain}には表示可能なスキル間接続がありません（ローディング閾値を下げてみてください）")
                                 else:
-                                    st.info(f"💡 {selected_domain}には表示可能なスキル間接続がありません（ローディング閾値を下げてみてください）")
+                                    st.warning("⚠️ 表示するスキルがありません。スキルを選択してください。")
                             else:
                                 st.info("💡 ドメインモデルが見つかりません")
 
