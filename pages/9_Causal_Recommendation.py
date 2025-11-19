@@ -97,6 +97,9 @@ if not st.session_state.get("causal_model_trained", False):
 
 recommender = st.session_state.causal_recommender
 
+# 学習データのサマリー情報を表示
+st.info(f"📊 学習済みモデル: メンバー数 {len(recommender.skill_matrix_.index)}人、スキル数 {len(recommender.skill_matrix_.columns)}個")
+
 # =========================================================
 # 推薦 & 可視化セクション
 # =========================================================
@@ -108,7 +111,15 @@ with tab1:
     st.subheader("メンバーへのスキル推薦")
 
     members = td["members_clean"]
-    member_options = members["メンバーコード"].tolist()
+
+    # 推薦可能なメンバーのみを選択肢として表示
+    # (skill_matrix_に存在するメンバーコードのみ)
+    available_members = recommender.skill_matrix_.index.tolist()
+    member_options = [m for m in members["メンバーコード"].tolist() if m in available_members]
+
+    if not member_options:
+        st.warning("推薦可能なメンバーが見つかりません。学習データを確認してください。")
+        st.stop()
 
     # メンバー選択
     selected_member_code = st.selectbox(
@@ -139,7 +150,11 @@ with tab1:
         recommendations = recommender.recommend(selected_member_code, top_n=10)
 
         if not recommendations:
-            st.info("推奨できるスキルが見つかりませんでした（保有スキルが十分でないか、因果関係が見つかりませんでした）。")
+            # メンバーの保有スキル数を表示
+            member_skills = recommender.skill_matrix_.loc[selected_member_code]
+            owned_count = (member_skills > 0).sum()
+            st.warning(f"💡 推奨できるスキルが見つかりませんでした。")
+            st.info(f"現在の保有スキル数: {owned_count}個\n\n以下の可能性があります：\n- 既にほとんどのスキルを習得済み\n- 保有スキルと他のスキルの間に明確な因果関係が見つからなかった")
         else:
             for i, rec in enumerate(recommendations, 1):
                 with st.container():
