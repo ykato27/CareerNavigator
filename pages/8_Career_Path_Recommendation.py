@@ -34,9 +34,9 @@ apply_enterprise_styles()
 
 # ページヘッダー
 render_page_header(
-    title="【工事中】🎯 キャリアパス因果構造推薦",
-    icon="",
-    description=""
+    title="【工事中】キャリアパス因果構造推薦",
+    icon="🎯",
+    description="役職ごとの標準的なスキル習得パスに基づくキャリア支援"
 )
 
 # =========================================================
