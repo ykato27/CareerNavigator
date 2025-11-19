@@ -581,151 +581,225 @@ model_type = st.radio(
 # =========================================================
 
 if model_type == "UnifiedSEM（実データ）":
-    st.info("📊 実データを使用したUnifiedSEM推定を実行します")
+    st.markdown("---")
+    st.subheader("🎯 スキル選択")
 
-    # カテゴリー選択
-    with st.expander("🔧 ドメイン設定", expanded=True):
-        st.markdown("### 力量カテゴリーの選択")
+    st.info("""
+    **📊 UnifiedSEM分析について**
 
-        # 利用可能なカテゴリーを取得
-        available_categories = competence_master['力量カテゴリー名'].unique().tolist()
-        available_categories = [cat for cat in available_categories if pd.notna(cat)]
+    UnifiedSEMは、スキル間の関連性を統計的にモデル化し、スキルネットワーク全体の構造を明らかにします。
+    """)
 
-        # カテゴリーごとのスキル数を計算
-        category_counts = competence_master.groupby('力量カテゴリー名').size().to_dict()
+    skill_selection_mode = st.radio(
+        "**分析に使用するスキルの範囲を選択してください**",
+        options=["🌐 全スキル使用（推奨）", "📂 カテゴリーで絞り込む"],
+        index=0,
+        help="""
+        ・全スキル使用：すべてのスキルを対象に、全体のネットワーク構造を分析します（推奨）
+        ・カテゴリーで絞り込む：特定のカテゴリーに絞って、詳細な構造を分析します
+        """
+    )
 
-        # ========================================
-        # 初心者向け：推奨セット選択
-        # ========================================
-        st.markdown("#### 📋 推奨セットから選択（初心者向け）")
+    # 利用可能なカテゴリーを取得
+    available_categories = competence_master['力量カテゴリー名'].unique().tolist()
+    available_categories = [cat for cat in available_categories if pd.notna(cat)]
 
+    # カテゴリーごとのスキル数を計算
+    category_counts = competence_master.groupby('力量カテゴリー名').size().to_dict()
+
+    # 選択されたカテゴリーを保存する変数
+    selected_categories = []
+    selected_competences = pd.DataFrame()
+    total_skills = 0
+
+    if skill_selection_mode == "🌐 全スキル使用（推奨）":
+        st.success("✅ **全スキルを対象にSEM分析を実行します**")
+        st.markdown("""
+        すべてのスキルを使用することで、組織全体のスキルネットワーク構造を包括的に把握できます。
+        スキル間の関連性、カテゴリー間の関係性が明らかになります。
+        """)
+
+        # 全カテゴリーを自動選択
+        selected_categories = available_categories
+        selected_competences = competence_master
+        total_skills = len(competence_master)
+
+        # 統計情報の表示
+        st.markdown("---")
+        st.markdown("#### 📊 分析対象データ")
         col1, col2, col3 = st.columns(3)
-
         with col1:
-            if st.button("🎯 バランス型（推奨）", use_container_width=True):
-                # スキル数が50-150個になるようなセットを自動選択
-                target_skills = 100
-                threshold = 50
-                selected = []
-                total = 0
-                for cat in sorted(available_categories, key=lambda x: -category_counts.get(x, 0)):
-                    cat_skills = category_counts.get(cat, 0)
-                    if total + cat_skills <= target_skills + threshold:
-                        selected.append(cat)
-                        total += cat_skills
-                    if len(selected) >= 5:  # 最大5カテゴリー
-                        break
-                if selected:
-                    st.session_state['unified_selected_categories'] = selected
-                    st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
-
+            st.metric("📁 カテゴリー数", len(selected_categories))
         with col2:
-            if st.button("📚 大規模型", use_container_width=True):
-                # スキル数が150-250個になるようなセットを自動選択
-                selected = []
-                total = 0
-                for cat in sorted(available_categories, key=lambda x: -category_counts.get(x, 0)):
-                    cat_skills = category_counts.get(cat, 0)
-                    if total + cat_skills <= 250:
-                        selected.append(cat)
-                        total += cat_skills
-                    if len(selected) >= 8:  # 最大8カテゴリー
-                        break
-                if selected:
-                    st.session_state['unified_selected_categories'] = selected
-                    st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
-
+            st.metric("🎯 スキル総数", total_skills)
         with col3:
-            if st.button("⚡ コンパクト型", use_container_width=True):
-                # スキル数が20-50個になるようなセットを自動選択
-                selected = []
-                total = 0
-                for cat in sorted(available_categories, key=lambda x: -category_counts.get(x, 0)):
-                    cat_skills = category_counts.get(cat, 0)
-                    if total + cat_skills <= 50:
-                        selected.append(cat)
-                        total += cat_skills
-                    if len(selected) >= 3:  # 最大3カテゴリー
-                        break
-                if selected:
-                    st.session_state['unified_selected_categories'] = selected
-                    st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
+            recommend_model = "UnifiedSEM" if total_skills <= 200 else "HierarchicalSEM"
+            st.metric("🔍 推奨モデル", recommend_model)
 
-        # ========================================
-        # 上級者向け：カテゴリー詳細調整
-        # ========================================
-        with st.expander("🔧 カテゴリーを詳細調整（上級者向け）", expanded=False):
-            st.write("複数のカテゴリーを選択してください（推奨: 2~5カテゴリー、スキル数50~200個）")
-
-            # 全件選択ボタン（チェックボックスではなくボタンで実装）
-            col_a, col_b = st.columns([1, 3])
-            with col_a:
-                if st.button("🌍 全件選択", key="unified_select_all_btn", use_container_width=True):
-                    # 全カテゴリーを選択してsession_stateに保存
-                    st.session_state['unified_selected_categories'] = available_categories[:]
-                    st.success(f"✅ 全{len(available_categories)}カテゴリーを選択しました")
-
-            with col_b:
-                if st.button("🗑️ 選択解除", key="unified_clear_all_btn", use_container_width=True):
-                    # 選択を解除
-                    if 'unified_selected_categories' in st.session_state:
-                        del st.session_state['unified_selected_categories']
-                    st.info("選択を解除しました")
-
-            # カテゴリー情報の表示
-            category_info = [f"{cat} ({category_counts.get(cat, 0)}個)" for cat in available_categories]
-
-            # session_stateから現在の選択を取得
-            current_selection = []
-            if 'unified_selected_categories' in st.session_state:
-                current_categories = st.session_state['unified_selected_categories']
-                current_selection = [f"{cat} ({category_counts.get(cat, 0)}個)"
-                                    for cat in current_categories if cat in available_categories]
-
-            selected_categories_display = st.multiselect(
-                "力量カテゴリー",
-                options=category_info,
-                default=current_selection,
-                help="複数のカテゴリーを選択してください。UnifiedSEMは200スキル程度まで推奨",
-                key="unified_multiselect"
+        if total_skills > 200:
+            st.warning(
+                f"⚠️ **スキル数が多い場合の推奨**\n\n"
+                f"現在のスキル数: **{total_skills}個**\n\n"
+                f"スキル数が200個を超える場合、より適切な結果を得るために **HierarchicalSEM** の使用を推奨します。\n\n"
+                f"**または**、「📂 カテゴリーで絞り込む」を選択して特定カテゴリーに絞り込むこともできます。"
             )
 
-            # 表示名から実際のカテゴリー名を抽出
-            if selected_categories_display:
-                selected_categories = [cat.rsplit(' (', 1)[0] for cat in selected_categories_display]
-                st.session_state['unified_selected_categories'] = selected_categories
+    else:  # カテゴリーで絞り込む
+        with st.expander("🔧 カテゴリー選択", expanded=True):
+            st.markdown("### 力量カテゴリーの選択")
+            st.info("特定のカテゴリーに絞り込んで分析することで、より詳細な構造を把握できます。")
 
-        # ========================================
-        # 選択状況の確認
-        # ========================================
-        if 'unified_selected_categories' in st.session_state:
-            selected_categories = st.session_state['unified_selected_categories']
-            selected_competences = competence_master[
-                competence_master['力量カテゴリー名'].isin(selected_categories)
-            ]
-            total_skills = len(selected_competences)
+            # ========================================
+            # 初心者向け：推奨セット選択
+            # ========================================
+            st.markdown("#### 📋 推奨セットから選択（初心者向け）")
 
-            st.markdown("---")
-            st.markdown("#### 📊 選択状況")
             col1, col2, col3 = st.columns(3)
+
             with col1:
-                st.metric("選択カテゴリー数", len(selected_categories))
+                if st.button("🎯 バランス型（推奨）", use_container_width=True):
+                    # スキル数が50-150個になるようなセットを自動選択
+                    target_skills = 100
+                    threshold = 50
+                    selected = []
+                    total = 0
+                    for cat in sorted(available_categories, key=lambda x: -category_counts.get(x, 0)):
+                        cat_skills = category_counts.get(cat, 0)
+                        if total + cat_skills <= target_skills + threshold:
+                            selected.append(cat)
+                            total += cat_skills
+                        if len(selected) >= 5:  # 最大5カテゴリー
+                            break
+                    if selected:
+                        st.session_state['unified_selected_categories'] = selected
+                        st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
+
             with col2:
-                st.metric("スキル総数", total_skills)
+                if st.button("📚 大規模型", use_container_width=True):
+                    # スキル数が150-250個になるようなセットを自動選択
+                    selected = []
+                    total = 0
+                    for cat in sorted(available_categories, key=lambda x: -category_counts.get(x, 0)):
+                        cat_skills = category_counts.get(cat, 0)
+                        if total + cat_skills <= 250:
+                            selected.append(cat)
+                            total += cat_skills
+                        if len(selected) >= 8:  # 最大8カテゴリー
+                            break
+                    if selected:
+                        st.session_state['unified_selected_categories'] = selected
+                        st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
+
             with col3:
-                recommend_model = "UnifiedSEM" if total_skills <= 200 else "HierarchicalSEM"
-                st.metric("推奨モデル", recommend_model)
+                if st.button("⚡ コンパクト型", use_container_width=True):
+                    # スキル数が20-50個になるようなセットを自動選択
+                    selected = []
+                    total = 0
+                    for cat in sorted(available_categories, key=lambda x: -category_counts.get(x, 0)):
+                        cat_skills = category_counts.get(cat, 0)
+                        if total + cat_skills <= 50:
+                            selected.append(cat)
+                            total += cat_skills
+                        if len(selected) >= 3:  # 最大3カテゴリー
+                            break
+                    if selected:
+                        st.session_state['unified_selected_categories'] = selected
+                        st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
 
-            if total_skills > 200:
-                st.warning(f"⚠️ スキル数が{total_skills}個と多いです。UnifiedSEMは200個程度まで推奨。HierarchicalSEMの使用を検討してください。")
-            elif total_skills < 10:
-                st.error("❌ スキル数が少なすぎます。最低10個以上を選択してください。")
-        else:
-            selected_categories = []
-            selected_competences = pd.DataFrame()
-            total_skills = 0
+            # ========================================
+            # 上級者向け：カテゴリー詳細調整
+            # ========================================
+            with st.expander("🔧 カテゴリーを詳細調整（上級者向け）", expanded=False):
+                st.write("複数のカテゴリーを選択してください（推奨: 2~5カテゴリー、スキル数50~200個）")
 
-    if st.button("🚀 UnifiedSEM推定を実行", type="primary", disabled=not selected_categories or total_skills < 10):
+                # 全件選択ボタン（チェックボックスではなくボタンで実装）
+                col_a, col_b = st.columns([1, 3])
+                with col_a:
+                    if st.button("🌍 全件選択", key="unified_select_all_btn", use_container_width=True):
+                        # 全カテゴリーを選択してsession_stateに保存
+                        st.session_state['unified_selected_categories'] = available_categories[:]
+                        st.success(f"✅ 全{len(available_categories)}カテゴリーを選択しました")
+
+                with col_b:
+                    if st.button("🗑️ 選択解除", key="unified_clear_all_btn", use_container_width=True):
+                        # 選択を解除
+                        if 'unified_selected_categories' in st.session_state:
+                            del st.session_state['unified_selected_categories']
+                        st.info("選択を解除しました")
+
+                # カテゴリー情報の表示
+                category_info = [f"{cat} ({category_counts.get(cat, 0)}個)" for cat in available_categories]
+
+                # session_stateから現在の選択を取得
+                current_selection = []
+                if 'unified_selected_categories' in st.session_state:
+                    current_categories = st.session_state['unified_selected_categories']
+                    current_selection = [f"{cat} ({category_counts.get(cat, 0)}個)"
+                                        for cat in current_categories if cat in available_categories]
+
+                selected_categories_display = st.multiselect(
+                    "力量カテゴリー",
+                    options=category_info,
+                    default=current_selection,
+                    help="複数のカテゴリーを選択してください。UnifiedSEMは200スキル程度まで推奨",
+                    key="unified_multiselect"
+                )
+
+                # 表示名から実際のカテゴリー名を抽出
+                if selected_categories_display:
+                    selected_categories = [cat.rsplit(' (', 1)[0] for cat in selected_categories_display]
+                    st.session_state['unified_selected_categories'] = selected_categories
+
+            # ========================================
+            # 選択状況の確認
+            # ========================================
+            if 'unified_selected_categories' in st.session_state:
+                selected_categories = st.session_state['unified_selected_categories']
+                selected_competences = competence_master[
+                    competence_master['力量カテゴリー名'].isin(selected_categories)
+                ]
+                total_skills = len(selected_competences)
+
+                st.markdown("---")
+                st.markdown("#### 📊 選択状況")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("選択カテゴリー数", len(selected_categories))
+                with col2:
+                    st.metric("スキル総数", total_skills)
+                with col3:
+                    recommend_model = "UnifiedSEM" if total_skills <= 200 else "HierarchicalSEM"
+                    st.metric("推奨モデル", recommend_model)
+
+                if total_skills > 200:
+                    st.warning(f"⚠️ スキル数が{total_skills}個と多いです。UnifiedSEMは200個程度まで推奨。HierarchicalSEMの使用を検討してください。")
+                elif total_skills < 10:
+                    st.error("❌ スキル数が少なすぎます。最低10個以上を選択してください。")
+            else:
+                selected_categories = []
+                selected_competences = pd.DataFrame()
+                total_skills = 0
+
+    # 実行ボタン
+    st.markdown("---")
+    st.markdown("### 🚀 分析実行")
+
+    # ボタンの有効/無効の判定
+    can_execute = bool(selected_categories) and total_skills >= 10
+
+    if not can_execute:
+        if not selected_categories:
+            st.error("❌ カテゴリーが選択されていません。上記で「カテゴリーで絞り込む」を選択し、カテゴリーを選んでください。")
+        elif total_skills < 10:
+            st.error(f"❌ スキル数が少なすぎます（現在: {total_skills}個）。最低10個以上のスキルを含むカテゴリーを選択してください。")
+
+    if st.button(
+        "🚀 UnifiedSEM分析を開始",
+        type="primary",
+        disabled=not can_execute,
+        use_container_width=True,
+        help="選択したスキルを対象にSEM分析を実行します"
+    ):
         with st.spinner("データを準備中..."):
             try:
                 # データの準備: member_competence からピボットテーブルを作成
