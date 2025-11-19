@@ -931,6 +931,44 @@ if model_type == "UnifiedSEM（実データ）":
                 st.session_state['efa_filtered_skills'] = skill_user_counts[skill_user_counts >= min_users_for_skill].index.tolist()
                 st.session_state['efa_min_users'] = min_users_for_skill
 
+                # SEM推定方法の選択
+                st.markdown("---")
+                st.markdown("**⚡ SEM推定方法**")
+
+                # スキル数に応じたデフォルト選択
+                if n_skills_after >= 200:
+                    default_method_idx = 1  # ULS
+                    st.caption("💡 200+スキルでは高速推定法（ULS）を推奨します")
+                elif n_skills_after >= 150:
+                    default_method_idx = 1  # ULS
+                    st.caption("💡 150+スキルでは高速推定法（ULS）を推奨します")
+                else:
+                    default_method_idx = 0  # ML
+
+                estimation_method = st.radio(
+                    "推定アルゴリズム",
+                    options=["ML（最尤法）- 高精度・低速", "ULS（非重み付き最小二乗法）- 中精度・高速", "DWLS（対角重み付き最小二乗法）- 中精度・高速"],
+                    index=default_method_idx,
+                    help="""
+                    **ML（Maximum Likelihood）**: 最も正確だが計算時間が長い。適合度指標が全て利用可能。
+                    **ULS（Unweighted Least Squares）**: 約3-5倍高速。適合度指標は一部制限あり。
+                    **DWLS（Diagonally Weighted Least Squares）**: ULSより若干精度が高く、同程度に高速。
+
+                    推奨: 150+スキルではULS/DWLS、150未満ではML
+                    """
+                )
+
+                # methodパラメータに変換
+                if "ML" in estimation_method:
+                    sem_method = "ML"
+                elif "ULS" in estimation_method:
+                    sem_method = "ULS"
+                else:  # DWLS
+                    sem_method = "DWLS"
+
+                # session_stateに保存
+                st.session_state['sem_estimation_method'] = sem_method
+
                 efa_advanced = st.checkbox("詳細設定（因子数の手動指定）", value=False)
                 if efa_advanced:
                     col1, col2 = st.columns(2)
@@ -946,6 +984,10 @@ if model_type == "UnifiedSEM（実データ）":
                             n_efa_factors = int(manual_n_factors)
                     with col2:
                         st.caption("自動決定の場合、データの相関構造から最適な因子数が計算されます")
+    else:
+        # EFA不使用時もデフォルトの推定方法を設定
+        sem_method = "ML"
+        st.session_state['sem_estimation_method'] = sem_method
 
     # 実行ボタン
     st.markdown("---")
@@ -1165,8 +1207,11 @@ if model_type == "UnifiedSEM（実データ）":
 
                     st.info(f"📐 測定モデル: {len(measurement_specs)}個の潜在変数、構造モデル: {len(structural_specs)}個のパス")
 
-                # UnifiedSEM推定
-                sem = UnifiedSEMEstimator(measurement_specs, structural_specs, method='ML')
+                # UnifiedSEM推定（選択された推定方法を使用）
+                selected_method = st.session_state.get('sem_estimation_method', 'ML')
+                st.info(f"🔧 推定方法: {selected_method}")
+
+                sem = UnifiedSEMEstimator(measurement_specs, structural_specs, method=selected_method)
                 sem.fit(sem_pivot_data)  # EFA使用時はフィルタリング済みデータを使用
 
                 # 推定結果をsession_stateに保存（スライダー変更時も結果を保持）
@@ -1175,9 +1220,9 @@ if model_type == "UnifiedSEM（実データ）":
                 st.session_state['unified_sem_use_efa'] = use_efa
 
                 if use_efa:
-                    st.success(f"✅ 推定完了！EFAで発見した{efa_result['n_factors']}個の因子を使用したSEMモデルが構築されました。")
+                    st.success(f"✅ 推定完了！EFAで発見した{efa_result['n_factors']}個の因子を使用したSEMモデルが構築されました（推定方法: {selected_method}）")
                 else:
-                    st.success("✅ 推定完了！結果は下部に表示されます。")
+                    st.success(f"✅ 推定完了！結果は下部に表示されます（推定方法: {selected_method}）")
 
             except Exception as e:
                 st.error(f"❌ 推定エラー: {e}")
