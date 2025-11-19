@@ -8,19 +8,26 @@ MMR (Maximal Marginal Relevance)、カテゴリ多様性、タイプ多様性な
 1. MMRの効率化（キャッシング、早期終了）
 2. Position-aware ranking（上位は精度、下位は多様性）
 3. より柔軟な多様性戦略
+4. 埋め込みベースの意味的多様性（Semantic Diversity）
 """
 
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Any
 from collections import defaultdict
+from scipy.spatial.distance import cosine
 
 
 class DiversityReranker:
-    """多様性を考慮した再ランキングクラス"""
+    """多様性を考慮した再ランキングクラス（意味的多様性対応）"""
 
     def __init__(
-        self, lambda_relevance: float = 0.7, category_weight: float = 0.5, type_weight: float = 0.3
+        self,
+        lambda_relevance: float = 0.7,
+        category_weight: float = 0.5,
+        type_weight: float = 0.3,
+        embedding_weight: float = 0.0,
+        embeddings: Optional[Dict[str, Any]] = None,
     ):
         """
         初期化
@@ -29,10 +36,22 @@ class DiversityReranker:
             lambda_relevance: 関連性の重み（0-1）、高いほど精度重視、低いほど多様性重視
             category_weight: カテゴリ多様性の重み（0-1）
             type_weight: タイプ多様性の重み（0-1）
+            embedding_weight: 埋め込みベースの類似度の重み（0-1）
+                             0: カテゴリ/タイプベースのみ
+                             1: 埋め込みベースのみ
+                             0.5: 両者を半々でブレンド
+            embeddings: 埋め込み情報の辞書
+                       {
+                           "node2vec_model": Node2Vecモデル（.wv属性を持つ）,
+                           "nmf_model": MatrixFactorizationモデル,
+                           "embedding_type": "node2vec" | "nmf" | "both"
+                       }
         """
         self.lambda_relevance = lambda_relevance
         self.category_weight = category_weight
         self.type_weight = type_weight
+        self.embedding_weight = embedding_weight
+        self.embeddings = embeddings or {}
 
     def rerank_mmr(
         self,
@@ -91,9 +110,12 @@ class DiversityReranker:
             """キャッシュを使った類似度計算"""
             key = tuple(sorted([code1, code2]))
             if key not in similarity_cache:
-                similarity_cache[key] = self._calculate_similarity(
-                    competence_dict.get(code1, {}), competence_dict.get(code2, {})
-                )
+                comp1 = competence_dict.get(code1, {}).copy()
+                comp2 = competence_dict.get(code2, {}).copy()
+                # 力量コードを明示的に追加（埋め込みベースの類似度計算で必要）
+                comp1["力量コード"] = code1
+                comp2["力量コード"] = code2
+                similarity_cache[key] = self._calculate_similarity(comp1, comp2)
             return similarity_cache[key]
 
         selected = []
@@ -211,7 +233,7 @@ class DiversityReranker:
 
         Args:
             candidates: (力量コード, スコア)のリスト
-            competence_dict: 力量情報の辞書
+            competence_dict: 力量情報の辞書（キー: 力量コード）
 
         Returns:
             類似度行列 (N x N)
@@ -221,9 +243,17 @@ class DiversityReranker:
 
         # 上三角行列のみ計算（対称性を利用）
         for i in range(n):
-            comp1 = competence_dict.get(candidates[i][0], {})
+            code1 = candidates[i][0]
+            comp1 = competence_dict.get(code1, {})
+            # 力量コードを明示的に追加（埋め込みベースの類似度計算で必要）
+            comp1["力量コード"] = code1
+
             for j in range(i + 1, n):
-                comp2 = competence_dict.get(candidates[j][0], {})
+                code2 = candidates[j][0]
+                comp2 = competence_dict.get(code2, {})
+                # 力量コードを明示的に追加
+                comp2["力量コード"] = code2
+
                 sim = self._calculate_similarity(comp1, comp2)
                 similarity_matrix[i, j] = sim
                 similarity_matrix[j, i] = sim  # 対称性
@@ -387,7 +417,38 @@ class DiversityReranker:
 
     def _calculate_similarity(self, comp1: Dict, comp2: Dict) -> float:
         """
-        2つの力量の類似度を計算
+        2つの力量の類似度を計算（カテゴリ/タイプベース + 埋め込みベース）
+
+        Args:
+            comp1: 力量1の情報辞書（"力量コード"キーを含む）
+            comp2: 力量2の情報辞書（"力量コード"キーを含む）
+
+        Returns:
+            類似度（0-1）
+        """
+        # カテゴリ/タイプベースの類似度
+        category_type_sim = self._calculate_category_type_similarity(comp1, comp2)
+
+        # 埋め込みベースの類似度
+        if self.embedding_weight > 0 and self.embeddings:
+            code1 = comp1.get("力量コード")
+            code2 = comp2.get("力量コード")
+            if code1 and code2:
+                embedding_sim = self._get_embedding_similarity(code1, code2)
+                if embedding_sim is not None:
+                    # カテゴリ/タイプベースと埋め込みベースをブレンド
+                    similarity = (
+                        (1 - self.embedding_weight) * category_type_sim
+                        + self.embedding_weight * embedding_sim
+                    )
+                    return min(similarity, 1.0)
+
+        # 埋め込みが使えない場合はカテゴリ/タイプベースのみ
+        return category_type_sim
+
+    def _calculate_category_type_similarity(self, comp1: Dict, comp2: Dict) -> float:
+        """
+        カテゴリ/タイプベースの類似度を計算（従来方式）
 
         Args:
             comp1: 力量1の情報辞書
@@ -412,6 +473,109 @@ class DiversityReranker:
             similarity = similarity / max_similarity
 
         return min(similarity, 1.0)
+
+    def _get_embedding_similarity(self, code1: str, code2: str) -> Optional[float]:
+        """
+        埋め込みベースの類似度を計算（コサイン類似度）
+
+        Args:
+            code1: 力量コード1
+            code2: 力量コード2
+
+        Returns:
+            類似度（0-1）、埋め込みが取得できない場合はNone
+        """
+        try:
+            vec1 = self._get_embedding_vector(code1)
+            vec2 = self._get_embedding_vector(code2)
+
+            if vec1 is not None and vec2 is not None:
+                # コサイン類似度を計算（scipy.spatial.distance.cosineは距離なので1から引く）
+                # cosine距離 = 1 - cosine類似度
+                cosine_dist = cosine(vec1, vec2)
+                cosine_sim = 1 - cosine_dist
+
+                # 0-1の範囲にクリップ（数値誤差対策）
+                return max(0.0, min(1.0, cosine_sim))
+
+        except Exception:
+            # 埋め込み取得に失敗した場合はNoneを返す
+            pass
+
+        return None
+
+    def _get_embedding_vector(self, code: str) -> Optional[np.ndarray]:
+        """
+        力量コードに対応する埋め込みベクトルを取得
+
+        Args:
+            code: 力量コード
+
+        Returns:
+            埋め込みベクトル、取得できない場合はNone
+        """
+        if not self.embeddings:
+            return None
+
+        embedding_type = self.embeddings.get("embedding_type", "node2vec")
+
+        # Node2Vec埋め込み
+        if embedding_type in ["node2vec", "both"]:
+            node2vec_model = self.embeddings.get("node2vec_model")
+            if node2vec_model and hasattr(node2vec_model, "wv"):
+                try:
+                    if code in node2vec_model.wv:
+                        return node2vec_model.wv[code]
+                except (KeyError, AttributeError):
+                    pass
+
+        # NMF埋め込み
+        if embedding_type in ["nmf", "both"]:
+            nmf_model = self.embeddings.get("nmf_model")
+            if nmf_model and hasattr(nmf_model, "get_competence_factors"):
+                try:
+                    return nmf_model.get_competence_factors(code)
+                except (ValueError, KeyError):
+                    pass
+
+        # 両方を平均（embedding_type="both"でNode2VecとNMF両方が取得できた場合）
+        if embedding_type == "both":
+            node2vec_model = self.embeddings.get("node2vec_model")
+            nmf_model = self.embeddings.get("nmf_model")
+
+            vec_n2v = None
+            vec_nmf = None
+
+            if node2vec_model and hasattr(node2vec_model, "wv"):
+                try:
+                    if code in node2vec_model.wv:
+                        vec_n2v = node2vec_model.wv[code]
+                except (KeyError, AttributeError):
+                    pass
+
+            if nmf_model and hasattr(nmf_model, "get_competence_factors"):
+                try:
+                    vec_nmf = nmf_model.get_competence_factors(code)
+                except (ValueError, KeyError):
+                    pass
+
+            # 次元数を合わせて平均（簡易版）
+            if vec_n2v is not None and vec_nmf is not None:
+                # 次元数が異なる場合は、短い方にゼロパディング
+                max_dim = max(len(vec_n2v), len(vec_nmf))
+                vec_n2v_padded = np.pad(
+                    vec_n2v, (0, max_dim - len(vec_n2v)), mode="constant"
+                )
+                vec_nmf_padded = np.pad(
+                    vec_nmf, (0, max_dim - len(vec_nmf)), mode="constant"
+                )
+                return (vec_n2v_padded + vec_nmf_padded) / 2
+            elif vec_n2v is not None:
+                return vec_n2v
+            elif vec_nmf is not None:
+                return vec_nmf
+
+        return None
 
     def calculate_diversity_metrics(
         self,
