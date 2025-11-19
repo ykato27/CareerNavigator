@@ -1352,175 +1352,255 @@ if model_type == "UnifiedSEM（実データ）":
 # =========================================================
 
 elif model_type == "HierarchicalSEM（実データ）":
-    st.info("📊 実データを使用したHierarchicalSEM推定を実行します（大規模データ対応）")
+    st.markdown("---")
+    st.subheader("🎯 スキル選択")
 
-    # カテゴリー選択
-    with st.expander("🔧 階層構造設定", expanded=True):
-        st.markdown("### 力量カテゴリーの選択")
+    st.info("""
+    **📊 HierarchicalSEM分析について**
 
-        # 利用可能なカテゴリーを取得
-        available_categories = competence_master['力量カテゴリー名'].unique().tolist()
-        available_categories = [cat for cat in available_categories if pd.notna(cat)]
+    HierarchicalSEMは、大規模なスキルデータ（200~1000個）に対応した階層的な分析手法です。
+    カテゴリーごとに独立してモデルを推定し、その後統合層で全体の関係性を明らかにします。
+    """)
 
-        # カテゴリーごとのスキル数を計算
-        category_counts = competence_master.groupby('力量カテゴリー名').size().to_dict()
+    skill_selection_mode_hier = st.radio(
+        "**分析に使用するスキルの範囲を選択してください**",
+        options=["🌐 全スキル使用（推奨）", "📂 カテゴリーで絞り込む"],
+        index=0,
+        help="""
+        ・全スキル使用：すべてのスキルを対象に、階層的に分析します（推奨）
+        ・カテゴリーで絞り込む：特定のカテゴリーに絞って分析します
+        """,
+        key="hier_skill_selection_mode"
+    )
 
-        # ========================================
-        # 初心者向け：推奨セット選択
-        # ========================================
-        st.markdown("#### 📋 推奨セットから選択（初心者向け）")
+    # 利用可能なカテゴリーを取得
+    available_categories = competence_master['力量カテゴリー名'].unique().tolist()
+    available_categories = [cat for cat in available_categories if pd.notna(cat)]
 
-        col1, col2, col3 = st.columns(3)
+    # カテゴリーごとのスキル数を計算
+    category_counts = competence_master.groupby('力量カテゴリー名').size().to_dict()
 
-        with col1:
-            if st.button("🎯 標準型（推奨）", use_container_width=True, key="hier_standard"):
-                # スキル数が200-400個になるようなセットを自動選択
-                selected = []
-                total = 0
-                for cat in sorted(available_categories, key=lambda x: -category_counts.get(x, 0)):
-                    cat_skills = category_counts.get(cat, 0)
-                    if total + cat_skills <= 400:
-                        selected.append(cat)
-                        total += cat_skills
-                    if len(selected) >= 8:  # 最大8カテゴリー
-                        break
-                if selected:
-                    st.session_state['hierarchical_selected_categories'] = selected
-                    st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
+    # 選択されたカテゴリーを保存する変数
+    selected_categories = []
+    selected_competences = pd.DataFrame()
+    total_skills = 0
 
-        with col2:
-            if st.button("📚 大規模型", use_container_width=True, key="hier_large"):
-                # スキル数が400-800個になるようなセットを自動選択
-                selected = []
-                total = 0
-                for cat in sorted(available_categories, key=lambda x: -category_counts.get(x, 0)):
-                    cat_skills = category_counts.get(cat, 0)
-                    if total + cat_skills <= 800:
-                        selected.append(cat)
-                        total += cat_skills
-                    if len(selected) >= 15:  # 最大15カテゴリー
-                        break
-                if selected:
-                    st.session_state['hierarchical_selected_categories'] = selected
-                    st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
+    if skill_selection_mode_hier == "🌐 全スキル使用（推奨）":
+        st.success("✅ **全スキルを対象にHierarchicalSEM分析を実行します**")
+        st.markdown("""
+        すべてのスキルを使用することで、組織全体のスキル構造を階層的に把握できます。
+        各カテゴリーの詳細な分析と、カテゴリー間の関係性が明らかになります。
+        """)
 
-        with col3:
-            if st.button("🌍 全カテゴリー", use_container_width=True, key="hier_all"):
-                # 全カテゴリーを選択
-                selected = available_categories[:]
-                total = sum(category_counts.get(cat, 0) for cat in selected)
-                st.session_state['hierarchical_selected_categories'] = selected
-                st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
+        # 全カテゴリーを自動選択
+        selected_categories = available_categories
+        selected_competences = competence_master
+        total_skills = len(competence_master)
 
-        # ========================================
-        # 上級者向け：カテゴリー詳細調整
-        # ========================================
-        with st.expander("🔧 カテゴリーを詳細調整（上級者向け）", expanded=False):
-            st.write("複数のカテゴリーを選択してください（推奨: 5~20カテゴリー、200~1000スキル）")
-
-            # 全件選択ボタン（チェックボックスではなくボタンで実装）
-            col_a, col_b = st.columns([1, 3])
-            with col_a:
-                if st.button("🌍 全件選択", key="hier_select_all_btn", use_container_width=True):
-                    # 全カテゴリーを選択してsession_stateに保存
-                    st.session_state['hierarchical_selected_categories'] = available_categories[:]
-                    st.success(f"✅ 全{len(available_categories)}カテゴリーを選択しました")
-
-            with col_b:
-                if st.button("🗑️ 選択解除", key="hier_clear_all_btn", use_container_width=True):
-                    # 選択を解除
-                    if 'hierarchical_selected_categories' in st.session_state:
-                        del st.session_state['hierarchical_selected_categories']
-                    st.info("選択を解除しました")
-
-            # カテゴリー情報の表示
-            category_info = [f"{cat} ({category_counts.get(cat, 0)}個)" for cat in available_categories]
-
-            # session_stateから現在の選択を取得
-            current_selection = []
-            if 'hierarchical_selected_categories' in st.session_state:
-                current_categories = st.session_state['hierarchical_selected_categories']
-                current_selection = [f"{cat} ({category_counts.get(cat, 0)}個)"
-                                    for cat in current_categories if cat in available_categories]
-
-            selected_categories_display = st.multiselect(
-                "力量カテゴリー",
-                options=category_info,
-                default=current_selection,
-                help="複数のカテゴリーを選択してください。HierarchicalSEMは1000スキルまで対応",
-                key="hier_multiselect"
-            )
-
-            # 表示名から実際のカテゴリー名を抽出
-            if selected_categories_display:
-                selected_categories = [cat.rsplit(' (', 1)[0] for cat in selected_categories_display]
-                st.session_state['hierarchical_selected_categories'] = selected_categories
-
-        # ========================================
-        # 選択状況の確認と並列処理設定
-        # ========================================
-        if 'hierarchical_selected_categories' in st.session_state:
-            selected_categories = st.session_state['hierarchical_selected_categories']
-            selected_competences = competence_master[
-                competence_master['力量カテゴリー名'].isin(selected_categories)
-            ]
-            total_skills = len(selected_competences)
-
-            st.markdown("---")
-            st.markdown("#### 📊 選択状況")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("選択カテゴリー数", len(selected_categories))
-            with col2:
-                st.metric("スキル総数", total_skills)
-            with col3:
-                if total_skills <= 400:
-                    est_time = "~5分"
-                elif total_skills <= 800:
-                    est_time = "5-15分"
-                else:
-                    est_time = "15分以上"
-                st.metric("推定時間", est_time)
-
-            if total_skills > 1000:
-                st.warning(f"⚠️ スキル数が{total_skills}個と非常に多いです。処理に時間がかかる場合があります。")
-            elif total_skills < 20:
-                st.error("❌ スキル数が少なすぎます。最低20個以上を選択してください。")
-        else:
-            selected_categories = []
-            selected_competences = pd.DataFrame()
-            total_skills = 0
-
-        # 並列処理設定
+        # 統計情報の表示
         st.markdown("---")
-        st.markdown("#### ⚙️ 処理設定")
+        st.markdown("#### 📊 分析対象データ")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📁 カテゴリー数", len(selected_categories))
+        with col2:
+            st.metric("🎯 スキル総数", total_skills)
+        with col3:
+            if total_skills <= 400:
+                est_time = "~5分"
+            elif total_skills <= 800:
+                est_time = "5-15分"
+            else:
+                est_time = "15分以上"
+            st.metric("⏱️ 推定時間", est_time)
 
-        # session_stateで状態を保持（スライダー変更時に他の設定が初期化されるのを防ぐ）
-        if 'hsem_use_parallel' not in st.session_state:
-            st.session_state.hsem_use_parallel = True
-        if 'hsem_n_jobs' not in st.session_state:
-            st.session_state.hsem_n_jobs = 4
-
-        use_parallel = st.checkbox(
-            "並列処理を有効化（高速化）",
-            value=st.session_state.hsem_use_parallel,
-            key="hsem_parallel_checkbox"
-        )
-        st.session_state.hsem_use_parallel = use_parallel
-
-        if use_parallel:
-            n_jobs = st.slider(
-                "並列ジョブ数",
-                1, 8,
-                value=st.session_state.hsem_n_jobs,
-                help="CPUコア数に応じて調整してください",
-                key="hsem_n_jobs_slider"
+        if total_skills > 1000:
+            st.warning(
+                f"⚠️ **スキル数が非常に多い場合**\n\n"
+                f"現在のスキル数: **{total_skills}個**\n\n"
+                f"処理に時間がかかる場合があります。「📂 カテゴリーで絞り込む」を選択して特定カテゴリーに絞り込むことも検討してください。"
             )
-            st.session_state.hsem_n_jobs = n_jobs
-        else:
-            n_jobs = 1
 
-    if st.button("🚀 HierarchicalSEM推定を実行", type="primary", disabled=not selected_categories or total_skills < 20):
+    else:  # カテゴリーで絞り込む
+        with st.expander("🔧 カテゴリー選択", expanded=True):
+            st.markdown("### 力量カテゴリーの選択")
+            st.info("特定のカテゴリーに絞り込んで階層的に分析することで、より詳細な構造を把握できます。")
+
+            # ========================================
+            # 初心者向け：推奨セット選択
+            # ========================================
+            st.markdown("#### 📋 推奨セットから選択（初心者向け）")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                if st.button("🎯 標準型（推奨）", use_container_width=True, key="hier_standard"):
+                    # スキル数が200-400個になるようなセットを自動選択
+                    selected = []
+                    total = 0
+                    for cat in sorted(available_categories, key=lambda x: -category_counts.get(x, 0)):
+                        cat_skills = category_counts.get(cat, 0)
+                        if total + cat_skills <= 400:
+                            selected.append(cat)
+                            total += cat_skills
+                        if len(selected) >= 8:  # 最大8カテゴリー
+                            break
+                    if selected:
+                        st.session_state['hierarchical_selected_categories'] = selected
+                        st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
+
+            with col2:
+                if st.button("📚 大規模型", use_container_width=True, key="hier_large"):
+                    # スキル数が400-800個になるようなセットを自動選択
+                    selected = []
+                    total = 0
+                    for cat in sorted(available_categories, key=lambda x: -category_counts.get(x, 0)):
+                        cat_skills = category_counts.get(cat, 0)
+                        if total + cat_skills <= 800:
+                            selected.append(cat)
+                            total += cat_skills
+                        if len(selected) >= 15:  # 最大15カテゴリー
+                            break
+                    if selected:
+                        st.session_state['hierarchical_selected_categories'] = selected
+                        st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
+
+            with col3:
+                if st.button("🌍 全カテゴリー", use_container_width=True, key="hier_all"):
+                    # 全カテゴリーを選択
+                    selected = available_categories[:]
+                    total = sum(category_counts.get(cat, 0) for cat in selected)
+                    st.session_state['hierarchical_selected_categories'] = selected
+                    st.success(f"✅ {len(selected)}個のカテゴリーを選択しました（{total}個のスキル）")
+
+            # ========================================
+            # 上級者向け：カテゴリー詳細調整
+            # ========================================
+            with st.expander("🔧 カテゴリーを詳細調整（上級者向け）", expanded=False):
+                st.write("複数のカテゴリーを選択してください（推奨: 5~20カテゴリー、200~1000スキル）")
+
+                # 全件選択ボタン（チェックボックスではなくボタンで実装）
+                col_a, col_b = st.columns([1, 3])
+                with col_a:
+                    if st.button("🌍 全件選択", key="hier_select_all_btn", use_container_width=True):
+                        # 全カテゴリーを選択してsession_stateに保存
+                        st.session_state['hierarchical_selected_categories'] = available_categories[:]
+                        st.success(f"✅ 全{len(available_categories)}カテゴリーを選択しました")
+
+                with col_b:
+                    if st.button("🗑️ 選択解除", key="hier_clear_all_btn", use_container_width=True):
+                        # 選択を解除
+                        if 'hierarchical_selected_categories' in st.session_state:
+                            del st.session_state['hierarchical_selected_categories']
+                        st.info("選択を解除しました")
+
+                # カテゴリー情報の表示
+                category_info = [f"{cat} ({category_counts.get(cat, 0)}個)" for cat in available_categories]
+
+                # session_stateから現在の選択を取得
+                current_selection = []
+                if 'hierarchical_selected_categories' in st.session_state:
+                    current_categories = st.session_state['hierarchical_selected_categories']
+                    current_selection = [f"{cat} ({category_counts.get(cat, 0)}個)"
+                                        for cat in current_categories if cat in available_categories]
+
+                selected_categories_display = st.multiselect(
+                    "力量カテゴリー",
+                    options=category_info,
+                    default=current_selection,
+                    help="複数のカテゴリーを選択してください。HierarchicalSEMは1000スキルまで対応",
+                    key="hier_multiselect"
+                )
+
+                # 表示名から実際のカテゴリー名を抽出
+                if selected_categories_display:
+                    selected_categories = [cat.rsplit(' (', 1)[0] for cat in selected_categories_display]
+                    st.session_state['hierarchical_selected_categories'] = selected_categories
+
+            # ========================================
+            # 選択状況の確認
+            # ========================================
+            if 'hierarchical_selected_categories' in st.session_state:
+                selected_categories = st.session_state['hierarchical_selected_categories']
+                selected_competences = competence_master[
+                    competence_master['力量カテゴリー名'].isin(selected_categories)
+                ]
+                total_skills = len(selected_competences)
+
+                st.markdown("---")
+                st.markdown("#### 📊 選択状況")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("選択カテゴリー数", len(selected_categories))
+                with col2:
+                    st.metric("スキル総数", total_skills)
+                with col3:
+                    if total_skills <= 400:
+                        est_time = "~5分"
+                    elif total_skills <= 800:
+                        est_time = "5-15分"
+                    else:
+                        est_time = "15分以上"
+                    st.metric("推定時間", est_time)
+
+                if total_skills > 1000:
+                    st.warning(f"⚠️ スキル数が{total_skills}個と非常に多いです。処理に時間がかかる場合があります。")
+                elif total_skills < 20:
+                    st.error("❌ スキル数が少なすぎます。最低20個以上を選択してください。")
+            else:
+                selected_categories = []
+                selected_competences = pd.DataFrame()
+                total_skills = 0
+
+    # 並列処理設定
+    st.markdown("---")
+    st.markdown("### ⚙️ 処理設定")
+
+    # session_stateで状態を保持（スライダー変更時に他の設定が初期化されるのを防ぐ）
+    if 'hsem_use_parallel' not in st.session_state:
+        st.session_state.hsem_use_parallel = True
+    if 'hsem_n_jobs' not in st.session_state:
+        st.session_state.hsem_n_jobs = 4
+
+    use_parallel = st.checkbox(
+        "並列処理を有効化（高速化）",
+        value=st.session_state.hsem_use_parallel,
+        key="hsem_parallel_checkbox"
+    )
+    st.session_state.hsem_use_parallel = use_parallel
+
+    if use_parallel:
+        n_jobs = st.slider(
+            "並列ジョブ数",
+            1, 8,
+            value=st.session_state.hsem_n_jobs,
+            help="CPUコア数に応じて調整してください",
+            key="hsem_n_jobs_slider"
+        )
+        st.session_state.hsem_n_jobs = n_jobs
+    else:
+        n_jobs = 1
+
+    # 実行ボタン
+    st.markdown("---")
+    st.markdown("### 🚀 分析実行")
+
+    # ボタンの有効/無効の判定
+    can_execute = bool(selected_categories) and total_skills >= 20
+
+    if not can_execute:
+        if not selected_categories:
+            st.error("❌ カテゴリーが選択されていません。上記で「カテゴリーで絞り込む」を選択し、カテゴリーを選んでください。")
+        elif total_skills < 20:
+            st.error(f"❌ スキル数が少なすぎます（現在: {total_skills}個）。最低20個以上のスキルを含むカテゴリーを選択してください。")
+
+    if st.button(
+        "🚀 HierarchicalSEM分析を開始",
+        type="primary",
+        disabled=not can_execute,
+        use_container_width=True,
+        help="選択したスキルを対象にHierarchicalSEM分析を実行します"
+    ):
         with st.spinner("データを準備中..."):
             try:
                 # データの準備
