@@ -1793,6 +1793,209 @@ elif model_type == "HierarchicalSEM（実データ）":
 
                     st.plotly_chart(fig, use_container_width=True)
 
+                # ============================================
+                # ネットワークグラフ可視化（HierarchicalSEM用）
+                # ============================================
+                st.markdown("---")
+                st.markdown("## 📊 ネットワークグラフ可視化")
+
+                with st.spinner("ネットワークグラフを生成中..."):
+                    try:
+                        # グラフ可視化モジュールをロード
+                        visualizer_module = load_sem_network_visualizer()
+                        SEMNetworkVisualizer = visualizer_module.SEMNetworkVisualizer
+
+                        visualizer = SEMNetworkVisualizer()
+
+                        # スキルコード → スキル名（日本語）のマッピングを作成
+                        skill_code_to_name = dict(zip(
+                            competence_master['力量コード'],
+                            competence_master['力量名']
+                        ))
+
+                        # タブで表示方法を選択
+                        tab1, tab2 = st.tabs(["🕸️ スキル間ネットワーク（ドメイン別）", "📈 カテゴリー別スコア相関"])
+
+                        with tab1:
+                            st.markdown(
+                                "### スキル間ネットワーク（ドメイン別）\n"
+                                "各カテゴリー内でのスキル同士の関連性を表示します"
+                            )
+
+                            # ドメイン選択
+                            domain_names = [name for name in result.domain_models.keys() if name != '全体力量']
+
+                            if len(domain_names) > 0:
+                                selected_domain = st.selectbox(
+                                    "表示するカテゴリーを選択",
+                                    options=domain_names,
+                                    help="各カテゴリー内のスキル間ネットワークを表示します"
+                                )
+
+                                # 選択されたドメインのモデルを取得
+                                domain_model = result.domain_models[selected_domain]
+
+                                # メンバー選択
+                                st.markdown("##### 👤 メンバー別表示（オプション）")
+                                # フィルタリング後のメンバーを使用
+                                member_names_hier = members_clean_filtered['メンバー名'].tolist()
+                                member_codes_hier = members_clean_filtered['メンバーコード'].tolist()
+
+                                member_options_hier = ["（全体表示）"] + [f"{name} ({code})" for name, code in zip(member_names_hier, member_codes_hier)]
+
+                                selected_member_display_hier = st.selectbox(
+                                    "メンバーを選択",
+                                    options=member_options_hier,
+                                    help="メンバーを選択すると、そのメンバーの取得済み/未取得力量が色分けされます",
+                                    key="hier_sem_selected_member"
+                                )
+
+                                # 選択されたメンバーの取得済みスキルを取得
+                                acquired_skills_hier = None
+                                if selected_member_display_hier != "（全体表示）":
+                                    # メンバーコードを抽出
+                                    selected_member_code_hier = selected_member_display_hier.split("(")[-1].rstrip(")")
+
+                                    # このメンバーの取得済みスキルを取得
+                                    member_skills_hier = member_competence[
+                                        member_competence['メンバーコード'] == selected_member_code_hier
+                                    ]['力量コード'].tolist()
+                                    acquired_skills_hier = set(member_skills_hier)
+
+                                    st.caption(f"✅ 取得済み力量: {len(acquired_skills_hier)}個")
+
+                                st.markdown("---")
+
+                                col_threshold_hier, col_edge_hier = st.columns(2)
+
+                                with col_threshold_hier:
+                                    loading_threshold_hier = st.slider(
+                                        "ローディング閾値",
+                                        min_value=0.0,
+                                        max_value=1.0,
+                                        value=0.2,
+                                        step=0.05,
+                                        help="この値以上のファクターローディングを持つ力量のみ表示します",
+                                        key="hier_sem_loading_threshold",
+                                    )
+                                    st.caption(f"現在の閾値: {loading_threshold_hier:.2f}")
+
+                                # 全接続数を計算
+                                temp_edges_hier = []
+                                for j in range(len(domain_model.latent_vars)):
+                                    contributing_skills = [
+                                        (i, abs(domain_model.Lambda[i, j]))
+                                        for i in range(len(domain_model.observed_vars))
+                                        if abs(domain_model.Lambda[i, j]) > loading_threshold_hier
+                                    ]
+                                    for k1 in range(len(contributing_skills)):
+                                        for k2 in range(k1 + 1, len(contributing_skills)):
+                                            temp_edges_hier.append(True)
+
+                                max_edges_hier = len(temp_edges_hier)
+
+                                with col_edge_hier:
+                                    # スライダーで表示する接続数の範囲を調整
+                                    slider_start_key_hier = f"hier_sem_skill_network_edge_start_{selected_domain}"
+                                    slider_end_key_hier = f"hier_sem_skill_network_edge_end_{selected_domain}"
+
+                                    if slider_start_key_hier not in st.session_state:
+                                        st.session_state[slider_start_key_hier] = 1 if max_edges_hier > 0 else 1
+
+                                    if slider_end_key_hier not in st.session_state:
+                                        st.session_state[slider_end_key_hier] = min(20, max_edges_hier) if max_edges_hier > 0 else 1
+
+                                    if st.session_state[slider_end_key_hier] > max_edges_hier and max_edges_hier > 0:
+                                        st.session_state[slider_end_key_hier] = max_edges_hier
+
+                                    st.markdown("##### 接続範囲指定（関係性が強い順）")
+
+                                    edge_start_hier = st.slider(
+                                        "開始位置（番目から）",
+                                        min_value=1,
+                                        max_value=max(1, max_edges_hier),
+                                        step=1,
+                                        help=f"最小: 1、最大: {max_edges_hier}",
+                                        key=slider_start_key_hier,
+                                    )
+
+                                    edge_end_hier = st.slider(
+                                        "終了位置（番目まで）",
+                                        min_value=1,
+                                        max_value=max(1, max_edges_hier),
+                                        step=1,
+                                        help=f"開始位置以上の値で指定してください",
+                                        key=slider_end_key_hier,
+                                    )
+
+                                    if edge_start_hier > edge_end_hier:
+                                        edge_start_hier, edge_end_hier = edge_end_hier, edge_start_hier
+                                        st.warning(f"開始位置が終了位置より大きいため、自動調整しました: {edge_start_hier}～{edge_end_hier}")
+
+                                    st.caption(f"表示中: {edge_start_hier}～{edge_end_hier}番目 （全 {max_edges_hier} 接続）")
+
+                                st.markdown("---")
+
+                                if max_edges_hier > 0:
+                                    fig_skill_network_hier = visualizer.visualize_skill_network(
+                                        lambda_matrix=domain_model.Lambda,
+                                        latent_vars=domain_model.latent_vars,
+                                        observed_vars=domain_model.observed_vars,
+                                        skill_name_mapping=skill_code_to_name,
+                                        loading_threshold=loading_threshold_hier,
+                                        edge_limit_start=edge_start_hier,
+                                        edge_limit_end=edge_end_hier,
+                                        acquired_skills=acquired_skills_hier,
+                                    )
+                                    st.plotly_chart(fig_skill_network_hier, use_container_width=True)
+                                else:
+                                    st.info(f"💡 {selected_domain}には表示可能なスキル間接続がありません（ローディング閾値を下げてみてください）")
+                            else:
+                                st.info("💡 ドメインモデルが見つかりません")
+
+                        with tab2:
+                            st.markdown(
+                                "### 📈 カテゴリー別スコア相関\n"
+                                "各カテゴリースコア間の相関関係を表示します"
+                            )
+
+                            if result.domain_scores is not None and len(result.domain_scores.columns) > 1:
+                                # 相関行列を計算
+                                corr_matrix = result.domain_scores.corr()
+
+                                # ヒートマップで表示
+                                fig_corr = px.imshow(
+                                    corr_matrix,
+                                    labels=dict(x="カテゴリー", y="カテゴリー", color="相関係数"),
+                                    aspect="auto",
+                                    color_continuous_scale='RdBu_r',
+                                    zmin=-1,
+                                    zmax=1,
+                                )
+                                fig_corr.update_layout(
+                                    title="カテゴリースコア相関マトリクス",
+                                    height=600
+                                )
+
+                                st.plotly_chart(fig_corr, use_container_width=True)
+
+                                st.markdown("""
+                                **読み方:**
+                                - 値が1に近い: 正の相関（一方が高いと他方も高い）
+                                - 値が-1に近い: 負の相関（一方が高いと他方は低い）
+                                - 値が0に近い: 相関なし
+                                """)
+                            else:
+                                st.info("💡 カテゴリースコアが見つかりません")
+
+                        st.success("✅ ネットワークグラフを生成しました")
+
+                    except Exception as e:
+                        st.error(f"❌ グラフ生成エラー: {e}")
+                        import traceback
+                        with st.expander("エラー詳細"):
+                            st.code(traceback.format_exc())
+
                 # 詳細データ
                 with st.expander("📋 詳細データ"):
                     st.markdown("#### 統合モデル（カテゴリー間の関係）")
