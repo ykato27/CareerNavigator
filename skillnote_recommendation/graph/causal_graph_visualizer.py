@@ -200,175 +200,9 @@ class CausalGraphVisualizer:
             height=height,
             width="100%",
             highlight_nodes=[center_node],
-            member_skills=member_skills
+            member_skills=member_skills,
+            show_negative=show_negative
         )
-
-    def visualize_interactive(
-        self,
-        output_path: str = "temp_graph.html",
-        threshold: float = 0.1,
-        top_n: int = 50,
-        height: str = "600px",
-        width: str = "100%",
-        notebook: bool = False,
-        show_negative: bool = False,
-        highlight_nodes: Optional[List[str]] = None,
-        member_skills: Optional[List[str]] = None
-    ) -> str:
-        """
-        PyVisを用いてインタラクティブなHTMLグラフを生成し、パスを返す。
-        
-        Args:
-            output_path: 出力HTMLファイルのパス
-            threshold: エッジを表示する最小の係数（絶対値）
-            top_n: 表示する最大ノード数（中心性に基づく）
-            height: グラフの高さ
-            width: グラフの幅
-            notebook: Notebook環境かどうか
-            show_negative: 負の因果関係も表示するか（False=正のみ、True=正負両方）
-            
-        Returns:
-            str: 生成されたHTMLファイルのパス
-        """
-        if not PYVIS_AVAILABLE:
-            raise ImportError("pyvis is not installed. Please install it with: pip install pyvis>=0.3.2")
-        
-        # PyVisネットワークの初期化
-        net = Network(height=height, width=width, bgcolor="#ffffff", font_color="#333333", notebook=notebook)
-        # 物理演算の調整（安定化のため）
-        net.force_atlas_2based()
-        
-        # 1. ノードのフィルタリング（次数中心性で上位N個を選択）
-        # 隣接行列の絶対値を使用
-        abs_adj = self.adj_matrix.abs()
-        
-        # 次数（入次数 + 出次数）を計算
-        degrees = abs_adj.sum(axis=0) + abs_adj.sum(axis=1)
-        
-        # 上位N個のノードを取得
-        top_nodes = degrees.sort_values(ascending=False).head(top_n).index.tolist()
-        
-        # 2. ノードの追加
-        for node in top_nodes:
-            # ノードのサイズを次数に比例させる
-            size = 20 + degrees[node] * 3
-            
-            # 色の決定
-            # デフォルト: 白（将来のスキル）
-            color = {
-                'background': '#FFFFFF', 
-                'border': '#333333',
-                'highlight': {'background': '#F0F0F0', 'border': '#333333'}
-            }
-            font = {'color': '#333333'}
-            
-            if highlight_nodes and node in highlight_nodes:
-                # 推奨スキル: 青
-                color = {
-                    'background': '#E3F2FD', 
-                    'border': '#1976D2',
-                    'highlight': {'background': '#BBDEFB', 'border': '#1565C0'}
-                }
-                font = {'color': '#0D47A1', 'face': 'arial', 'size': 20}
-                size = 30 # 少し大きく
-                
-            elif member_skills and node in member_skills:
-                # 保有スキル: 緑
-                color = {
-                    'background': '#E8F5E9', 
-                    'border': '#388E3C',
-                    'highlight': {'background': '#C8E6C9', 'border': '#2E7D32'}
-                }
-                font = {'color': '#1B5E20'}
-            
-            net.add_node(
-                node, 
-                label=node, 
-                title=node, 
-                size=size, 
-                color=color,
-                font=font,
-                shape='box'
-            )
-            
-        # 3. エッジの追加
-        # 上位ノード間のエッジのみ追加
-        for from_node in top_nodes:
-            for to_node in top_nodes:
-                if from_node == to_node:
-                    continue
-                
-                weight = self.adj_matrix.loc[from_node, to_node]
-                
-                if abs(weight) >= threshold:
-                    # 負の因果関係をスキップする場合
-                    if not show_negative and weight < 0:
-                        continue
-                    
-                    # エッジの太さと色
-                    width_val = max(1, abs(weight) * 5)
-                    color = "#333333" if weight > 0 else "#DC3545" # Black for positive, Red for negative
-                    title = f"{from_node} -> {to_node}: {weight:.2f}"
-                    
-                    net.add_edge(
-                        from_node, 
-                        to_node, 
-                        value=abs(weight), 
-                        title=title, 
-                        color=color,
-                        width=width_val,
-                        arrowStrikethrough=False
-                    )
-        
-        # オプション設定（操作パネルを表示しない、物理演算を少し落ち着かせる）
-        net.set_options("""
-        var options = {
-          "physics": {
-            "forceAtlas2Based": {
-              "gravitationalConstant": -50,
-              "centralGravity": 0.01,
-              "springLength": 100,
-              "springConstant": 0.08
-            },
-            "maxVelocity": 50,
-            "solver": "forceAtlas2Based",
-            "timestep": 0.35,
-            "stabilization": {
-              "enabled": true,
-              "iterations": 150
-            }
-          },
-          "nodes": {
-            "font": {
-              "size": 14,
-              "face": "sans-serif"
-            }
-          },
-          "edges": {
-            "arrows": {
-              "to": {
-                "enabled": true,
-                "scaleFactor": 0.5
-              }
-            },
-            "smooth": {
-              "type": "continuous"
-            }
-          }
-        }
-        """)
-        
-        # 保存
-        # Streamlit Cloudなど書き込み権限の問題を回避するため、絶対パスを使用することを推奨
-        try:
-            net.save_graph(output_path)
-            return output_path
-        except Exception as e:
-            logger.error(f"グラフの保存に失敗しました: {e}")
-            # フォールバック: カレントディレクトリ
-            fallback_path = "temp_network.html"
-            net.save_graph(fallback_path)
-            return fallback_path
 
     def _filter_nodes_by_centrality(
         self,
@@ -426,9 +260,12 @@ class CausalGraphVisualizer:
         top_n: int = 50,
         centrality_method: str = "pagerank",
         highlight_nodes: Optional[List[str]] = None,
+        member_skills: Optional[List[str]] = None,
+        show_negative: bool = True,
         physics_enabled: bool = True,
         height: str = "750px",
-        width: str = "100%"
+        width: str = "100%",
+        notebook: bool = False
     ) -> str:
         """
         PyVisを用いてインタラクティブなHTMLグラフを生成
@@ -439,9 +276,12 @@ class CausalGraphVisualizer:
             top_n: 表示する最大ノード数（中心性でフィルタ）
             centrality_method: 中心性の計算方法 ("pagerank" または "degree")
             highlight_nodes: ハイライトするノード名のリスト
+            member_skills: メンバーが保有しているスキルのリスト
+            show_negative: 負の因果関係も表示するか（False=正のみ、True=正負両方）
             physics_enabled: 物理演算を有効にするか
             height: グラフの高さ
             width: グラフの幅
+            notebook: Notebook環境かどうか
 
         Returns:
             生成されたHTMLファイルのパス
@@ -496,10 +336,24 @@ class CausalGraphVisualizer:
             net.toggle_physics(False)
 
         highlight_set = set(highlight_nodes) if highlight_nodes else set()
+        member_skills_set = set(member_skills) if member_skills else set()
 
         # ノードを追加
         for node in selected_nodes:
-            color = "#97C2FC" if node in highlight_set else "#DDDDDD"
+            # 色の決定（優先順位: ハイライト > 保有スキル > デフォルト）
+            if node in highlight_set:
+                # ハイライトノード: 青
+                color = "#97C2FC"
+                size = 20
+            elif node in member_skills_set:
+                # 保有スキル: 緑
+                color = "#90EE90"
+                size = 17
+            else:
+                # デフォルト: グレー
+                color = "#DDDDDD"
+                size = 15
+
             title = f"<b>{node}</b>"  # ホバー時の情報
 
             net.add_node(
@@ -507,7 +361,7 @@ class CausalGraphVisualizer:
                 label=node,
                 color=color,
                 title=title,
-                size=20 if node in highlight_set else 15,
+                size=size,
                 font={"size": 14}
             )
 
@@ -522,6 +376,10 @@ class CausalGraphVisualizer:
                 weight = self.adj_matrix.loc[from_node, to_node]
 
                 if abs(weight) >= threshold:
+                    # 負の因果関係をスキップする場合
+                    if not show_negative and weight < 0:
+                        continue
+
                     # 係数の大きさで線の太さを変える
                     edge_width = max(1, abs(weight) * 5)
 
