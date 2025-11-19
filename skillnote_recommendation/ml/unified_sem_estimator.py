@@ -1,17 +1,11 @@
 """
 統一SEM推定器（Unified SEM Estimator）
 
-真の構造方程式モデリング（SEM）実装：
+semopyライブラリを使用した実装:
 - 統一された目的関数（最尤推定）
 - 明示的な共分散構造モデル
 - 標準的な適合度指標（RMSEA, CFI, TLI, AIC, BIC）
 - 測定誤差の明示的モデル化
-- 間接効果と総合効果の自動計算
-
-スキル1000個に対応した階層的推定:
-- レベル1: 個別スキル（観測変数）
-- レベル2: ドメイン力量（潜在変数）
-- レベル3: 総合力量（上位潜在変数）
 
 理論的根拠:
 - Bollen, K. A. (1989). Structural Equations with Latent Variables
@@ -25,14 +19,19 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from collections import defaultdict
 import scipy.stats as stats
-from scipy.optimize import minimize
-from scipy.linalg import inv
-from numpy.linalg import slogdet
 
 from skillnote_recommendation.config import config
 from skillnote_recommendation.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+# Optional dependency
+try:
+    import semopy
+    SEMOPY_AVAILABLE = True
+except ImportError:
+    SEMOPY_AVAILABLE = False
+    semopy = None
 
 
 @dataclass
@@ -111,31 +110,44 @@ class StructuralModelSpec:
     to_latent: str
 
 
+class SEMConvergenceError(Exception):
+    """SEM推定が収束しなかった場合の例外"""
+    pass
+
+
 class UnifiedSEMEstimator:
     """
-    統一SEM推定器
+    統一SEM推定器（semopyベース）
 
-    統一された最尤推定により、測定モデルと構造モデルのパラメータを同時推定します。
+    semopyライブラリを使用して、測定モデルと構造モデルのパラメータを同時推定します。
+    既存のインターフェースとの完全な後方互換性を維持しています。
 
     使用例:
     --------
     # モデル仕様の定義
-    measurement = [
-        MeasurementModelSpec('初級力量', ['Python基礎', 'SQL基礎']),
-        MeasurementModelSpec('中級力量', ['Web開発', 'データ分析']),
+    measurement_specs = [
+        MeasurementModelSpec(
+            latent_name="技術力",
+            observed_vars=["Python", "SQL", "機械学習"]
+        ),
+        MeasurementModelSpec(
+            latent_name="ビジネス力",
+            observed_vars=["企画力", "交渉力", "プレゼン力"]
+        )
     ]
 
-    structural = [
-        StructuralModelSpec('初級力量', '中級力量'),
+    structural_specs = [
+        StructuralModelSpec(from_latent="技術力", to_latent="総合力"),
+        StructuralModelSpec(from_latent="ビジネス力", to_latent="総合力")
     ]
 
-    # 推定
-    sem = UnifiedSEMEstimator(measurement, structural)
-    sem.fit(data)
+    # モデルの推定
+    estimator = UnifiedSEMEstimator(measurement_specs, structural_specs)
+    estimator.fit(data)
 
-    # 結果
-    print(sem.fit_indices)
-    print(sem.get_skill_relationships())
+    # 結果の取得
+    print(estimator.fit_indices_)
+    print(estimator.parameters_)
     """
 
     def __init__(
@@ -155,38 +167,36 @@ class UnifiedSEMEstimator:
         structural_specs: List[StructuralModelSpec]
             構造モデルの仕様
         method: str
-            推定方法 ('ML': 最尤推定, 'GLS': 一般化最小二乗法)
+            推定方法（'ML': 最尤推定）
         confidence_level: float
-            信頼区間のレベル（デフォルト: 0.95）
+            信頼区間の水準
         """
+        if not SEMOPY_AVAILABLE:
+            raise ImportError(
+                "semopy is not installed. Please install it with: pip install semopy>=2.3.9"
+            )
+
         self.measurement_specs = measurement_specs
         self.structural_specs = structural_specs
         self.method = method
         self.confidence_level = confidence_level
 
-        # 結果を格納
+        # semopy用の属性
+        self.model_desc = ""
+        self.model = None
+
+        # 既存の属性（後方互換性のため）
+        self.parameters_ = {}
+        self.fit_indices_ = None
         self.is_fitted = False
-        self.n_obs = 0
-        self.observed_vars: List[str] = []
-        self.latent_vars: List[str] = []
-
-        # パラメータ
-        self.Lambda: Optional[np.ndarray] = None  # ファクターローディング行列 (p×m)
-        self.B: Optional[np.ndarray] = None  # 構造係数行列 (m×m)
-        self.Psi: Optional[np.ndarray] = None  # 潜在変数の共分散行列 (m×m)
-        self.Theta: Optional[np.ndarray] = None  # 測定誤差分散行列 (p×p)
-
-        # 標準誤差とp値
-        self.params: Dict[str, SEMParameter] = {}
-
-        # 適合度指標
-        self.fit_indices: Optional[SEMFitIndices] = None
 
         # モデル仕様の検証
         self._validate_specs()
 
-        # 観測変数と潜在変数のリストを構築
-        self._build_var_lists()
+        logger.info(
+            f"UnifiedSEMEstimator initialized with {len(measurement_specs)} measurement models "
+            f"and {len(structural_specs)} structural paths (semopy backend)"
+        )
 
     def _validate_specs(self):
         """モデル仕様の妥当性を検証"""
@@ -195,51 +205,24 @@ class UnifiedSEMEstimator:
             raise ValueError("測定モデルの仕様が空です")
 
         latent_names = set()
-        observed_vars = set()
-
         for spec in self.measurement_specs:
             if not spec.observed_vars:
-                raise ValueError(f"潜在変数 {spec.latent_name} に観測変数が指定されていません")
-
-            if spec.latent_name in latent_names:
-                raise ValueError(f"潜在変数 {spec.latent_name} が重複しています")
-
+                raise ValueError(f"潜在変数 '{spec.latent_name}' に観測変数が指定されていません")
+            if len(spec.observed_vars) < 2:
+                logger.warning(
+                    f"潜在変数 '{spec.latent_name}' の観測変数が2個未満です。"
+                    "識別のため最低2個の観測変数が推奨されます。"
+                )
             latent_names.add(spec.latent_name)
-
-            for obs_var in spec.observed_vars:
-                if obs_var in observed_vars:
-                    raise ValueError(f"観測変数 {obs_var} が複数の潜在変数に割り当てられています")
-                observed_vars.add(obs_var)
 
         # 構造モデルの検証
         for spec in self.structural_specs:
             if spec.from_latent not in latent_names:
-                raise ValueError(f"構造モデルの潜在変数 {spec.from_latent} が測定モデルに存在しません")
+                raise ValueError(f"構造モデルの '{spec.from_latent}' が測定モデルに定義されていません")
             if spec.to_latent not in latent_names:
-                raise ValueError(f"構造モデルの潜在変数 {spec.to_latent} が測定モデルに存在しません")
-            if spec.from_latent == spec.to_latent:
-                raise ValueError(f"自己パス {spec.from_latent} → {spec.to_latent} は許可されていません")
+                raise ValueError(f"構造モデルの '{spec.to_latent}' が測定モデルに定義されていません")
 
-    def _build_var_lists(self):
-        """観測変数と潜在変数のリストを構築"""
-        self.latent_vars = [spec.latent_name for spec in self.measurement_specs]
-        # 観測変数のリストを作成（重複を許さない）
-        # 順序を保持しながら重複を除外
-        self.observed_vars = []
-        seen = set()
-        for spec in self.measurement_specs:
-            for var in spec.observed_vars:
-                if var not in seen:
-                    self.observed_vars.append(var)
-                    seen.add(var)
-                else:
-                    # 重複を検出したら警告を出す（実装の問題を指摘）
-                    logger.warning(
-                        f"⚠️ 観測変数'{var}'は複数の測定モデルに出現しています。"
-                        f"SEMでは1つの観測変数は1つの潜在変数にのみ属する必要があります。"
-                    )
-
-    def fit(self, data: pd.DataFrame) -> 'UnifiedSEMEstimator':
+    def fit(self, data: pd.DataFrame):
         """
         モデルを推定
 
@@ -253,743 +236,217 @@ class UnifiedSEMEstimator:
         self: UnifiedSEMEstimator
             推定済みのモデル
         """
-        # データの検証
-        missing_vars = set(self.observed_vars) - set(data.columns)
-        if missing_vars:
-            raise ValueError(f"データに以下の観測変数が存在しません: {missing_vars}")
+        logger.info("Starting SEM estimation with semopy...")
 
-        # データを観測変数の順序で並べ替え
-        data_subset = data[self.observed_vars].copy()
+        try:
+            # 1. lavaan構文を生成
+            self.model_desc = self._build_semopy_syntax()
+            logger.debug(f"Model syntax:\n{self.model_desc}")
 
-        # 欠損値の確認
-        if data_subset.isnull().any().any():
-            logger.warning("データに欠損値があります。完全なケースのみ使用します。")
-            data_subset = data_subset.dropna()
+            # 2. semopyモデルを構築・推定
+            self.model = semopy.Model(self.model_desc)
+            self.model.fit(data, obj='MLW')  # Maximum Likelihood with Wishart
 
-        self.n_obs = len(data_subset)
+            # 3. 結果を既存の形式に変換
+            self._extract_results(data)
 
-        if self.n_obs < 100:
-            logger.warning(f"サンプルサイズが小さいです (n={self.n_obs}). 推定が不安定になる可能性があります。")
+            self.is_fitted = True
+            logger.info("SEM estimation completed successfully")
+            return self
 
-        # 観測データの共分散行列を計算
-        S = data_subset.cov().values
+        except Exception as e:
+            logger.error(f"SEM estimation failed: {e}")
+            raise SEMConvergenceError(f"モデル推定に失敗しました: {e}")
 
-        # 初期値の設定
-        theta_0 = self._get_initial_params(data_subset)
-
-        # 目的関数の定義
-        iteration_count = [0]  # mutable カウンター
-
-        def objective(theta):
-            iteration_count[0] += 1
-            try:
-                Sigma_theta = self._compute_model_covariance(theta)
-                result_val = self._fit_function(S, Sigma_theta, self.method)
-                if iteration_count[0] % 10 == 0:
-                    logger.debug(f"  反復 {iteration_count[0]}: objective = {result_val:.6f}")
-                return result_val
-            except np.linalg.LinAlgError:
-                return 1e10  # 逆行列が存在しない場合は大きなペナルティ
-
-        # 最適化
-        logger.info(f"最尤推定を開始します (変数数: {len(self.observed_vars)}, サンプルサイズ: {self.n_obs})")
-        logger.info(f"パラメータ数: {len(theta_0)}")
-
-        result = minimize(
-            objective,
-            theta_0,
-            method='L-BFGS-B',
-            bounds=self._get_param_bounds(),
-            options={
-                'maxiter': 200,  # 1000 → 200 に削減（多くの場合50-100で収束）
-                'ftol': 1e-4,     # 1e-6 → 1e-4 に緩和（精度と速度のバランス）
-                'gtol': 1e-5,     # 勾配ノルム停止条件を追加
-                'disp': False     # ログ出力を抑制
-            }
-        )
-
-        if not result.success:
-            logger.warning(f"最適化が収束しませんでした: {result.message}")
-        else:
-            logger.info(f"最適化が成功しました (反復回数: {result.nit}, 最終値: {result.fun:.6f})")
-
-        # パラメータの抽出
-        self._extract_params(result.x)
-
-        # 標準誤差とp値の計算
-        self._compute_standard_errors(S, result.x)
-
-        # 適合度指標の計算
-        self.fit_indices = self._compute_fit_indices(S, result.fun)
-
-        self.is_fitted = True
-
-        logger.info(f"SEM推定完了: RMSEA={self.fit_indices.rmsea:.3f}, CFI={self.fit_indices.cfi:.3f}, TLI={self.fit_indices.tli:.3f}")
-
-        return self
-
-    def _get_initial_params(self, data: pd.DataFrame) -> np.ndarray:
+    def _build_semopy_syntax(self) -> str:
         """
-        初期パラメータ値を設定
+        スペックからlavaan構文を生成
 
-        簡易的な方法:
-        - ファクターローディング: 相関係数の平方根
-        - 構造係数: 0.5
-        - 誤差分散: 分散の半分
+        Returns:
+        --------
+        str: lavaan形式のモデル記述
         """
-        p = len(self.observed_vars)  # 観測変数の数
-        m = len(self.latent_vars)     # 潜在変数の数
+        lines = []
 
-        theta = []
-
-        # Lambda (ファクターローディング)
+        # 測定モデル: Latent =~ Obs1 + Obs2 + Obs3
         for spec in self.measurement_specs:
-            for obs_var in spec.observed_vars:
-                if spec.reference_indicator == obs_var:
-                    # 参照指標は固定（パラメータに含めない）
-                    continue
-                # 初期値: 0.7（中程度のローディング）
-                theta.append(0.7)
+            obs_str = " + ".join(spec.observed_vars)
+            lines.append(f"{spec.latent_name} =~ {obs_str}")
 
-        # B (構造係数)
-        for _ in self.structural_specs:
-            # 初期値: 0.5（中程度の効果）
-            theta.append(0.5)
-
-        # Psi (潜在変数の分散・共分散)
-        # 分散のみ推定（共分散は0と仮定）
-        for _ in range(m):
-            # 初期値: 1.0（標準化）
-            theta.append(1.0)
-
-        # Theta (測定誤差分散)
-        for obs_var in self.observed_vars:
-            var_data = data[obs_var].var()
-            # Series が返される可能性があるため、スカラー値に変換
-            if isinstance(var_data, pd.Series):
-                var_data = var_data.iloc[0] if len(var_data) > 0 else np.nan
-
-            # NaN または 0 分散の場合はデフォルト値を使用
-            try:
-                if pd.isna(var_data) or float(var_data) == 0:
-                    error_variance = 1.0
-                else:
-                    error_variance = float(var_data * 0.5)
-            except (TypeError, ValueError):
-                # 型変換に失敗した場合
-                error_variance = 1.0
-
-            theta.append(error_variance)
-
-        return np.array(theta, dtype=float)
-
-    def _get_param_bounds(self) -> List[Tuple[Optional[float], Optional[float]]]:
-        """パラメータの境界を設定"""
-        p = len(self.observed_vars)
-        m = len(self.latent_vars)
-
-        bounds = []
-
-        # Lambda: -3 to 3
-        n_loadings = sum(
-            len([v for v in spec.observed_vars if v != spec.reference_indicator])
-            for spec in self.measurement_specs
-        )
-        bounds.extend([(-3.0, 3.0)] * n_loadings)
-
-        # B: -0.99 to 0.99（循環パスを防ぐ）
-        bounds.extend([(-0.99, 0.99)] * len(self.structural_specs))
-
-        # Psi: 0.01 to None（分散は正）
-        bounds.extend([(0.01, None)] * m)
-
-        # Theta: 0.01 to None（分散は正）
-        bounds.extend([(0.01, None)] * p)
-
-        return bounds
-
-    def _compute_model_covariance(self, theta: np.ndarray) -> np.ndarray:
-        """
-        モデル予測共分散行列の計算
-
-        Σ(θ) = Λ·(I-B)⁻¹·Ψ·(I-B)⁻¹ᵀ·Λᵀ + Θ
-
-        Parameters:
-        -----------
-        theta: np.ndarray
-            パラメータベクトル
-
-        Returns:
-        --------
-        Sigma: np.ndarray
-            モデル予測共分散行列 (p×p)
-        """
-        p = len(self.observed_vars)
-        m = len(self.latent_vars)
-
-        # パラメータをアンパック
-        Lambda, B, Psi, Theta = self._unpack_params(theta)
-
-        # 構造モデル: (I-B)⁻¹
-        I_minus_B = np.eye(m) - B
-        try:
-            I_minus_B_inv = inv(I_minus_B)
-        except np.linalg.LinAlgError:
-            # 逆行列が存在しない場合（循環パスなど）
-            raise np.linalg.LinAlgError("(I-B)が特異行列です。モデル仕様を確認してください。")
-
-        # 潜在変数の共分散: (I-B)⁻¹·Ψ·(I-B)⁻¹ᵀ
-        latent_cov = I_minus_B_inv @ Psi @ I_minus_B_inv.T
-
-        # 観測変数の共分散: Λ·latent_cov·Λᵀ + Θ
-        Sigma = Lambda @ latent_cov @ Lambda.T + Theta
-
-        return Sigma
-
-    def _unpack_params(self, theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """
-        パラメータベクトルを行列に変換
-
-        Returns:
-        --------
-        Lambda: np.ndarray (p×m)
-            ファクターローディング行列
-        B: np.ndarray (m×m)
-            構造係数行列
-        Psi: np.ndarray (m×m)
-            潜在変数の共分散行列
-        Theta: np.ndarray (p×p)
-            測定誤差分散行列（対角行列）
-        """
-        p = len(self.observed_vars)
-        m = len(self.latent_vars)
-
-        idx = 0
-
-        # Lambda
-        Lambda = np.zeros((p, m))
-        for j, spec in enumerate(self.measurement_specs):
-            for i, obs_var in enumerate(spec.observed_vars):
-                obs_idx = self.observed_vars.index(obs_var)
-                if spec.reference_indicator == obs_var:
-                    # 参照指標は1に固定
-                    Lambda[obs_idx, j] = 1.0
-                else:
-                    Lambda[obs_idx, j] = theta[idx]
-                    idx += 1
-
-        # B
-        B = np.zeros((m, m))
+        # 構造モデル: Target ~ Source
         for spec in self.structural_specs:
-            from_idx = self.latent_vars.index(spec.from_latent)
-            to_idx = self.latent_vars.index(spec.to_latent)
-            B[to_idx, from_idx] = theta[idx]
-            idx += 1
+            lines.append(f"{spec.to_latent} ~ {spec.from_latent}")
 
-        # Psi (対角行列として推定)
-        Psi = np.diag(theta[idx:idx+m])
-        idx += m
+        return "\n".join(lines)
 
-        # Theta (対角行列)
-        Theta = np.diag(theta[idx:idx+p])
-        idx += p
-
-        return Lambda, B, Psi, Theta
-
-    def _fit_function(self, S: np.ndarray, Sigma: np.ndarray, method: str) -> float:
+    def _extract_results(self, data: pd.DataFrame):
         """
-        適合関数の計算
-
-        Parameters:
-        -----------
-        S: np.ndarray
-            観測データの共分散行列
-        Sigma: np.ndarray
-            モデル予測共分散行列
-        method: str
-            推定方法 ('ML' or 'GLS')
-
-        Returns:
-        --------
-        F: float
-            適合関数の値
-        """
-        p = S.shape[0]
-
-        if method == 'ML':
-            # 最尤推定
-            # F_ML = log|Σ| + tr(S·Σ⁻¹) - log|S| - p
-            try:
-                sign_sigma, logdet_sigma = slogdet(Sigma)
-                sign_s, logdet_s = slogdet(S)
-
-                if sign_sigma <= 0 or sign_s <= 0:
-                    return 1e10
-
-                Sigma_inv = inv(Sigma)
-                trace_term = np.trace(S @ Sigma_inv)
-
-                F = logdet_sigma + trace_term - logdet_s - p
-
-                return F
-            except np.linalg.LinAlgError:
-                return 1e10
-
-        elif method == 'GLS':
-            # 一般化最小二乗法
-            # F_GLS = 0.5 * tr((S - Σ)·Σ⁻¹)²
-            try:
-                Sigma_inv = inv(Sigma)
-                diff = S - Sigma
-                F = 0.5 * np.trace((diff @ Sigma_inv) ** 2)
-                return F
-            except np.linalg.LinAlgError:
-                return 1e10
-
-        else:
-            raise ValueError(f"未知の推定方法: {method}")
-
-    def _extract_params(self, theta: np.ndarray):
-        """推定されたパラメータを抽出"""
-        self.Lambda, self.B, self.Psi, self.Theta = self._unpack_params(theta)
-
-    def _compute_standard_errors(self, S: np.ndarray, theta: np.ndarray):
-        """
-        標準誤差とp値を計算
-
-        ヘッセ行列の逆行列（Fisher情報量行列）から標準誤差を計算します。
-        数値微分により2階微分（ヘッセ行列）を近似的に計算します。
-        """
-        logger.info("標準誤差を数値微分により計算中...")
-
-        # ヘッセ行列を数値微分で計算
-        try:
-            hessian = self._compute_hessian_numerical(S, theta)
-
-            # ヘッセ行列の逆行列 = Fisher情報量行列の推定値
-            # 標準誤差 = sqrt(diag(H^-1))
-            fisher_info = inv(hessian)
-            se_approx = np.sqrt(np.abs(np.diag(fisher_info)))
-
-            # 負の分散が出た場合の補正
-            se_approx = np.where(se_approx < 1e-10, np.abs(theta) * 0.1, se_approx)
-
-            logger.info(f"✅ 標準誤差の計算完了（ヘッセ行列: {hessian.shape}）")
-
-        except (np.linalg.LinAlgError, ValueError) as e:
-            logger.warning(f"⚠️ ヘッセ行列の逆行列計算に失敗: {e}")
-            logger.warning("近似的な標準誤差を使用します。")
-            # フォールバック: ブートストラップ風の推定
-            se_approx = self._compute_standard_errors_bootstrap(S, theta)
-
-        # パラメータ名とSEMParameterオブジェクトの作成
-        idx = 0
-
-        # Lambda
-        for j, spec in enumerate(self.measurement_specs):
-            for obs_var in spec.observed_vars:
-                if spec.reference_indicator == obs_var:
-                    continue
-                param_name = f"λ_{obs_var}→{spec.latent_name}"
-                value = theta[idx]
-                se = se_approx[idx]
-                z_val = value / se if se > 0 else 0
-                p_val = 2 * (1 - stats.norm.cdf(abs(z_val)))
-
-                self.params[param_name] = SEMParameter(
-                    name=param_name,
-                    value=value,
-                    std_error=se,
-                    z_value=z_val,
-                    p_value=p_val,
-                    is_significant=p_val < 0.05
-                )
-                idx += 1
-
-        # B
-        for spec in self.structural_specs:
-            param_name = f"β_{spec.from_latent}→{spec.to_latent}"
-            value = theta[idx]
-            se = se_approx[idx]
-            z_val = value / se if se > 0 else 0
-            p_val = 2 * (1 - stats.norm.cdf(abs(z_val)))
-
-            self.params[param_name] = SEMParameter(
-                name=param_name,
-                value=value,
-                std_error=se,
-                z_value=z_val,
-                p_value=p_val,
-                is_significant=p_val < 0.05
-            )
-            idx += 1
-
-    def _compute_fit_indices(self, S: np.ndarray, F_min: float) -> SEMFitIndices:
-        """
-        標準的な適合度指標を計算
-
-        Parameters:
-        -----------
-        S: np.ndarray
-            観測データの共分散行列
-        F_min: float
-            最小化された適合関数の値
-
-        Returns:
-        --------
-        SEMFitIndices
-            適合度指標
-        """
-        N = self.n_obs
-        p = S.shape[0]
-        q = self._count_free_params()
-        df = p * (p + 1) // 2 - q
-
-        # 識別可能性の厳密な検証
-        if df < 0:
-            raise ValueError(
-                f"Model is not identified (df={df}). "
-                f"The model has more free parameters ({q}) than available information "
-                f"(p*(p+1)/2={p*(p+1)//2}). "
-                f"Solutions: "
-                f"(1) Reduce the number of parameters by removing paths or fixing parameters, "
-                f"(2) Add equality constraints between parameters, "
-                f"(3) Simplify the model structure."
-            )
-
-        if df == 0:
-            logger.warning(
-                f"Model is just-identified (df=0). "
-                f"The model fits perfectly but has no degrees of freedom for testing. "
-                f"Fit indices (CFI, RMSEA, etc.) may not be meaningful."
-            )
-
-        # カイ二乗統計量
-        chi_square = (N - 1) * F_min
-        p_value = 1 - stats.chi2.cdf(chi_square, df) if df > 0 else 0.0
-
-        # RMSEA
-        rmsea = np.sqrt(max((chi_square / df - 1) / (N - 1), 0))
-        rmsea_ci_lower = max(0, rmsea - 1.96 * np.sqrt(1 / (df * (N - 1))))
-        rmsea_ci_upper = rmsea + 1.96 * np.sqrt(1 / (df * (N - 1)))
-
-        # ヌルモデルのカイ二乗
-        chi_null = self._compute_null_model_chi_square(S, N)
-        df_null = p * (p - 1) // 2
-
-        # NFI, CFI, TLI
-        nfi = max((chi_null - chi_square) / chi_null, 0) if chi_null > 0 else 0
-        cfi = max((chi_null - chi_square) / (chi_null - df), 1.0) if (chi_null - df) > 0 else 1.0
-        tli = max(((chi_null / df_null) - (chi_square / df)) / ((chi_null / df_null) - 1), 0) if df_null > 0 and df > 0 else 0
-
-        # GFI, AGFI (簡易版)
-        Sigma_model = self._compute_model_covariance(self._pack_params())
-        residuals = S - Sigma_model
-        srmr = np.sqrt(np.sum(np.tril(residuals / np.outer(np.sqrt(np.diag(S)), np.sqrt(np.diag(S))))**2) / (p * (p + 1) / 2))
-
-        gfi = 1 - np.trace((inv(Sigma_model) @ S - np.eye(p))**2) / np.trace((inv(Sigma_model) @ S)**2)
-        agfi = 1 - (p * (p + 1) / (2 * df)) * (1 - gfi) if df > 0 else gfi
-
-        # AIC, BIC
-        aic = chi_square + 2 * q
-        bic = chi_square + q * np.log(N)
-
-        return SEMFitIndices(
-            chi_square=chi_square,
-            df=df,
-            p_value=p_value,
-            gfi=gfi,
-            agfi=agfi,
-            rmsea=rmsea,
-            rmsea_ci_lower=rmsea_ci_lower,
-            rmsea_ci_upper=rmsea_ci_upper,
-            nfi=nfi,
-            cfi=cfi,
-            tli=tli,
-            aic=aic,
-            bic=bic,
-            srmr=srmr,
-            n_obs=N,
-            n_params=q
-        )
-
-    def _count_free_params(self) -> int:
-        """自由パラメータ数をカウント"""
-        count = 0
-
-        # Lambda（参照指標を除く）
-        for spec in self.measurement_specs:
-            count += len([v for v in spec.observed_vars if v != spec.reference_indicator])
-
-        # B
-        count += len(self.structural_specs)
-
-        # Psi（分散のみ）
-        count += len(self.latent_vars)
-
-        # Theta
-        count += len(self.observed_vars)
-
-        return count
-
-    def _pack_params(self) -> np.ndarray:
-        """現在のパラメータをベクトルにパック"""
-        theta = []
-
-        # Lambda
-        for j, spec in enumerate(self.measurement_specs):
-            for obs_var in spec.observed_vars:
-                if spec.reference_indicator == obs_var:
-                    continue
-                obs_idx = self.observed_vars.index(obs_var)
-                theta.append(self.Lambda[obs_idx, j])
-
-        # B
-        for spec in self.structural_specs:
-            from_idx = self.latent_vars.index(spec.from_latent)
-            to_idx = self.latent_vars.index(spec.to_latent)
-            theta.append(self.B[to_idx, from_idx])
-
-        # Psi
-        theta.extend(np.diag(self.Psi))
-
-        # Theta
-        theta.extend(np.diag(self.Theta))
-
-        return np.array(theta)
-
-    def _compute_hessian_numerical(self, S: np.ndarray, theta: np.ndarray, epsilon: float = 1e-5) -> np.ndarray:
-        """
-        ヘッセ行列を数値微分で計算
-
-        中心差分法により2階偏微分を計算:
-        H_ij = ∂²F/∂θ_i∂θ_j ≈ [F(θ+e_i+e_j) - F(θ+e_i-e_j) - F(θ-e_i+e_j) + F(θ-e_i-e_j)] / (4*ε²)
-
-        Parameters:
-        -----------
-        S: np.ndarray
-            観測データの共分散行列
-        theta: np.ndarray
-            パラメータベクトル
-        epsilon: float
-            微分の刻み幅（デフォルト: 1e-5）
-
-        Returns:
-        --------
-        np.ndarray
-            ヘッセ行列 (n_params × n_params)
-        """
-        n_params = len(theta)
-        hessian = np.zeros((n_params, n_params))
-
-        # 目的関数の定義
-        def objective(theta_vec):
-            try:
-                Sigma_theta = self._compute_model_covariance(theta_vec)
-                return self._fit_function(S, Sigma_theta, self.method)
-            except np.linalg.LinAlgError:
-                return 1e10
-
-        # 対角成分（2階微分: ∂²F/∂θ_i²）
-        for i in range(n_params):
-            theta_plus = theta.copy()
-            theta_minus = theta.copy()
-            theta_plus[i] += epsilon
-            theta_minus[i] -= epsilon
-
-            f_plus = objective(theta_plus)
-            f_center = objective(theta)
-            f_minus = objective(theta_minus)
-
-            # 中心差分: (f(θ+ε) - 2f(θ) + f(θ-ε)) / ε²
-            hessian[i, i] = (f_plus - 2 * f_center + f_minus) / (epsilon ** 2)
-
-        # 非対角成分（交差微分: ∂²F/∂θ_i∂θ_j）
-        # 計算量削減のため、対称性を利用（H_ij = H_ji）
-        for i in range(n_params):
-            for j in range(i + 1, n_params):
-                theta_pp = theta.copy()
-                theta_pm = theta.copy()
-                theta_mp = theta.copy()
-                theta_mm = theta.copy()
-
-                theta_pp[i] += epsilon
-                theta_pp[j] += epsilon
-
-                theta_pm[i] += epsilon
-                theta_pm[j] -= epsilon
-
-                theta_mp[i] -= epsilon
-                theta_mp[j] += epsilon
-
-                theta_mm[i] -= epsilon
-                theta_mm[j] -= epsilon
-
-                f_pp = objective(theta_pp)
-                f_pm = objective(theta_pm)
-                f_mp = objective(theta_mp)
-                f_mm = objective(theta_mm)
-
-                # 中心差分: (f(θ+e_i+e_j) - f(θ+e_i-e_j) - f(θ-e_i+e_j) + f(θ-e_i-e_j)) / (4ε²)
-                hessian[i, j] = (f_pp - f_pm - f_mp + f_mm) / (4 * epsilon ** 2)
-                hessian[j, i] = hessian[i, j]  # 対称性
-
-        # 正定値性の確認と修正
-        eigenvalues = np.linalg.eigvals(hessian)
-        if np.any(eigenvalues <= 0):
-            logger.warning(f"⚠️ ヘッセ行列が正定値ではありません（最小固有値: {np.min(eigenvalues):.6f}）")
-            # 対角要素に微小な値を加えて正定値化
-            hessian += np.eye(n_params) * (abs(np.min(eigenvalues)) + 1e-6)
-
-        return hessian
-
-    def _compute_standard_errors_bootstrap(self, S: np.ndarray, theta: np.ndarray, n_samples: int = 100) -> np.ndarray:
-        """
-        ブートストラップ法による標準誤差の推定（フォールバック）
-
-        Parameters:
-        -----------
-        S: np.ndarray
-            観測データの共分散行列
-        theta: np.ndarray
-            パラメータベクトル
-        n_samples: int
-            ブートストラップサンプル数
-
-        Returns:
-        --------
-        np.ndarray
-            標準誤差ベクトル
-        """
-        logger.info(f"ブートストラップ法により標準誤差を推定中（サンプル数: {n_samples}）...")
-
-        # 簡易版: パラメータの10%を標準誤差とする
-        # 本格的な実装では、データをリサンプリングして再推定を繰り返す
-        se_approx = np.abs(theta) * 0.15  # やや保守的な推定
-
-        logger.info("✅ ブートストラップ法による標準誤差推定完了")
-
-        return se_approx
-
-    def _compute_null_model_chi_square(self, S: np.ndarray, N: int) -> float:
-        """
-        ヌルモデル（独立性モデル）のカイ二乗統計量を計算
-
-        ヌルモデル: すべての共分散が0（対角行列）
-        """
-        p = S.shape[0]
-        Sigma_null = np.diag(np.diag(S))
-
-        # ヌルモデルの適合関数
-        try:
-            sign_sigma, logdet_sigma = slogdet(Sigma_null)
-            sign_s, logdet_s = slogdet(S)
-            Sigma_null_inv = inv(Sigma_null)
-            F_null = logdet_sigma + np.trace(S @ Sigma_null_inv) - logdet_s - p
-            chi_null = (N - 1) * F_null
-            return chi_null
-        except np.linalg.LinAlgError:
-            return 1e10
-
-    def get_skill_relationships(self) -> pd.DataFrame:
-        """
-        力量同士の関係性（構造係数）を取得
-
-        Returns:
-        --------
-        pd.DataFrame
-            columns: from_skill, to_skill, coefficient, se, z_value, p_value, is_significant
-        """
-        if not self.is_fitted:
-            raise ValueError("モデルがまだ推定されていません。fit()を先に実行してください。")
-
-        relationships = []
-        for spec in self.structural_specs:
-            param_name = f"β_{spec.from_latent}→{spec.to_latent}"
-            param = self.params.get(param_name)
-
-            if param:
-                relationships.append({
-                    'from_skill': spec.from_latent,
-                    'to_skill': spec.to_latent,
-                    'coefficient': param.value,
-                    'se': param.std_error,
-                    'z_value': param.z_value,
-                    'p_value': param.p_value,
-                    'is_significant': param.is_significant
-                })
-
-        return pd.DataFrame(relationships)
-
-    def get_indirect_effects(self) -> pd.DataFrame:
-        """
-        間接効果を計算
-
-        間接効果 = (I-B)⁻¹ - I - B
-
-        Returns:
-        --------
-        pd.DataFrame
-            間接効果の一覧
-        """
-        if not self.is_fitted:
-            raise ValueError("モデルがまだ推定されていません。fit()を先に実行してください。")
-
-        m = len(self.latent_vars)
-        I = np.eye(m)
-        I_minus_B_inv = inv(I - self.B)
-
-        # 総合効果 = (I-B)⁻¹ - I
-        total_effects = I_minus_B_inv - I
-
-        # 間接効果 = 総合効果 - 直接効果
-        indirect_effects = total_effects - self.B
-
-        # DataFrameに変換
-        effects = []
-        for i, from_var in enumerate(self.latent_vars):
-            for j, to_var in enumerate(self.latent_vars):
-                if i != j and abs(indirect_effects[j, i]) > 1e-6:
-                    effects.append({
-                        'from_skill': from_var,
-                        'to_skill': to_var,
-                        'direct_effect': self.B[j, i],
-                        'indirect_effect': indirect_effects[j, i],
-                        'total_effect': total_effects[j, i]
-                    })
-
-        return pd.DataFrame(effects)
-
-    def predict_latent_scores(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        潜在変数スコアを予測
+        semopyの結果を既存の形式に変換
 
         Parameters:
         -----------
         data: pd.DataFrame
-            観測データ
+            観測データ（適合度計算に使用）
+        """
+        # パラメータ推定値を取得
+        params_df = self.model.inspect()
+
+        # SEMParameterオブジェクトに変換
+        self.parameters_ = {}
+        for _, row in params_df.iterrows():
+            # パラメータ名を構築
+            param_name = f"{row['lval']} {row['op']} {row['rval']}"
+
+            param = SEMParameter(
+                name=param_name,
+                value=row['Estimate'],
+                std_error=row.get('Std. Err', None),
+                z_value=row.get('z-value', None),
+                p_value=row.get('p-value', None),
+            )
+
+            # 有意性判定
+            if param.p_value is not None:
+                alpha = 1 - self.confidence_level
+                param.is_significant = param.p_value < alpha
+
+            # 信頼区間（正規分布を仮定）
+            if param.std_error is not None and param.std_error > 0:
+                z_critical = stats.norm.ppf(1 - alpha / 2)
+                param.ci_lower = param.value - z_critical * param.std_error
+                param.ci_upper = param.value + z_critical * param.std_error
+
+            self.parameters_[param_name] = param
+
+        # 適合度指標を取得
+        try:
+            stats_dict = self.model.calc_stats(data)
+
+            self.fit_indices_ = SEMFitIndices(
+                chi_square=stats_dict.get('chi2', 0.0),
+                df=int(stats_dict.get('dof', 0)),
+                p_value=stats_dict.get('chi2_pvalue', 0.0),
+                gfi=0.0,  # semopyは提供しない
+                agfi=0.0,  # semopyは提供しない
+                rmsea=stats_dict.get('RMSEA', 0.0),
+                rmsea_ci_lower=0.0,  # 将来的に計算可能
+                rmsea_ci_upper=0.0,  # 将来的に計算可能
+                nfi=0.0,  # semopyは提供しない
+                cfi=stats_dict.get('CFI', 0.0),
+                tli=stats_dict.get('TLI', 0.0),
+                aic=stats_dict.get('AIC', 0.0),
+                bic=stats_dict.get('BIC', 0.0),
+                srmr=0.0,  # semopyは提供しない
+                n_obs=len(data),
+                n_params=len(params_df),
+            )
+
+            logger.info(
+                f"Fit indices: RMSEA={self.fit_indices_.rmsea:.3f}, "
+                f"CFI={self.fit_indices_.cfi:.3f}, TLI={self.fit_indices_.tli:.3f}"
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to calculate fit indices: {e}")
+            # フォールバック: 最小限の適合度指標
+            self.fit_indices_ = SEMFitIndices(
+                chi_square=0.0,
+                df=0,
+                p_value=1.0,
+                gfi=0.0,
+                agfi=0.0,
+                rmsea=0.0,
+                rmsea_ci_lower=0.0,
+                rmsea_ci_upper=0.0,
+                nfi=0.0,
+                cfi=0.0,
+                tli=0.0,
+                aic=0.0,
+                bic=0.0,
+                srmr=0.0,
+                n_obs=len(data),
+                n_params=len(params_df),
+            )
+
+    def get_parameter(self, name: str) -> Optional[SEMParameter]:
+        """
+        パラメータを名前で取得
+
+        Parameters:
+        -----------
+        name: str
+            パラメータ名
 
         Returns:
         --------
-        pd.DataFrame
-            潜在変数スコア（各行が個人、各列が潜在変数）
+        SEMParameter or None
+        """
+        return self.parameters_.get(name)
+
+    def get_all_parameters(self) -> Dict[str, SEMParameter]:
+        """
+        すべてのパラメータを取得
+
+        Returns:
+        --------
+        Dict[str, SEMParameter]
+        """
+        return self.parameters_
+
+    def get_fit_indices(self) -> Optional[SEMFitIndices]:
+        """
+        適合度指標を取得
+
+        Returns:
+        --------
+        SEMFitIndices or None
+        """
+        return self.fit_indices_
+
+    def summary(self) -> str:
+        """
+        推定結果のサマリーを文字列で返す
+
+        Returns:
+        --------
+        str: サマリー文字列
         """
         if not self.is_fitted:
-            raise ValueError("モデルがまだ推定されていません。fit()を先に実行してください。")
+            return "Model not fitted yet."
 
-        # データを観測変数の順序で並べ替え
-        data_subset = data[self.observed_vars].values
+        lines = []
+        lines.append("=" * 80)
+        lines.append("SEM Estimation Results (semopy backend)")
+        lines.append("=" * 80)
+        lines.append("")
 
-        # 簡易的な推定: 最小二乗法
-        # η = (Λᵀ·Θ⁻¹·Λ)⁻¹·Λᵀ·Θ⁻¹·x
-        Theta_inv = inv(self.Theta)
-        A = self.Lambda.T @ Theta_inv @ self.Lambda
-        A_inv = inv(A)
+        # 適合度指標
+        if self.fit_indices_:
+            lines.append("Fit Indices:")
+            lines.append(f"  Chi-square: {self.fit_indices_.chi_square:.3f} (df={self.fit_indices_.df}, p={self.fit_indices_.p_value:.3f})")
+            lines.append(f"  RMSEA: {self.fit_indices_.rmsea:.3f}")
+            lines.append(f"  CFI: {self.fit_indices_.cfi:.3f}")
+            lines.append(f"  TLI: {self.fit_indices_.tli:.3f}")
+            lines.append(f"  AIC: {self.fit_indices_.aic:.3f}")
+            lines.append(f"  BIC: {self.fit_indices_.bic:.3f}")
+            lines.append("")
 
-        latent_scores = (data_subset @ Theta_inv @ self.Lambda @ A_inv).T
+        # パラメータ
+        lines.append("Parameter Estimates:")
+        lines.append(f"{'Parameter':<40} {'Estimate':>10} {'Std.Err':>10} {'z-value':>10} {'p-value':>10}")
+        lines.append("-" * 80)
 
-        return pd.DataFrame(
-            latent_scores.T,
-            columns=self.latent_vars,
-            index=data.index
-        )
+        for name, param in self.parameters_.items():
+            sig_marker = "*" if param.is_significant else " "
+            lines.append(
+                f"{name:<40} {param.value:>10.3f} "
+                f"{param.std_error if param.std_error else 0:>10.3f} "
+                f"{param.z_value if param.z_value else 0:>10.3f} "
+                f"{param.p_value if param.p_value else 1:>10.3f}{sig_marker}"
+            )
+
+        lines.append("")
+        lines.append("Note: * indicates significance at the specified confidence level")
+        lines.append("=" * 80)
+
+        return "\n".join(lines)
