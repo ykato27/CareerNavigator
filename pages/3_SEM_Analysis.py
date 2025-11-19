@@ -88,6 +88,19 @@ def load_skill_dependency_analyzer():
     spec.loader.exec_module(module)
     return module
 
+def load_efa():
+    """ExploratoryFactorAnalyzerを動的にロード"""
+    core_dir = project_root / "skillnote_recommendation" / "core"
+    efa_path = core_dir / "exploratory_factor_analysis.py"
+
+    spec = importlib.util.spec_from_file_location(
+        "exploratory_factor_analysis",
+        str(efa_path)
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 def load_visualization_utils():
     """visualization utilsを動的にロード"""
     utils_dir = project_root / "skillnote_recommendation" / "utils"
@@ -814,6 +827,66 @@ if model_type == "UnifiedSEM（実データ）":
                 selected_competences = pd.DataFrame()
                 total_skills = 0
 
+    # EFAオプション
+    st.markdown("---")
+    st.markdown("### ⚙️ 分析オプション")
+
+    use_efa = False
+    n_efa_factors = None
+
+    if total_skills >= 50:  # 50スキル以上でEFAオプションを表示
+        with st.expander("🔬 探索的因子分析（EFA）オプション", expanded=(total_skills >= 150)):
+            st.markdown("""
+            **探索的因子分析（EFA）とは？**
+
+            データから自動的に潜在因子を発見する手法です。事前に定義されたカテゴリーに依存せず、
+            スキル間の相関構造から「実際にどのような能力の次元があるか」を統計的に推定します。
+
+            **メリット:**
+            - 🚀 **高速化**: 因子数が少なくなるため、大規模データ（150+スキル）で特に効果的
+            - 📊 **データ駆動**: カテゴリー定義の誤りに影響されない
+            - 🔍 **新発見**: 既存カテゴリーでは捉えられない能力の次元を発見できる可能性
+
+            **推奨:**
+            - スキル数150+: 強く推奨
+            - スキル数100-149: 推奨
+            - スキル数50-99: オプション
+            """)
+
+            if total_skills >= 150:
+                st.info(f"💡 現在のスキル数（{total_skills}個）ではEFAの使用を強く推奨します。")
+                default_use_efa = True
+            elif total_skills >= 100:
+                st.info(f"💡 現在のスキル数（{total_skills}個）ではEFAの使用を推奨します。")
+                default_use_efa = True
+            else:
+                default_use_efa = False
+
+            use_efa = st.checkbox(
+                "探索的因子分析（EFA）を使用する",
+                value=default_use_efa,
+                help="データから自動的に潜在因子を発見します。因子数は自動決定されます。"
+            )
+
+            if use_efa:
+                st.success("✅ EFAを使用します。因子数は自動決定されます（Kaiser基準 + 累積寄与率80%）")
+
+                efa_advanced = st.checkbox("詳細設定", value=False)
+                if efa_advanced:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        manual_n_factors = st.number_input(
+                            "因子数を手動指定（オプション）",
+                            min_value=3,
+                            max_value=20,
+                            value=None,
+                            help="Noneの場合は自動決定します"
+                        )
+                        if manual_n_factors:
+                            n_efa_factors = int(manual_n_factors)
+                    with col2:
+                        st.caption("自動決定の場合、データの相関構造から最適な因子数が計算されます")
+
     # 実行ボタン
     st.markdown("---")
     st.markdown("### 🚀 分析実行")
@@ -861,6 +934,51 @@ if model_type == "UnifiedSEM（実データ）":
                     st.code(traceback.format_exc())
                 st.stop()
 
+        # EFA使用判定とキャッシュ
+        efa_result = None
+        if use_efa:
+            # キャッシュキーを作成
+            skill_codes_key = "_".join(sorted(pivot_data.columns.tolist())[:10])  # 先頭10スキルでキー生成
+            cache_key_efa = f"efa_{len(pivot_data.columns)}_{len(pivot_data)}_{skill_codes_key}"
+
+            if cache_key_efa not in st.session_state:
+                with st.spinner("探索的因子分析（EFA）実行中..."):
+                    try:
+                        # EFAモジュールロード
+                        efa_module = load_efa()
+                        ExploratoryFactorAnalyzer = efa_module.ExploratoryFactorAnalyzer
+
+                        # EFA実行
+                        efa = ExploratoryFactorAnalyzer(
+                            member_competence=member_competence,
+                            competence_master=competence_master,
+                            n_factors=n_efa_factors,  # Noneの場合は自動決定
+                        )
+                        efa_result = efa.fit()
+
+                        # キャッシュに保存
+                        st.session_state[cache_key_efa] = efa_result
+
+                        st.success(f"✅ EFA完了！{efa_result['n_factors']}個の因子を発見しました（累積寄与率: {np.sum(efa_result['explained_variance']):.1%}）")
+
+                        # 因子解釈を表示
+                        interpretation = efa.get_factor_interpretation(top_n=3)
+                        with st.expander("🔍 発見された因子の解釈", expanded=True):
+                            for factor_name, top_skills in interpretation.items():
+                                st.markdown(f"**{factor_name}** (寄与率: {efa_result['explained_variance'][int(factor_name.replace('因子', ''))-1]:.1%})")
+                                skills_text = ", ".join([f"{name}({loading:.2f})" for name, loading in top_skills])
+                                st.caption(f"主要スキル: {skills_text}")
+
+                    except Exception as e:
+                        st.error(f"❌ EFA実行エラー: {e}")
+                        import traceback
+                        with st.expander("エラー詳細"):
+                            st.code(traceback.format_exc())
+                        st.stop()
+            else:
+                efa_result = st.session_state[cache_key_efa]
+                st.info(f"✅ EFA結果をキャッシュから読み込みました（{efa_result['n_factors']}個の因子）")
+
         with st.spinner("UnifiedSEM推定中..."):
             try:
                 # モジュールロード
@@ -869,43 +987,84 @@ if model_type == "UnifiedSEM（実データ）":
                 MeasurementModelSpec = unified_sem_module.MeasurementModelSpec
                 StructuralModelSpec = unified_sem_module.StructuralModelSpec
 
-                # 測定モデル仕様の作成（カテゴリーごと）
-                measurement_specs = []
-                valid_categories = []  # 測定モデルに含まれるカテゴリーを記録
-                for category in selected_categories:
-                    cat_competences = selected_competences[
-                        selected_competences['力量カテゴリー名'] == category
-                    ]
-                    skill_codes = cat_competences['力量コード'].tolist()
+                if use_efa and efa_result:
+                    # EFAベースの測定モデル仕様
+                    st.info("🔬 EFAで発見した因子を使用してSEMを構築します")
 
-                    # ピボットデータに存在するスキルのみを使用
-                    skill_codes = [code for code in skill_codes if code in pivot_data.columns]
+                    measurement_specs = []
+                    valid_factors = []
 
-                    if len(skill_codes) >= 2:  # 最低2個のスキルが必要
-                        measurement_specs.append(
-                            MeasurementModelSpec(
-                                latent_name=category,
-                                observed_vars=skill_codes,
-                                reference_indicator=skill_codes[0]  # 最初のスキルを参照指標に
+                    for factor_idx in range(efa_result['n_factors']):
+                        factor_name = efa_result['factor_names'][factor_idx]
+                        loadings = efa_result['factor_loadings'][:, factor_idx]
+
+                        # ローディングが閾値以上のスキルを選択（0.3以上）
+                        significant_indices = np.where(np.abs(loadings) > 0.3)[0]
+
+                        if len(significant_indices) >= 2:
+                            factor_skills = [efa_result['skill_codes'][idx] for idx in significant_indices]
+                            # ピボットデータに存在するスキルのみ使用
+                            factor_skills = [code for code in factor_skills if code in pivot_data.columns]
+
+                            if len(factor_skills) >= 2:
+                                measurement_specs.append(
+                                    MeasurementModelSpec(
+                                        latent_name=factor_name,
+                                        observed_vars=factor_skills,
+                                        reference_indicator=factor_skills[0]
+                                    )
+                                )
+                                valid_factors.append(factor_name)
+
+                    # 構造モデル仕様
+                    structural_specs = []
+                    for i, from_factor in enumerate(valid_factors):
+                        for j, to_factor in enumerate(valid_factors):
+                            if i < j:
+                                structural_specs.append(
+                                    StructuralModelSpec(from_latent=from_factor, to_latent=to_factor)
+                                )
+
+                    st.info(f"📐 EFAモデル: {len(measurement_specs)}個の因子、構造モデル: {len(structural_specs)}個のパス")
+
+                else:
+                    # カテゴリーベースの測定モデル仕様（従来）
+                    measurement_specs = []
+                    valid_categories = []
+                    for category in selected_categories:
+                        cat_competences = selected_competences[
+                            selected_competences['力量カテゴリー名'] == category
+                        ]
+                        skill_codes = cat_competences['力量コード'].tolist()
+
+                        # ピボットデータに存在するスキルのみを使用
+                        skill_codes = [code for code in skill_codes if code in pivot_data.columns]
+
+                        if len(skill_codes) >= 2:  # 最低2個のスキルが必要
+                            measurement_specs.append(
+                                MeasurementModelSpec(
+                                    latent_name=category,
+                                    observed_vars=skill_codes,
+                                    reference_indicator=skill_codes[0]  # 最初のスキルを参照指標に
+                                )
                             )
-                        )
-                        valid_categories.append(category)  # 有効なカテゴリーを記録
+                            valid_categories.append(category)  # 有効なカテゴリーを記録
 
-                # 構造モデル仕様の作成（測定モデルに含まれるカテゴリーのみ使用）
-                structural_specs = []
-                for i, from_cat in enumerate(valid_categories):
-                    for j, to_cat in enumerate(valid_categories):
-                        if i < j:  # 上三角のみ（一方向の関係）
-                            structural_specs.append(
-                                StructuralModelSpec(from_latent=from_cat, to_latent=to_cat)
-                            )
+                    # 構造モデル仕様の作成（測定モデルに含まれるカテゴリーのみ使用）
+                    structural_specs = []
+                    for i, from_cat in enumerate(valid_categories):
+                        for j, to_cat in enumerate(valid_categories):
+                            if i < j:  # 上三角のみ（一方向の関係）
+                                structural_specs.append(
+                                    StructuralModelSpec(from_latent=from_cat, to_latent=to_cat)
+                                )
 
-                # 除外されたカテゴリーを警告
-                excluded_categories = set(selected_categories) - set(valid_categories)
-                if excluded_categories:
-                    st.warning(f"⚠️ スキル数が2個未満のため除外されたカテゴリー: {', '.join(excluded_categories)}")
+                    # 除外されたカテゴリーを警告
+                    excluded_categories = set(selected_categories) - set(valid_categories)
+                    if excluded_categories:
+                        st.warning(f"⚠️ スキル数が2個未満のため除外されたカテゴリー: {', '.join(excluded_categories)}")
 
-                st.info(f"📐 測定モデル: {len(measurement_specs)}個の潜在変数、構造モデル: {len(structural_specs)}個のパス")
+                    st.info(f"📐 測定モデル: {len(measurement_specs)}個の潜在変数、構造モデル: {len(structural_specs)}個のパス")
 
                 # UnifiedSEM推定
                 sem = UnifiedSEMEstimator(measurement_specs, structural_specs, method='ML')
@@ -914,8 +1073,12 @@ if model_type == "UnifiedSEM（実データ）":
                 # 推定結果をsession_stateに保存（スライダー変更時も結果を保持）
                 st.session_state['unified_sem_result'] = sem
                 st.session_state['unified_sem_selected_competences'] = selected_competences
+                st.session_state['unified_sem_use_efa'] = use_efa
 
-                st.success("✅ 推定完了！結果は下部に表示されます。")
+                if use_efa:
+                    st.success(f"✅ 推定完了！EFAで発見した{efa_result['n_factors']}個の因子を使用したSEMモデルが構築されました。")
+                else:
+                    st.success("✅ 推定完了！結果は下部に表示されます。")
 
             except Exception as e:
                 st.error(f"❌ 推定エラー: {e}")
