@@ -1254,6 +1254,61 @@ if model_type == "UnifiedSEM（実データ）":
 
                     st.markdown("---")
 
+                    # 学習順序分析（取得日データがある場合）
+                    dependency_edges = None
+                    use_learning_order = False
+
+                    if '取得日' in member_competence.columns:
+                        use_learning_order = st.checkbox(
+                            "🎓 学習順序ロジックを使用（取得日データから分析）",
+                            value=True,
+                            help="実際の取得パターンから学習順序を推定し、有向グラフの方向性を決定します",
+                            key="unified_use_learning_order"
+                        )
+
+                        if use_learning_order:
+                            # キャッシュキーを作成（メンバーフィルタリング状態を含む）
+                            cache_key = f"unified_dep_{len(st.session_state.get('filtered_member_codes', []))}"
+
+                            if cache_key not in st.session_state:
+                                with st.spinner("学習順序を分析中..."):
+                                    try:
+                                        # フィルタリングされたメンバーの力量データを取得
+                                        if 'filtered_member_codes' in st.session_state and st.session_state.filtered_member_codes:
+                                            filtered_competence = member_competence[
+                                                member_competence['メンバーコード'].isin(st.session_state.filtered_member_codes)
+                                            ]
+                                        else:
+                                            filtered_competence = member_competence
+
+                                        # SkillDependencyAnalyzerをロード
+                                        analyzer_module = load_skill_dependency_analyzer()
+                                        SkillDependencyAnalyzer = analyzer_module.SkillDependencyAnalyzer
+
+                                        # アナライザーを初期化（デフォルトパラメータ）
+                                        analyzer = SkillDependencyAnalyzer(
+                                            member_competence=filtered_competence,
+                                            competence_master=competence_master,
+                                            time_window_days=180,
+                                            min_transition_count=2,
+                                            confidence_threshold=0.2,
+                                        )
+
+                                        # グラフデータを取得
+                                        graph_data = analyzer.get_dependency_graph_data()
+
+                                        # セッション状態に保存
+                                        st.session_state[cache_key] = graph_data.get('edges', [])
+
+                                        st.success(f"✅ 学習順序分析完了！{len(st.session_state[cache_key])}個の依存関係を検出")
+
+                                    except Exception as e:
+                                        st.warning(f"⚠️ 学習順序分析エラー: {e}")
+                                        st.info("Lambda行列ベースのネットワークを表示します")
+                                        st.session_state[cache_key] = []
+
+                            dependency_edges = st.session_state.get(cache_key, [])
+
                     # フィルタリングされたスキルに対応するLambda行列の行インデックスを取得
                     if len(filtered_skill_codes) > 0:
                         filtered_indices = [
@@ -1274,8 +1329,15 @@ if model_type == "UnifiedSEM（実データ）":
                             edge_limit_start=edge_start,
                             edge_limit_end=edge_end,
                             acquired_skills=acquired_skills,
+                            dependency_edges=dependency_edges if dependency_edges else None,
                         )
                         st.plotly_chart(fig_skill_network, use_container_width=True)
+
+                        # 使用したロジックを表示
+                        if use_learning_order and dependency_edges:
+                            st.caption(f"🎓 学習順序ロジック使用中（{len(dependency_edges)}個の依存関係）")
+                        else:
+                            st.caption("📊 Lambda行列ベースのネットワーク")
                     else:
                         st.warning("⚠️ 表示するスキルがありません。スキルを選択してください。")
 
@@ -1949,9 +2011,15 @@ elif model_type == "HierarchicalSEM（実データ）":
 
                         with tab1:
                             st.markdown(
-                                "### スキル間ネットワーク（ドメイン別）\n"
-                                "各カテゴリー内でのスキル同士の関連性を表示します"
+                                "### スキル間ネットワーク（ドメイン別・有向グラフ）\n"
+                                "各カテゴリー内でのスキル同士の学習順序・前提関係を可視化"
                             )
+
+                            st.info("""
+                            **📊 グラフの方向性について:**
+                            - 取得日データがある場合: 実際の学習パターンから方向性を推定（A→B = Aを先に学ぶべき）
+                            - 取得日データがない場合: カテゴリー内の関連性を表示（無向グラフ）
+                            """)
 
                             # ドメイン選択
                             domain_names = [name for name in result.domain_models.keys() if name != '全体力量']
@@ -2109,6 +2177,61 @@ elif model_type == "HierarchicalSEM（実データ）":
 
                                 st.markdown("---")
 
+                                # 学習順序分析（取得日データがある場合）
+                                dependency_edges_hier = None
+                                use_learning_order_hier = False
+
+                                if '取得日' in member_competence.columns:
+                                    use_learning_order_hier = st.checkbox(
+                                        "🎓 学習順序ロジックを使用（取得日データから分析）",
+                                        value=True,
+                                        help="実際の取得パターンから学習順序を推定し、有向グラフの方向性を決定します",
+                                        key=f"hier_use_learning_order_{selected_domain}"
+                                    )
+
+                                    if use_learning_order_hier:
+                                        # キャッシュキーを作成
+                                        cache_key_hier = f"hier_dep_{selected_domain}_{len(st.session_state.get('filtered_member_codes', []))}"
+
+                                        if cache_key_hier not in st.session_state:
+                                            with st.spinner("学習順序を分析中..."):
+                                                try:
+                                                    # フィルタリングされたメンバーの力量データを取得
+                                                    if 'filtered_member_codes' in st.session_state and st.session_state.filtered_member_codes:
+                                                        filtered_competence_hier = member_competence[
+                                                            member_competence['メンバーコード'].isin(st.session_state.filtered_member_codes)
+                                                        ]
+                                                    else:
+                                                        filtered_competence_hier = member_competence
+
+                                                    # SkillDependencyAnalyzerをロード
+                                                    analyzer_module = load_skill_dependency_analyzer()
+                                                    SkillDependencyAnalyzer = analyzer_module.SkillDependencyAnalyzer
+
+                                                    # アナライザーを初期化
+                                                    analyzer_hier = SkillDependencyAnalyzer(
+                                                        member_competence=filtered_competence_hier,
+                                                        competence_master=competence_master,
+                                                        time_window_days=180,
+                                                        min_transition_count=2,
+                                                        confidence_threshold=0.2,
+                                                    )
+
+                                                    # グラフデータを取得
+                                                    graph_data_hier = analyzer_hier.get_dependency_graph_data()
+
+                                                    # セッション状態に保存
+                                                    st.session_state[cache_key_hier] = graph_data_hier.get('edges', [])
+
+                                                    st.success(f"✅ 学習順序分析完了！{len(st.session_state[cache_key_hier])}個の依存関係を検出")
+
+                                                except Exception as e:
+                                                    st.warning(f"⚠️ 学習順序分析エラー: {e}")
+                                                    st.info("Lambda行列ベースのネットワークを表示します")
+                                                    st.session_state[cache_key_hier] = []
+
+                                        dependency_edges_hier = st.session_state.get(cache_key_hier, [])
+
                                 # フィルタリングされたスキルに対応するLambda行列の行インデックスを取得
                                 if len(filtered_skill_codes_hier) > 0:
                                     filtered_indices_hier = [
@@ -2130,8 +2253,15 @@ elif model_type == "HierarchicalSEM（実データ）":
                                             edge_limit_start=edge_start_hier,
                                             edge_limit_end=edge_end_hier,
                                             acquired_skills=acquired_skills_hier,
+                                            dependency_edges=dependency_edges_hier if dependency_edges_hier else None,
                                         )
                                         st.plotly_chart(fig_skill_network_hier, use_container_width=True)
+
+                                        # 使用したロジックを表示
+                                        if use_learning_order_hier and dependency_edges_hier:
+                                            st.caption(f"🎓 学習順序ロジック使用中（{len(dependency_edges_hier)}個の依存関係）")
+                                        else:
+                                            st.caption("📊 Lambda行列ベースのネットワーク")
                                     else:
                                         st.info(f"💡 {selected_domain}には表示可能なスキル間接続がありません（ローディング閾値を下げてみてください）")
                                 else:

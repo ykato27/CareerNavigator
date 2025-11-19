@@ -204,13 +204,16 @@ class SEMNetworkVisualizer:
         edge_limit_start: Optional[int] = None,
         edge_limit_end: Optional[int] = None,
         acquired_skills: Optional[set] = None,
+        dependency_edges: Optional[List[Dict]] = None,
     ) -> go.Figure:
         """
         スキル間のネットワークグラフを可視化（有向グラフ）
 
         同じ潜在変数に統話するスキル同士を連結。
-        ローディング強度に基づいて接続し、方向性を決定。
-        方向性: ローディングが高いスキル → 低いスキル
+        dependency_edgesがある場合は学習順序に基づいて方向性を決定。
+        ない場合はローディング強度に基づいて接続し、方向性を決定。
+        方向性: 前提スキル → 後続スキル（dependency_edges使用時）
+              ローディングが高いスキル → 低いスキル（Lambda行列使用時）
 
         Args:
             lambda_matrix: ファクターローディング行列
@@ -222,6 +225,8 @@ class SEMNetworkVisualizer:
             edge_limit_start: 表示範囲の開始位置（関係性が強い順の何番目から）
             edge_limit_end: 表示範囲の終了位置（関係性が強い順の何番目まで）
             acquired_skills: 取得済みスキルのセット（メンバー別表示用）
+            dependency_edges: 学習順序の依存関係エッジデータ
+                             形式: [{'from': skill_code, 'to': skill_code, 'weight': float, 'strength': str}, ...]
 
         Returns:
             Plotly Figure オブジェクト
@@ -235,43 +240,63 @@ class SEMNetworkVisualizer:
             display_name = skill_name_mapping.get(skill, skill) if skill_name_mapping else skill
             G.add_node(skill, node_type="skill", display_name=display_name)
 
-        # エッジ追加：同じ潜在変数に統話するスキル同士
+        # エッジ追加：学習順序ベース または Lambda行列ベース
         all_edges = []  # 強度順でソート用
 
-        for j, latent in enumerate(latent_vars):
-            # この潜在変数に統話するスキルを検出
-            contributing_skills = []
-            for i, skill in enumerate(observed_vars):
-                loading = abs(lambda_matrix[i, j])
-                if loading > loading_threshold:
-                    contributing_skills.append((skill, loading))
+        if dependency_edges:
+            # 学習順序の依存関係エッジを使用（取得日データあり）
+            for edge in dependency_edges:
+                from_skill = edge['from']
+                to_skill = edge['to']
 
-            # スキル同士を接続（方向性を決定）
-            for k1 in range(len(contributing_skills)):
-                for k2 in range(k1 + 1, len(contributing_skills)):
-                    skill1, loading1 = contributing_skills[k1]
-                    skill2, loading2 = contributing_skills[k2]
-
-                    # 方向性を決定：ローディングが高い方 → 低い方
-                    if loading1 >= loading2:
-                        from_skill, to_skill = skill1, skill2
-                        from_loading, to_loading = loading1, loading2
-                    else:
-                        from_skill, to_skill = skill2, skill1
-                        from_loading, to_loading = loading2, loading1
-
-                    # ローディングの平均を接続強度として使用
-                    weight = (loading1 + loading2) / 2
-                    latent_context = latent
-
+                # observed_varsに存在するエッジのみを追加
+                if from_skill in observed_vars and to_skill in observed_vars:
                     all_edges.append({
                         'from': from_skill,
                         'to': to_skill,
-                        'weight': weight,
-                        'latent': latent_context,
-                        'from_loading': from_loading,
-                        'to_loading': to_loading,
+                        'weight': edge.get('weight', edge.get('confidence', 0.5)),
+                        'latent': edge.get('strength', '依存'),  # 強度情報
+                        'from_loading': edge.get('weight', 0.5),
+                        'to_loading': edge.get('weight', 0.5),
+                        'dependency_based': True,
                     })
+        else:
+            # Lambda行列ベースのエッジ（取得日データなし）
+            for j, latent in enumerate(latent_vars):
+                # この潜在変数に統話するスキルを検出
+                contributing_skills = []
+                for i, skill in enumerate(observed_vars):
+                    loading = abs(lambda_matrix[i, j])
+                    if loading > loading_threshold:
+                        contributing_skills.append((skill, loading))
+
+                # スキル同士を接続（方向性を決定）
+                for k1 in range(len(contributing_skills)):
+                    for k2 in range(k1 + 1, len(contributing_skills)):
+                        skill1, loading1 = contributing_skills[k1]
+                        skill2, loading2 = contributing_skills[k2]
+
+                        # 方向性を決定：ローディングが高い方 → 低い方
+                        if loading1 >= loading2:
+                            from_skill, to_skill = skill1, skill2
+                            from_loading, to_loading = loading1, loading2
+                        else:
+                            from_skill, to_skill = skill2, skill1
+                            from_loading, to_loading = loading2, loading1
+
+                        # ローディングの平均を接続強度として使用
+                        weight = (loading1 + loading2) / 2
+                        latent_context = latent
+
+                        all_edges.append({
+                            'from': from_skill,
+                            'to': to_skill,
+                            'weight': weight,
+                            'latent': latent_context,
+                            'from_loading': from_loading,
+                            'to_loading': to_loading,
+                            'dependency_based': False,
+                        })
 
         if not all_edges:
             return self._create_empty_figure("スキル間の接続が見つかりませんでした")
