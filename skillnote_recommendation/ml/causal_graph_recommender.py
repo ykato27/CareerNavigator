@@ -149,7 +149,8 @@ class CausalGraphRecommender:
             for owned in owned_skills:
                 # owned が target に与える影響
                 effect = self._get_effect(owned, target_skill)
-                if effect > 0.01:
+                # 閾値を0.001に下げて、より弱い因果効果も捕捉
+                if effect > 0.001:
                     readiness_score += effect
                     readiness_reasons.append((owned, effect))
             
@@ -162,14 +163,19 @@ class CausalGraphRecommender:
                     continue
                 # target が future に与える影響
                 effect = self._get_effect(target_skill, future)
-                if effect > 0.01:
+                # 閾値を0.001に下げて、より弱い因果効果も捕捉
+                if effect > 0.001:
                     utility_score += effect
                     utility_reasons.append((future, effect))
             
-            # 総合スコア (重み付けは調整可能)
-            total_score = readiness_score * 0.6 + utility_score * 0.4
+            # 総合スコア: Readinessを重視（0.9）してユーザー固有の推薦を強化
+            total_score = readiness_score * 0.9 + utility_score * 0.1
             
-            if total_score > 0:
+            # Readiness Scoreが0のスキルは除外（ユーザー固有性を確保）
+            # ただし、保有スキルが少ない場合は例外的に含める
+            min_readiness = 0.0 if len(owned_skills) < 3 else 0.001
+            
+            if total_score > 0 and readiness_score >= min_readiness:
                 scores.append({
                     'skill_name': target_skill,
                     'skill_code': self.name_to_code.get(target_skill, target_skill),
