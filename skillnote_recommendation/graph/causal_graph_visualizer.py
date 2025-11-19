@@ -45,7 +45,8 @@ class CausalGraphVisualizer:
         threshold: float = 0.1, 
         highlight_nodes: Optional[List[str]] = None,
         highlight_color: str = 'lightblue',
-        output_format: str = 'png'
+        output_format: str = 'png',
+        show_negative: bool = False
     ) -> graphviz.Digraph:
         """
         グラフを可視化
@@ -55,12 +56,14 @@ class CausalGraphVisualizer:
             highlight_nodes: ハイライトするノード名のリスト
             highlight_color: ハイライト色
             output_format: 出力フォーマット
+            show_negative: 負の因果関係も表示するか
             
         Returns:
             graphviz.Digraphオブジェクト
         """
         dot = graphviz.Digraph(comment='Causal Graph')
         dot.attr(rankdir='LR') # 左から右へ
+        dot.attr('node', fontsize='18', width='2.0', height='0.8')  # ノードを大きく
         dot.format = output_format
         
         nodes = self.adj_matrix.columns.tolist()
@@ -84,6 +87,10 @@ class CausalGraphVisualizer:
                 weight = self.adj_matrix.loc[from_node, to_node]
                 
                 if abs(weight) >= threshold:
+                    # 負の因果関係をスキップする場合
+                    if not show_negative and weight < 0:
+                        continue
+                    
                     # 係数の大きさで線の太さを変える
                     penwidth = str(max(1, abs(weight) * 5))
                     
@@ -107,7 +114,8 @@ class CausalGraphVisualizer:
         self,
         center_node: str,
         radius: int = 1,
-        threshold: float = 0.1
+        threshold: float = 0.1,
+        show_negative: bool = False
     ) -> graphviz.Digraph:
         """
         特定のノードを中心としたサブグラフ（エゴネットワーク）を可視化
@@ -129,7 +137,11 @@ class CausalGraphVisualizer:
 
         # サブクラス作成して可視化
         sub_visualizer = CausalGraphVisualizer(sub_matrix)
-        return sub_visualizer.visualize(threshold=threshold, highlight_nodes=[center_node])
+        return sub_visualizer.visualize(
+            threshold=threshold, 
+            highlight_nodes=[center_node],
+            show_negative=show_negative
+        )
 
     def visualize_interactive(
         self,

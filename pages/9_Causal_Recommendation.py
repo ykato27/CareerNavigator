@@ -157,9 +157,19 @@ with tab1:
                     st.info(rec['explanation'])
                     st.markdown("---")
         
-        # グラフを全幅で表示
-        st.markdown("### 🔗 関連因果グラフ（インタラクティブ）")
-        st.caption("選択したメンバーの保有スキル（青）と推奨スキル周辺の因果関係")
+        # グラフ表示用の推奨スキル選択
+        st.markdown("### 🔗 関連因果グラフ")
+        st.caption("選択した推奨スキルを中心とした因果関係")
+        
+        # 推奨スキルから選択（上位5個まで）
+        skill_options = [f"{i+1}. {rec['competence_name']} (スコア: {rec['score']:.2f})" 
+                        for i, rec in enumerate(recommendations[:5])]
+        selected_skill_idx = st.selectbox(
+            "グラフを表示する推奨スキルを選択",
+            range(min(5, len(recommendations))),
+            format_func=lambda x: skill_options[x],
+            help="上位5個の推奨スキルから選択できます。パフォーマンスのため、上位5個のみ表示します。"
+        )
 
         # 表示設定
         col_g1, col_g2, col_g3 = st.columns(3)
@@ -187,7 +197,7 @@ with tab1:
 
         # エゴネットワークの可視化
         if recommendations:
-            center_node = recommendations[0]['competence_name']
+            center_node = recommendations[selected_skill_idx]['competence_name']
 
             # Visualizer作成
             adj_matrix = recommender.learner.get_adjacency_matrix()
@@ -207,10 +217,11 @@ with tab1:
                 dot = visualizer.visualize_ego_network(
                     center_node=center_node,
                     radius=1,
-                    threshold=graph_threshold
+                    threshold=graph_threshold,
+                    show_negative=show_negative_ego
                 )
                 st.graphviz_chart(dot, use_container_width=True)
-                st.caption("💡 推奨スキルを中心とした因果関係を表示")
+                st.caption(f"💡 {center_node} を中心とした因果関係を表示")
             except Exception as e:
                 st.error(f"グラフを描画できませんでした: {e}")
 
