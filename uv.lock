@@ -1667,6 +1667,16 @@ wheels = [
 ]
 
 [[package]]
+name = "python-louvain"
+version = "0.16"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "networkx" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7c/0d/8787b021d52eb8764c0bb18ab95f720cf554902044c6a5cb1865daf45763/python-louvain-0.16.tar.gz", hash = "sha256:b7ba2df5002fd28d3ee789a49532baad11fe648e4f2117cf0798e7520a1da56b", size = 204641, upload-time = "2022-01-29T15:53:03.532Z" }
+
+[[package]]
 name = "python-pptx"
 version = "1.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2054,6 +2064,7 @@ dependencies = [
     { name = "plotly" },
     { name = "pydantic" },
     { name = "python-json-logger" },
+    { name = "python-louvain" },
     { name = "python-pptx" },
     { name = "scikit-learn" },
     { name = "streamlit" },
@@ -2089,6 +2100,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "python-json-logger", specifier = ">=2.0.0" },
+    { name = "python-louvain", specifier = ">=0.16" },
     { name = "python-pptx", specifier = ">=0.6.21" },
     { name = "scikit-learn", specifier = ">=1.3.0" },
     { name = "streamlit", specifier = ">=1.50.0" },
