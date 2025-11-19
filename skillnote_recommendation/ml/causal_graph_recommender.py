@@ -238,25 +238,6 @@ class CausalGraphRecommender:
     def _get_effect(self, cause: str, effect: str) -> float:
         """因果効果を取得 (存在しない場合は0)"""
         if self.total_effects_ is None:
-            return 0.0
-        return self.total_effects_.get(cause, {}).get(effect, 0.0)
-
-    def _generate_explanation(self, item: Dict[str, Any]) -> str:
-        """推薦理由のテキスト生成"""
-        readiness = item['readiness_reasons']
-        utility = item['utility_reasons']
-        
-        lines = [f"【因果推論推薦】スコア: {item['total_score']:.2f}"]
-        
-        if readiness:
-            top_cause, effect_val = readiness[0]
-            lines.append(f"・準備: あなたの「{top_cause}」スキルが、このスキルの習得を強く後押しします (効果: {effect_val:.2f})。")
-            
-        if utility:
-            top_result, effect_val = utility[0]
-            lines.append(f"・将来: このスキルを学ぶと、将来「{top_result}」の習得がスムーズになります (効果: {effect_val:.2f})。")
-            
-        if not readiness and not utility:
             lines.append("・基礎スキルとして推奨されます。")
             
         return "\n".join(lines)
