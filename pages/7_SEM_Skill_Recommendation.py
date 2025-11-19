@@ -40,7 +40,7 @@ apply_rich_ui_styles()
 
 # Header
 render_gradient_header(
-    "🎓 SEM階層的スキル推薦（取得順序ベース）",
+    "【工事中】🎓 SEM階層的スキル推薦（取得順序ベース）",
     "スキルの取得順序から学習する完全データドリブンな段階的学習パス推薦"
 )
 
