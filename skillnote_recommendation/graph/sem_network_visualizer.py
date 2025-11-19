@@ -231,6 +231,13 @@ class SEMNetworkVisualizer:
         Returns:
             Plotly Figure オブジェクト
         """
+        # スキル数に基づく適応的パラメータの計算
+        n_skills = len(observed_vars)
+        adaptive_params = self._get_adaptive_skill_network_params(n_skills)
+
+        # 適応的なローディング閾値（大規模グラフではエッジ数を削減）
+        effective_threshold = max(loading_threshold, adaptive_params['min_loading_threshold'])
+
         # NetworkXグラフを構築（有向グラフに変更）
         G = nx.DiGraph()
 
@@ -246,8 +253,9 @@ class SEMNetworkVisualizer:
         if dependency_edges:
             # 学習順序の依存関係エッジを使用（取得日データあり）
             for edge in dependency_edges:
-                from_skill = edge['from']
-                to_skill = edge['to']
+                # SkillDependencyAnalyzerは 'source' と 'target' キーを使用
+                from_skill = edge.get('source', edge.get('from'))
+                to_skill = edge.get('target', edge.get('to'))
 
                 # observed_varsに存在するエッジのみを追加
                 if from_skill in observed_vars and to_skill in observed_vars:
@@ -262,41 +270,49 @@ class SEMNetworkVisualizer:
                     })
         else:
             # Lambda行列ベースのエッジ（取得日データなし）
-            for j, latent in enumerate(latent_vars):
-                # この潜在変数に統話するスキルを検出
-                contributing_skills = []
-                for i, skill in enumerate(observed_vars):
-                    loading = abs(lambda_matrix[i, j])
-                    if loading > loading_threshold:
-                        contributing_skills.append((skill, loading))
+            # 大規模グラフでは効率的なエッジ生成を使用
+            if n_skills > 100:
+                all_edges = self._generate_edges_optimized(
+                    lambda_matrix, latent_vars, observed_vars,
+                    effective_threshold, adaptive_params['max_edges_per_node']
+                )
+            else:
+                # 従来の方法（小規模グラフ）
+                for j, latent in enumerate(latent_vars):
+                    # この潜在変数に統話するスキルを検出
+                    contributing_skills = []
+                    for i, skill in enumerate(observed_vars):
+                        loading = abs(lambda_matrix[i, j])
+                        if loading > effective_threshold:
+                            contributing_skills.append((skill, loading))
 
-                # スキル同士を接続（方向性を決定）
-                for k1 in range(len(contributing_skills)):
-                    for k2 in range(k1 + 1, len(contributing_skills)):
-                        skill1, loading1 = contributing_skills[k1]
-                        skill2, loading2 = contributing_skills[k2]
+                    # スキル同士を接続（方向性を決定）
+                    for k1 in range(len(contributing_skills)):
+                        for k2 in range(k1 + 1, len(contributing_skills)):
+                            skill1, loading1 = contributing_skills[k1]
+                            skill2, loading2 = contributing_skills[k2]
 
-                        # 方向性を決定：ローディングが高い方 → 低い方
-                        if loading1 >= loading2:
-                            from_skill, to_skill = skill1, skill2
-                            from_loading, to_loading = loading1, loading2
-                        else:
-                            from_skill, to_skill = skill2, skill1
-                            from_loading, to_loading = loading2, loading1
+                            # 方向性を決定：ローディングが高い方 → 低い方
+                            if loading1 >= loading2:
+                                from_skill, to_skill = skill1, skill2
+                                from_loading, to_loading = loading1, loading2
+                            else:
+                                from_skill, to_skill = skill2, skill1
+                                from_loading, to_loading = loading2, loading1
 
-                        # ローディングの平均を接続強度として使用
-                        weight = (loading1 + loading2) / 2
-                        latent_context = latent
+                            # ローディングの平均を接続強度として使用
+                            weight = (loading1 + loading2) / 2
+                            latent_context = latent
 
-                        all_edges.append({
-                            'from': from_skill,
-                            'to': to_skill,
-                            'weight': weight,
-                            'latent': latent_context,
-                            'from_loading': from_loading,
-                            'to_loading': to_loading,
-                            'dependency_based': False,
-                        })
+                            all_edges.append({
+                                'from': from_skill,
+                                'to': to_skill,
+                                'weight': weight,
+                                'latent': latent_context,
+                                'from_loading': from_loading,
+                                'to_loading': to_loading,
+                                'dependency_based': False,
+                            })
 
         if not all_edges:
             return self._create_empty_figure("スキル間の接続が見つかりませんでした")
@@ -319,8 +335,8 @@ class SEMNetworkVisualizer:
         for edge in all_edges:
             G.add_edge(edge['from'], edge['to'], weight=edge['weight'], latent=edge['latent'])
 
-        # レイアウト計算
-        pos = nx.spring_layout(G, k=2, iterations=50, seed=42, weight="weight")
+        # レイアウト計算（適応的アルゴリズム選択）
+        pos = self._calculate_skill_network_layout(G, n_skills, adaptive_params)
 
         # Plotly Figure を作成
         fig = self._create_skill_network_figure(G, pos, latent_vars, acquired_skills)
@@ -403,6 +419,196 @@ class SEMNetworkVisualizer:
     # ============================================================
     # 内部メソッド
     # ============================================================
+
+    def _get_adaptive_skill_network_params(self, n_skills: int) -> dict:
+        """
+        スキル数に基づく適応的パラメータを取得
+
+        Args:
+            n_skills: スキル数
+
+        Returns:
+            適応的パラメータの辞書
+        """
+        if n_skills >= 200:
+            # 超大規模: 200+スキル
+            return {
+                'layout_algorithm': 'kamada_kawai',  # 高速収束アルゴリズム
+                'layout_iterations': 100,  # Kamada-Kawaiの最大反復
+                'min_loading_threshold': 0.5,  # 閾値を大幅に引き上げてエッジ削減
+                'max_edges_per_node': 10,  # ノードあたり最大エッジ数
+                'use_optimized_edge_generation': True,
+            }
+        elif n_skills >= 150:
+            # 大規模: 150-199スキル
+            return {
+                'layout_algorithm': 'kamada_kawai',
+                'layout_iterations': 150,
+                'min_loading_threshold': 0.45,
+                'max_edges_per_node': 15,
+                'use_optimized_edge_generation': True,
+            }
+        elif n_skills >= 100:
+            # 中規模大: 100-149スキル
+            return {
+                'layout_algorithm': 'spring',
+                'layout_iterations': 30,  # spring layoutの反復を削減
+                'min_loading_threshold': 0.4,
+                'max_edges_per_node': 20,
+                'use_optimized_edge_generation': True,
+            }
+        elif n_skills >= 50:
+            # 中規模: 50-99スキル
+            return {
+                'layout_algorithm': 'spring',
+                'layout_iterations': 40,
+                'min_loading_threshold': 0.3,
+                'max_edges_per_node': 30,
+                'use_optimized_edge_generation': False,
+            }
+        else:
+            # 小規模: <50スキル
+            return {
+                'layout_algorithm': 'spring',
+                'layout_iterations': 50,
+                'min_loading_threshold': 0.3,
+                'max_edges_per_node': 50,
+                'use_optimized_edge_generation': False,
+            }
+
+    def _generate_edges_optimized(
+        self,
+        lambda_matrix: np.ndarray,
+        latent_vars: List[str],
+        observed_vars: List[str],
+        loading_threshold: float,
+        max_edges_per_node: int,
+    ) -> List[Dict]:
+        """
+        大規模グラフ向けの最適化されたエッジ生成
+
+        各ノードからのエッジ数を制限し、top-N戦略を使用してパフォーマンスを向上
+
+        Args:
+            lambda_matrix: ファクターローディング行列
+            latent_vars: 潜在変数名
+            observed_vars: 観測変数名
+            loading_threshold: ローディング閾値
+            max_edges_per_node: ノードあたりの最大エッジ数
+
+        Returns:
+            エッジリスト
+        """
+        all_edges = []
+        edge_count_per_node = defaultdict(int)
+
+        for j, latent in enumerate(latent_vars):
+            # この潜在変数に貢献するスキルを検出（ローディング順にソート）
+            contributing_skills = []
+            for i, skill in enumerate(observed_vars):
+                loading = abs(lambda_matrix[i, j])
+                if loading > loading_threshold:
+                    contributing_skills.append((skill, loading))
+
+            # ローディングの強い順にソート
+            contributing_skills.sort(key=lambda x: x[1], reverse=True)
+
+            # Top-N戦略: 各潜在変数につき上位スキルのみ接続
+            # 大規模グラフでは接続を制限
+            max_skills_per_latent = min(len(contributing_skills), 30)
+            contributing_skills = contributing_skills[:max_skills_per_latent]
+
+            # スキル同士を接続（エッジ数制限付き）
+            for k1 in range(len(contributing_skills)):
+                skill1, loading1 = contributing_skills[k1]
+
+                # このノードが既に最大エッジ数に達している場合はスキップ
+                if edge_count_per_node[skill1] >= max_edges_per_node:
+                    continue
+
+                for k2 in range(k1 + 1, len(contributing_skills)):
+                    skill2, loading2 = contributing_skills[k2]
+
+                    # 両方のノードがエッジ数制限内かチェック
+                    if (edge_count_per_node[skill1] >= max_edges_per_node or
+                        edge_count_per_node[skill2] >= max_edges_per_node):
+                        continue
+
+                    # 方向性を決定：ローディングが高い方 → 低い方
+                    if loading1 >= loading2:
+                        from_skill, to_skill = skill1, skill2
+                        from_loading, to_loading = loading1, loading2
+                    else:
+                        from_skill, to_skill = skill2, skill1
+                        from_loading, to_loading = loading2, loading1
+
+                    # ローディングの平均を接続強度として使用
+                    weight = (loading1 + loading2) / 2
+
+                    all_edges.append({
+                        'from': from_skill,
+                        'to': to_skill,
+                        'weight': weight,
+                        'latent': latent,
+                        'from_loading': from_loading,
+                        'to_loading': to_loading,
+                        'dependency_based': False,
+                    })
+
+                    # エッジカウントを更新
+                    edge_count_per_node[from_skill] += 1
+                    edge_count_per_node[to_skill] += 1
+
+        return all_edges
+
+    def _calculate_skill_network_layout(
+        self,
+        G: nx.DiGraph,
+        n_skills: int,
+        adaptive_params: dict,
+    ) -> Dict[str, Tuple[float, float]]:
+        """
+        スキルネットワーク用の適応的レイアウト計算
+
+        スキル数に応じて最適なレイアウトアルゴリズムを選択
+
+        Args:
+            G: NetworkXグラフ
+            n_skills: スキル数
+            adaptive_params: 適応的パラメータ
+
+        Returns:
+            ノード位置の辞書
+        """
+        algorithm = adaptive_params['layout_algorithm']
+        iterations = adaptive_params['layout_iterations']
+
+        if algorithm == 'kamada_kawai':
+            # Kamada-Kawaiレイアウト（大規模グラフ向け、より高速）
+            try:
+                pos = nx.kamada_kawai_layout(
+                    G,
+                    scale=5,
+                    weight='weight',
+                )
+            except Exception as e:
+                logger.warning(f"Kamada-Kawai layout failed: {e}, falling back to spring layout")
+                # フォールバック: spring layout（反復回数削減）
+                pos = nx.spring_layout(G, k=2, iterations=20, seed=42, weight="weight")
+        elif algorithm == 'spring':
+            # Spring layoutレイアウト（中小規模グラフ）
+            pos = nx.spring_layout(
+                G,
+                k=2,
+                iterations=iterations,
+                seed=42,
+                weight="weight"
+            )
+        else:
+            # デフォルト: spring layout
+            pos = nx.spring_layout(G, k=2, iterations=50, seed=42, weight="weight")
+
+        return pos
 
     def _get_scale_category(self, n_observed: int) -> str:
         """
