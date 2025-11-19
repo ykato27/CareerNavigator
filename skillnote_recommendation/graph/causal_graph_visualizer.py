@@ -115,10 +115,18 @@ class CausalGraphVisualizer:
         center_node: str,
         radius: int = 1,
         threshold: float = 0.1,
-        show_negative: bool = False
+        show_negative: bool = False,
+        member_skills: Optional[List[str]] = None
     ) -> graphviz.Digraph:
         """
         特定のノードを中心としたサブグラフ（エゴネットワーク）を可視化
+        
+        Args:
+            center_node: 中心ノード（推奨スキル）
+            radius: 中心からの距離
+            threshold: 表示する最小の係数
+            show_negative: 負の因果関係も表示するか
+            member_skills: メンバーの保有スキルリスト（緑でハイライト）
         """
         # 簡易実装: 関連するノードを抽出して visualize を呼ぶ
         related_nodes = {center_node}
@@ -137,11 +145,22 @@ class CausalGraphVisualizer:
 
         # サブクラス作成して可視化
         sub_visualizer = CausalGraphVisualizer(sub_matrix)
-        return sub_visualizer.visualize(
+        
+        # 保有スキルと推奨スキルを区別して表示
+        # 保有スキル: 緑、推奨スキル: 青
+        dot = sub_visualizer.visualize(
             threshold=threshold, 
             highlight_nodes=[center_node],
             show_negative=show_negative
         )
+        
+        # 保有スキルを緑でハイライト（後から上書き）
+        if member_skills:
+            for skill in member_skills:
+                if skill in related_nodes and skill != center_node:
+                    dot.node(skill, skill, style='filled', fillcolor='lightgreen', shape='box')
+        
+        return dot
 
     def visualize_interactive(
         self,

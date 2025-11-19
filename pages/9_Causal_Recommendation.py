@@ -218,10 +218,18 @@ with tab1:
                     center_node=center_node,
                     radius=1,
                     threshold=graph_threshold,
-                    show_negative=show_negative_ego
+                    show_negative=show_negative_ego,
+                    member_skills=member_skill_names
                 )
                 st.graphviz_chart(dot, use_container_width=True)
-                st.caption(f"💡 {center_node} を中心とした因果関係を表示")
+                
+                # 凡例を表示
+                st.caption(f"💡 **{center_node}** を中心とした因果関係")
+                st.caption(
+                    "🟦 **青**: 推奨スキル（中心） | "
+                    "🟩 **緑**: あなたの保有スキル（なぜ推奨されるか） | "
+                    "⬜ **白**: 将来取得可能なスキル"
+                )
             except Exception as e:
                 st.error(f"グラフを描画できませんでした: {e}")
 
