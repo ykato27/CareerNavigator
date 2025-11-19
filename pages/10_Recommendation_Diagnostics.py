@@ -7,7 +7,13 @@ LiNGAMの学習状況と推薦ロジックをデバッグするためのペー�
 import streamlit as st
 import pandas as pd
 import numpy as np
-from skillnote_recommendation.data_loader import load_data
+import sys
+from pathlib import Path
+
+# プロジェクトルートをパスに追加
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from skillnote_recommendation.ml.causal_graph_recommender import CausalGraphRecommender
 
 st.set_page_config(page_title="推薦システム診断", page_icon="🔍", layout="wide")
@@ -17,10 +23,16 @@ st.caption("LiNGAMの学習状況と推薦ロジックをデバッグ")
 
 # データ読み込み
 @st.cache_data
-def get_data():
-    return load_data()
+def load_all_data():
+    """全データを読み込む"""
+    data_dir = project_root / "data"
+    
+    return {
+        "member_competence": pd.read_csv(data_dir / "member_competence.csv"),
+        "competence": pd.read_csv(data_dir / "competence.csv"),
+    }
 
-td = get_data()
+td = load_all_data()
 
 # 推薦モデルの構築
 @st.cache_resource
