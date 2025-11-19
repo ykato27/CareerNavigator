@@ -999,27 +999,45 @@ if model_type == "UnifiedSEM（実データ）":
                     measurement_specs = []
                     valid_factors = []
 
+                    # 各スキルの主因子を特定（最大ローディング）
+                    # これにより、各スキルは1つの因子にのみ割り当てられる
+                    from collections import defaultdict
+                    skill_primary_factor = {}
+
+                    for skill_idx, skill_code in enumerate(efa_result['skill_codes']):
+                        loadings_for_skill = efa_result['factor_loadings'][skill_idx, :]
+                        max_loading_idx = np.argmax(np.abs(loadings_for_skill))
+                        max_loading = np.abs(loadings_for_skill[max_loading_idx])
+
+                        # 閾値以上の場合のみ割り当て
+                        if max_loading > 0.3:
+                            skill_primary_factor[skill_code] = max_loading_idx
+
+                    # 因子ごとにスキルをグループ化
+                    factor_to_skills = defaultdict(list)
+                    for skill_code, factor_idx in skill_primary_factor.items():
+                        # ピボットデータに存在するスキルのみ
+                        if skill_code in pivot_data.columns:
+                            factor_to_skills[factor_idx].append(skill_code)
+
+                    # measurement_specs作成
                     for factor_idx in range(efa_result['n_factors']):
                         factor_name = efa_result['factor_names'][factor_idx]
-                        loadings = efa_result['factor_loadings'][:, factor_idx]
+                        factor_skills = factor_to_skills.get(factor_idx, [])
 
-                        # ローディングが閾値以上のスキルを選択（0.3以上）
-                        significant_indices = np.where(np.abs(loadings) > 0.3)[0]
-
-                        if len(significant_indices) >= 2:
-                            factor_skills = [efa_result['skill_codes'][idx] for idx in significant_indices]
-                            # ピボットデータに存在するスキルのみ使用
-                            factor_skills = [code for code in factor_skills if code in pivot_data.columns]
-
-                            if len(factor_skills) >= 2:
-                                measurement_specs.append(
-                                    MeasurementModelSpec(
-                                        latent_name=factor_name,
-                                        observed_vars=factor_skills,
-                                        reference_indicator=factor_skills[0]
-                                    )
+                        if len(factor_skills) >= 2:
+                            measurement_specs.append(
+                                MeasurementModelSpec(
+                                    latent_name=factor_name,
+                                    observed_vars=factor_skills,
+                                    reference_indicator=factor_skills[0]
                                 )
-                                valid_factors.append(factor_name)
+                            )
+                            valid_factors.append(factor_name)
+
+                    # 割り当てられたスキル数を表示
+                    total_assigned = sum(len(skills) for skills in factor_to_skills.values())
+                    st.caption(f"📊 {total_assigned}個のスキルを{len(valid_factors)}個の因子に割り当てました（各スキルは主因子のみに割り当て）")
 
                     # 構造モデル仕様
                     structural_specs = []
