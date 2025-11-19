@@ -948,10 +948,15 @@ if model_type == "UnifiedSEM（実データ）":
                         efa_module = load_efa()
                         ExploratoryFactorAnalyzer = efa_module.ExploratoryFactorAnalyzer
 
+                        # スキル名マッピングを作成（ピボットデータのスキルコードに対応）
+                        skill_code_to_name = dict(
+                            zip(selected_competences['力量コード'], selected_competences['力量名'])
+                        )
+
                         # EFA実行
                         efa = ExploratoryFactorAnalyzer(
-                            member_competence=member_competence,
-                            competence_master=competence_master,
+                            pivot_data=pivot_data,
+                            skill_name_mapping=skill_code_to_name,
                             n_factors=n_efa_factors,  # Noneの場合は自動決定
                         )
                         efa_result = efa.fit()

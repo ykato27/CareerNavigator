@@ -28,8 +28,8 @@ class ExploratoryFactorAnalyzer:
 
     def __init__(
         self,
-        member_competence: pd.DataFrame,
-        competence_master: pd.DataFrame,
+        pivot_data: pd.DataFrame,
+        skill_name_mapping: Dict[str, str],
         n_factors: Optional[int] = None,
         variance_threshold: float = 0.80,
         min_factors: int = 3,
@@ -39,15 +39,15 @@ class ExploratoryFactorAnalyzer:
         初期化
 
         Args:
-            member_competence: メンバー力量データ
-            competence_master: 力量マスター
+            pivot_data: ピボットテーブル（行=メンバー、列=スキルコード、値=スコア）
+            skill_name_mapping: スキルコード → スキル名のマッピング
             n_factors: 因子数（Noneの場合は自動決定）
             variance_threshold: 累積寄与率の閾値（デフォルト: 80%）
             min_factors: 最小因子数
             max_factors: 最大因子数
         """
-        self.member_competence = member_competence
-        self.competence_master = competence_master
+        self.pivot_data = pivot_data
+        self.skill_name_mapping = skill_name_mapping
         self.n_factors = n_factors
         self.variance_threshold = variance_threshold
         self.min_factors = min_factors
@@ -67,53 +67,24 @@ class ExploratoryFactorAnalyzer:
         Returns:
             (スキルスコア行列, スキルコードリスト, スキル名マッピング)
         """
-        # メンバーコード取得
-        member_codes = self.member_competence['メンバーコード'].unique()
+        # ピボットテーブルから直接取得
+        skill_score_matrix = self.pivot_data.values  # メンバー × スキル
+        skill_codes = self.pivot_data.columns.tolist()
 
-        # スキルコード取得（力量タイプ='スキル'のみ）
-        skill_master = self.competence_master[
-            self.competence_master['力量タイプ'] == 'スキル'
-        ]
-        skill_codes = skill_master['力量コード'].tolist()
+        # データ検証
+        if skill_score_matrix.size == 0:
+            raise ValueError("スキルスコア行列が空です。データを確認してください。")
 
-        # スキル名マッピング
-        skill_name_mapping = dict(
-            zip(skill_master['力量コード'], skill_master['力量名'])
-        )
-
-        # スキルスコア行列を構築（メンバー × スキル）
-        skill_scores = []
-        valid_members = []
-
-        for member_code in member_codes:
-            member_data = self.member_competence[
-                self.member_competence['メンバーコード'] == member_code
-            ]
-
-            # スキルスコアを取得
-            scores = []
-            for skill_code in skill_codes:
-                skill_row = member_data[member_data['力量コード'] == skill_code]
-                if not skill_row.empty:
-                    score = skill_row.iloc[0]['スコア']
-                    scores.append(score if pd.notna(score) else 0)
-                else:
-                    scores.append(0)
-
-            # 全てゼロのメンバーは除外
-            if sum(scores) > 0:
-                skill_scores.append(scores)
-                valid_members.append(member_code)
-
-        skill_score_matrix = np.array(skill_scores)
+        if len(skill_codes) < self.min_factors:
+            raise ValueError(f"スキル数（{len(skill_codes)}）が最小因子数（{self.min_factors}）より少ないです。")
 
         # 標準化（各スキルを平均0、分散1に）
         scaler = StandardScaler()
         skill_score_matrix_scaled = scaler.fit_transform(skill_score_matrix)
 
-        logger.info(f"Data prepared: {len(valid_members)} members × {len(skill_codes)} skills")
+        logger.info(f"Data prepared: {skill_score_matrix.shape[0]} members × {len(skill_codes)} skills")
 
-        return skill_score_matrix_scaled, skill_codes, skill_name_mapping
+        return skill_score_matrix_scaled, skill_codes, self.skill_name_mapping
 
     def determine_n_factors(self, skill_score_matrix: np.ndarray) -> int:
         """
