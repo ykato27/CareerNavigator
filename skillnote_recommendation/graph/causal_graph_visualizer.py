@@ -15,10 +15,16 @@ import numpy as np
 import networkx as nx
 from typing import Dict, List, Optional, Tuple, Union
 import logging
-from pyvis.network import Network
-import os
 import tempfile
 import os
+
+# Optional dependency
+try:
+    from pyvis.network import Network
+    PYVIS_AVAILABLE = True
+except ImportError:
+    PYVIS_AVAILABLE = False
+    Network = None
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +154,9 @@ class CausalGraphVisualizer:
         Returns:
             str: 生成されたHTMLファイルのパス
         """
+        if not PYVIS_AVAILABLE:
+            raise ImportError("pyvis is not installed. Please install it with: pip install pyvis>=0.3.2")
+        
         # PyVisネットワークの初期化
         net = Network(height=height, width=width, bgcolor="#ffffff", font_color="#333333", notebook=notebook)
         # 物理演算の調整（安定化のため）
