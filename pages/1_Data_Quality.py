@@ -5,7 +5,14 @@
 品質の問題を可視化します。
 """
 
+import os
 import streamlit as st
+
+# Streamlit Cloud上では非表示にする
+# HOSTNAME環境変数やSTREAMLIT_SHARING_MODE環境変数でStreamlit Cloudを検出
+if os.getenv("HOSTNAME", "").endswith(".streamlit.app") or os.getenv("STREAMLIT_SHARING_MODE"):
+    st.warning("⚠️ このページは現在メンテナンス中です。")
+    st.stop()
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
