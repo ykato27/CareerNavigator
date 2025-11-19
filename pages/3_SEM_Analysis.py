@@ -1320,6 +1320,15 @@ if model_type == "UnifiedSEM（実データ）":
                         import numpy as np
                         filtered_lambda = sem.Lambda[filtered_indices, :]
 
+                        # パフォーマンス最適化の適用状況を表示
+                        n_skills = len(filtered_skill_codes)
+                        if n_skills >= 200:
+                            st.info(f"⚡ 超大規模グラフ最適化適用中（{n_skills}スキル）: Kamada-Kawai レイアウト + 高度なエッジ削減")
+                        elif n_skills >= 150:
+                            st.info(f"⚡ 大規模グラフ最適化適用中（{n_skills}スキル）: Kamada-Kawai レイアウト + エッジ削減")
+                        elif n_skills >= 100:
+                            st.info(f"⚡ 中規模グラフ最適化適用中（{n_skills}スキル）: 高速レイアウト + エッジ制限")
+
                         fig_skill_network = visualizer.visualize_skill_network(
                             lambda_matrix=filtered_lambda,
                             latent_vars=sem.latent_vars,
@@ -2242,6 +2251,15 @@ elif model_type == "HierarchicalSEM（実データ）":
                                     # フィルタリングされた行のみを抽出
                                     import numpy as np
                                     filtered_lambda_hier = domain_model.Lambda[filtered_indices_hier, :]
+
+                                    # パフォーマンス最適化の適用状況を表示
+                                    n_skills_hier = len(filtered_skill_codes_hier)
+                                    if n_skills_hier >= 200:
+                                        st.info(f"⚡ 超大規模グラフ最適化適用中（{n_skills_hier}スキル）: Kamada-Kawai レイアウト + 高度なエッジ削減")
+                                    elif n_skills_hier >= 150:
+                                        st.info(f"⚡ 大規模グラフ最適化適用中（{n_skills_hier}スキル）: Kamada-Kawai レイアウト + エッジ削減")
+                                    elif n_skills_hier >= 100:
+                                        st.info(f"⚡ 中規模グラフ最適化適用中（{n_skills_hier}スキル）: 高速レイアウト + エッジ制限")
 
                                     if max_edges_hier > 0:
                                         fig_skill_network_hier = visualizer.visualize_skill_network(
