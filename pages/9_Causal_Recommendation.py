@@ -118,76 +118,94 @@ with tab1:
     )
 
     if selected_member_code:
-        col_rec, col_graph = st.columns([1, 1])
+        st.markdown("### 🎯 推奨スキル（優先順位順）")
+        
+        # スコアの説明
+        with st.expander("📖 スコアの見方", expanded=False):
+            st.markdown("""
+            推奨スコアは以下の2つの要素から計算されます:
+            
+            - **Readiness（準備度）**: 現在の保有スキルが、推奨スキルの習得をどれだけサポートするか
+              - 高いほど、今すぐ学習を始めやすいスキル
+              - 保有スキルから推奨スキルへの因果関係の強さで評価
+            
+            - **Utility（将来性）**: 推奨スキルを習得することで、将来的にどれだけ多くのスキル習得が可能になるか
+              - 高いほど、キャリアの選択肢を広げるスキル
+              - 推奨スキルから他のスキルへの因果関係の強さで評価
+            
+            **総合スコア** = Readiness × 0.6 + Utility × 0.4
+            """)
+        
+        recommendations = recommender.recommend(selected_member_code, top_n=10)
 
-        with col_rec:
-            st.markdown("### 🎯 推奨スキル")
-            recommendations = recommender.recommend(selected_member_code, top_n=5)
+        if not recommendations:
+            st.info("推奨できるスキルが見つかりませんでした（保有スキルが十分でないか、因果関係が見つかりませんでした）。")
+        else:
+            for i, rec in enumerate(recommendations, 1):
+                with st.container():
+                    st.markdown(f"#### {i}. {rec['competence_name']}")
+                    
+                    col1, col2, col3 = st.columns([2, 1, 1])
+                    with col1:
+                        st.metric("総合スコア", f"{rec['score']:.2f}")
+                    with col2:
+                        details = rec['details']
+                        st.metric("準備度", f"{details['readiness_score']:.2f}")
+                    with col3:
+                        st.metric("将来性", f"{details['utility_score']:.2f}")
+                    
+                    st.info(rec['explanation'])
+                    st.markdown("---")
+        
+        # グラフを全幅で表示
+        st.markdown("### 🔗 関連因果グラフ（インタラクティブ）")
+        st.caption("選択したメンバーの保有スキル（青）と推奨スキル周辺の因果関係")
 
-            if not recommendations:
-                st.info("推奨できるスキルが見つかりませんでした（保有スキルが十分でないか、因果関係が見つかりませんでした）。")
-            else:
-                for i, rec in enumerate(recommendations, 1):
-                    with st.container():
-                        st.markdown(f"#### {i}. {rec['competence_name']}")
-                        st.caption(f"スコア: {rec['score']:.2f}")
-                        st.info(rec['explanation'])
+        # 表示設定
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+            graph_threshold = st.slider(
+                "表示閾値",
+                0.01, 0.3, 0.05, 0.01,
+                key="ego_threshold",
+                help="この値以上の因果係数を持つエッジのみ表示"
+            )
+        with col_g2:
+            physics_enabled = st.checkbox(
+                "物理演算",
+                value=True,
+                key="ego_physics",
+                help="ノードの自動配置（重い場合はOFF推奨）"
+            )
 
-                        # 詳細スコア
-                        with st.expander("詳細スコア内訳"):
-                            details = rec['details']
-                            st.write(f"- Readiness (準備): {details['readiness_score']:.2f}")
-                            st.write(f"- Utility (将来): {details['utility_score']:.2f}")
+        # エゴネットワークの可視化
+        if recommendations:
+            center_node = recommendations[0]['competence_name']
 
-        with col_graph:
-            st.markdown("### 🔗 関連因果グラフ（インタラクティブ）")
-            st.caption("選択したメンバーの保有スキル（青）と推奨スキル周辺の因果関係")
+            # Visualizer作成
+            adj_matrix = recommender.learner.get_adjacency_matrix()
+            visualizer = CausalGraphVisualizer(adj_matrix)
 
-            # 表示設定
-            col_g1, col_g2 = st.columns(2)
-            with col_g1:
-                graph_threshold = st.slider(
-                    "表示閾値",
-                    0.01, 0.3, 0.05, 0.01,
-                    key="ego_threshold",
-                    help="この値以上の因果係数を持つエッジのみ表示"
+            # 保有スキルをハイライト用リストに
+            member_skills_codes = td["member_competence"][
+                td["member_competence"]["メンバーコード"] == selected_member_code
+            ]["力量コード"].tolist()
+
+            # コード -> 名前変換
+            code_to_name = recommender.code_to_name
+            member_skill_names = [code_to_name.get(c, c) for c in member_skills_codes]
+
+            try:
+                # エゴネットワークは静的グラフで表示
+                dot = visualizer.visualize_ego_network(
+                    center_node=center_node,
+                    radius=1,
+                    threshold=graph_threshold
                 )
-            with col_g2:
-                physics_enabled = st.checkbox(
-                    "物理演算",
-                    value=True,
-                    key="ego_physics",
-                    help="ノードの自動配置（重い場合はOFF推奨）"
-                )
-
-            # エゴネットワークの可視化
-            if recommendations:
-                center_node = recommendations[0]['competence_name']
-
-                # Visualizer作成
-                adj_matrix = recommender.learner.get_adjacency_matrix()
-                visualizer = CausalGraphVisualizer(adj_matrix)
-
-                # 保有スキルをハイライト用リストに
-                member_skills_codes = td["member_competence"][
-                    td["member_competence"]["メンバーコード"] == selected_member_code
-                ]["力量コード"].tolist()
-
-                # コード -> 名前変換
-                code_to_name = recommender.code_to_name
-                member_skill_names = [code_to_name.get(c, c) for c in member_skills_codes]
-
-                try:
-                    # エゴネットワークは静的グラフで表示
-                    dot = visualizer.visualize_ego_network(
-                        center_node=center_node,
-                        radius=1,
-                        threshold=graph_threshold
-                    )
-                    st.graphviz_chart(dot)
-                    st.caption("💡 推奨スキルを中心とした因果関係を表示")
-                except Exception as e:
-                    st.error(f"グラフを描画できませんでした: {e}")
+                st.graphviz_chart(dot, use_container_width=True)
+                st.caption("💡 推奨スキルを中心とした因果関係を表示")
+            except Exception as e:
+                st.error(f"グラフを描画できませんでした: {e}")
 
 with tab2:
     st.subheader("因果グラフ全体像（インタラクティブ）")
