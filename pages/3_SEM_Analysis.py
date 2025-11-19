@@ -208,25 +208,64 @@ with st.expander("📖 使い方ガイド", expanded=False):
 # =========================================================
 
 # データがロードされているか確認
-if 'transformed_data' not in st.session_state:
-    st.warning("⚠️ データがロードされていません。まずデータ読み込みページでデータをアップロードしてください。")
+if 'transformed_data' not in st.session_state or st.session_state.transformed_data is None:
+    st.error("❌ **データがロードされていません**")
+    st.markdown("""
+    ### 📋 次の手順でデータを読み込んでください:
+    
+    1. **左サイドバーのナビゲーション**から「🧭 CareerNavigator」（ホームページ）を選択
+    2. **6種類のCSVファイル**をアップロード:
+       - メンバーマスタ
+       - 力量（スキル）マスタ
+       - 力量（教育）マスタ
+       - 力量（資格）マスタ
+       - 力量カテゴリーマスタ
+       - 保有力量データ
+    3. **「📥 データを読み込む」ボタン**をクリック
+    4. データ読み込み完了後、このページに戻ってください
+    
+    """)
+    
+    # ホームページへのリンク（Streamlit Cloudの場合）
+    st.info("💡 **ヒント**: サイドバーの一番上にある「🧭 CareerNavigator」をクリックしてデータ読み込みページに移動できます")
     st.stop()
 
 td = st.session_state.transformed_data
 
 # デバッグ: transformed_dataの型を確認
 if not isinstance(td, dict):
-    st.error(f"❌ transformed_dataが辞書ではありません。型: {type(td)}")
-    st.info("データ読み込みページで再度データをアップロードしてください。")
+    st.error(f"❌ **データの形式が正しくありません**")
+    st.markdown(f"""
+    ### 🔍 エラー詳細:
+    - **期待される型**: 辞書 (dict)
+    - **実際の型**: `{type(td).__name__}`
+    
+    ### 🔧 解決方法:
+    1. ホームページ（🧭 CareerNavigator）に戻る
+    2. ページを再読み込み（ブラウザの更新ボタン）
+    3. データを再度アップロードして読み込む
+    
+    問題が解決しない場合は、ブラウザのキャッシュをクリアしてください。
+    """)
     st.stop()
 
 # データが必要なキーを持っているか確認
 required_keys = ["member_competence", "competence_master", "members_clean"]
 missing_keys = [key for key in required_keys if key not in td]
 if missing_keys:
-    st.error(f"❌ 必要なデータが不足しています: {', '.join(missing_keys)}")
-    st.info(f"利用可能なキー: {list(td.keys())}")
-    st.info("データ読み込みページで再度データをアップロードしてください。")
+    st.error(f"❌ **必要なデータが不足しています**")
+    st.markdown(f"""
+    ### 🔍 不足しているデータ:
+    {', '.join([f'`{key}`' for key in missing_keys])}
+    
+    ### 📊 現在利用可能なデータ:
+    {', '.join([f'`{key}`' for key in td.keys()])}
+    
+    ### 🔧 解決方法:
+    1. ホームページ（🧭 CareerNavigator）に戻る
+    2. **すべてのCSVファイル**が正しくアップロードされているか確認
+    3. データを再度読み込む
+    """)
     st.stop()
 
 member_competence_all = td["member_competence"]
