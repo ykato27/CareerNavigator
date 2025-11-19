@@ -1,13 +1,19 @@
 import pandas as pd
 import numpy as np
 import networkx as nx
-from pgmpy.models import BayesianNetwork
-from pgmpy.estimators import MaximumLikelihoodEstimator, BayesianEstimator
-from pgmpy.inference import VariableElimination
 from typing import List, Dict, Any, Optional, Tuple
 import structlog
 
 logger = structlog.get_logger()
+
+try:
+    from pgmpy.models import BayesianNetwork
+    from pgmpy.estimators import MaximumLikelihoodEstimator
+    from pgmpy.inference import VariableElimination
+    PGMPY_AVAILABLE = True
+except ImportError:
+    PGMPY_AVAILABLE = False
+    logger.warning("pgmpy not found. Bayesian Network features will be disabled.")
 
 class BayesianNetworkRecommender:
     """
@@ -34,6 +40,10 @@ class BayesianNetworkRecommender:
             data: メンバーごとのスキル保有データ（0/1）
             threshold: エッジを採用する係数の閾値（絶対値）
         """
+        if not PGMPY_AVAILABLE:
+            logger.warning("pgmpy is not available. Skipping fit.")
+            return
+
         logger.info("Starting Bayesian Network training")
         
         # 1. 隣接行列からエッジリストを作成（DAGの構築）
@@ -114,6 +124,9 @@ class BayesianNetworkRecommender:
         Returns:
             float: 確率 P(Target=1 | Evidence)
         """
+        if not PGMPY_AVAILABLE:
+            return 0.0
+
         if self.inference is None:
             raise RuntimeError("Model is not trained. Call fit() first.")
             
