@@ -70,8 +70,16 @@ def load_sem_network_visualizer():
 def load_skill_dependency_analyzer():
     """SkillDependencyAnalyzerを動的にロード"""
     core_dir = project_root / "skillnote_recommendation" / "core"
-    analyzer_path = core_dir / "skill_dependency_analyzer.py"
 
+    # Configをロード
+    config_path = core_dir / "config.py"
+    config_spec = importlib.util.spec_from_file_location("config", str(config_path))
+    config_module = importlib.util.module_from_spec(config_spec)
+    sys.modules['skillnote_recommendation.core.config'] = config_module
+    config_spec.loader.exec_module(config_module)
+
+    # SkillDependencyAnalyzerをロード
+    analyzer_path = core_dir / "skill_dependency_analyzer.py"
     spec = importlib.util.spec_from_file_location(
         "skill_dependency_analyzer",
         str(analyzer_path)
@@ -1041,8 +1049,8 @@ if model_type == "UnifiedSEM（実データ）":
                 visualizer = SEMNetworkVisualizer()
 
                 # タブで表示方法を選択（スキル間ネットワークを最初に）
-                tab1, tab2, tab3, tab4, tab5 = st.tabs(
-                    ["🕸️ スキル間ネットワーク", "🎓 スキル学習順序", "📈 統合モデル", "🔬 測定モデル", "🎯 カテゴリー間因果関係"]
+                tab1, tab2, tab3, tab4 = st.tabs(
+                    ["🕸️ スキル間ネットワーク", "📈 統合モデル", "🔬 測定モデル", "🎯 カテゴリー間因果関係"]
                 )
 
                 with tab1:
@@ -1267,177 +1275,6 @@ if model_type == "UnifiedSEM（実データ）":
 
                 with tab2:
                     st.markdown(
-                        "### 🎓 スキル学習順序（時系列分析）\n"
-                        "実際の取得データから学習順序・前提関係を抽出"
-                    )
-
-                    # 取得日データの存在チェック
-                    if '取得日' not in member_competence.columns:
-                        st.warning("⚠️ スキル学習順序分析には「取得日」データが必要です")
-                        st.info("""
-                        **対処方法:**
-                        1. CSVファイルに取得日カラムを追加してください
-                        2. データを再アップロードしてください
-
-                        **必要な形式:**
-                        - カラム名: `取得日`
-                        - 形式: YYYY/MM/DD または YYYY-MM-DD
-                        """)
-                    else:
-                        # 分析設定
-                        st.markdown("#### ⚙️ 分析設定")
-
-                        col1, col2, col3 = st.columns(3)
-
-                        with col1:
-                            time_window_days = st.slider(
-                                "遷移とみなす最大期間（日数）",
-                                min_value=30,
-                                max_value=365,
-                                value=180,
-                                step=30,
-                                help="この期間内に連続して習得したスキルペアを分析対象とします",
-                                key="unified_time_window"
-                            )
-
-                        with col2:
-                            min_transition_count = st.slider(
-                                "最小遷移人数",
-                                min_value=1,
-                                max_value=10,
-                                value=3,
-                                step=1,
-                                help="この人数以上が同じ順序で学んだパターンのみを抽出します",
-                                key="unified_min_transition"
-                            )
-
-                        with col3:
-                            confidence_threshold = st.slider(
-                                "依存関係の信頼度閾値",
-                                min_value=0.1,
-                                max_value=0.9,
-                                value=0.3,
-                                step=0.1,
-                                help="この信頼度以上の遷移を依存関係とみなします",
-                                key="unified_confidence"
-                            )
-
-                        # 分析実行ボタン
-                        if st.button("📊 学習順序を分析", key="unified_analyze_dependency", type="primary"):
-                            with st.spinner("スキル学習順序を分析中..."):
-                                try:
-                                    # フィルタリングされたメンバーの力量データを取得
-                                    if 'filtered_member_codes' in st.session_state and st.session_state.filtered_member_codes:
-                                        filtered_competence = member_competence[
-                                            member_competence['メンバーコード'].isin(st.session_state.filtered_member_codes)
-                                        ]
-                                    else:
-                                        filtered_competence = member_competence
-
-                                    # SkillDependencyAnalyzerをロード
-                                    analyzer_module = load_skill_dependency_analyzer()
-                                    SkillDependencyAnalyzer = analyzer_module.SkillDependencyAnalyzer
-
-                                    # アナライザーを初期化
-                                    analyzer = SkillDependencyAnalyzer(
-                                        member_competence=filtered_competence,
-                                        competence_master=competence_master,
-                                        time_window_days=time_window_days,
-                                        min_transition_count=min_transition_count,
-                                        confidence_threshold=confidence_threshold
-                                    )
-
-                                    # 学習パスを生成
-                                    learning_paths = analyzer.generate_learning_paths()
-
-                                    # グラフデータを取得
-                                    graph_data = analyzer.get_dependency_graph_data()
-
-                                    # セッション状態に保存
-                                    st.session_state.unified_skill_dependencies = {
-                                        'analyzer': analyzer,
-                                        'learning_paths': learning_paths,
-                                        'graph_data': graph_data
-                                    }
-
-                                    st.success(f"✅ 分析完了！{len(learning_paths)}個のスキルの学習パスを生成しました")
-
-                                except Exception as e:
-                                    st.error(f"❌ 分析エラー: {e}")
-                                    import traceback
-                                    with st.expander("エラー詳細"):
-                                        st.code(traceback.format_exc())
-
-                        # 分析結果表示
-                        if 'unified_skill_dependencies' in st.session_state:
-                            dep_data = st.session_state.unified_skill_dependencies
-                            learning_paths = dep_data['learning_paths']
-                            graph_data = dep_data['graph_data']
-
-                            st.markdown("---")
-                            st.markdown("#### 📊 分析サマリー")
-
-                            col1, col2, col3 = st.columns(3)
-
-                            with col1:
-                                total_skills = len(learning_paths)
-                                st.metric("分析スキル数", total_skills)
-
-                            with col2:
-                                total_edges = len(graph_data.get('edges', []))
-                                st.metric("依存関係数", total_edges)
-
-                            with col3:
-                                strong_deps = sum(1 for edge in graph_data.get('edges', []) if edge.get('strength') == '強')
-                                st.metric("強い依存関係", strong_deps)
-
-                            # グラフ表示
-                            st.markdown("---")
-                            st.markdown("#### 🕸️ スキル学習順序グラフ")
-
-                            st.markdown("""
-                            **グラフの見方:**
-                            - 矢印の向き: 学習順序（A→B = Aを先に学ぶべき）
-                            - 線の色:
-                              - 🔴 赤（太線）: 強い依存関係（信頼度 ≥ 70%）
-                              - 🟠 橙（中線）: 中程度の依存関係（信頼度 50-70%）
-                              - ⚫ 灰（細線）: 弱い依存関係（信頼度 30-50%）
-                            - 根拠: 実際のメンバーの取得パターンに基づく
-                            """)
-
-                            if graph_data.get('edges'):
-                                # visualization utilsをロード
-                                viz_module = load_visualization_utils()
-                                create_dependency_graph = viz_module.create_dependency_graph
-
-                                fig = create_dependency_graph(graph_data)
-                                st.plotly_chart(fig, use_container_width=True)
-                            else:
-                                st.info("依存関係が見つかりませんでした。分析設定を調整してみてください。")
-
-                            # 詳細データ
-                            with st.expander("📋 学習パス詳細データ"):
-                                path_data = []
-                                for code, path in learning_paths.items():
-                                    path_data.append({
-                                        '力量コード': code,
-                                        '力量名': path.competence_name,
-                                        'タイプ': path.competence_type,
-                                        '難易度': path.estimated_difficulty,
-                                        '前提スキル数': len(path.recommended_prerequisites),
-                                        '並列学習可能': len(path.can_learn_in_parallel),
-                                        'アンロック': len(path.unlocks),
-                                        '成功率': f"{int(path.success_rate * 100)}%"
-                                    })
-
-                                df_paths = pd.DataFrame(path_data)
-                                st.dataframe(df_paths, use_container_width=True)
-
-                        else:
-                            st.info("👆 上の「学習順序を分析」ボタンをクリックして分析を開始してください")
-
-                with tab3:
-                    st.markdown(
                         "### 📊 統合SEM構造（全体像）\n"
                         "スキル習得 → 力量カテゴリー形成 → キャリア発展の構造"
                     )
@@ -1503,7 +1340,7 @@ if model_type == "UnifiedSEM（実データ）":
                     )
                     st.plotly_chart(fig_combined, use_container_width=True)
 
-                with tab4:
+                with tab3:
                     st.markdown(
                         "### 🔬 測定モデル（スキル→力量）\n"
                         "各スキルが力量カテゴリーの形成にどの程度貢献しているか"
@@ -1553,7 +1390,7 @@ if model_type == "UnifiedSEM（実データ）":
                     )
                     st.plotly_chart(fig_measurement, use_container_width=True)
 
-                with tab5:
+                with tab4:
                     st.markdown(
                         "### 🎯 カテゴリー間因果関係（有向グラフ）\n"
                         "力量カテゴリー間の因果関係と学習発展段階"
@@ -2098,9 +1935,8 @@ elif model_type == "HierarchicalSEM（実データ）":
                         ))
 
                         # タブで表示方法を選択
-                        tab1, tab2, tab3, tab4 = st.tabs([
+                        tab1, tab2, tab3 = st.tabs([
                             "🕸️ スキル間ネットワーク（ドメイン別）",
-                            "🎓 スキル学習順序",
                             "📈 カテゴリー別スコア相関",
                             "🎯 カテゴリー間因果関係"
                         ])
@@ -2299,177 +2135,6 @@ elif model_type == "HierarchicalSEM（実データ）":
 
                         with tab2:
                             st.markdown(
-                                "### 🎓 スキル学習順序（時系列分析）\n"
-                                "実際の取得データから学習順序・前提関係を抽出"
-                            )
-
-                            # 取得日データの存在チェック
-                            if '取得日' not in member_competence.columns:
-                                st.warning("⚠️ スキル学習順序分析には「取得日」データが必要です")
-                                st.info("""
-                                **対処方法:**
-                                1. CSVファイルに取得日カラムを追加してください
-                                2. データを再アップロードしてください
-
-                                **必要な形式:**
-                                - カラム名: `取得日`
-                                - 形式: YYYY/MM/DD または YYYY-MM-DD
-                                """)
-                            else:
-                                # 分析設定
-                                st.markdown("#### ⚙️ 分析設定")
-
-                                col1, col2, col3 = st.columns(3)
-
-                                with col1:
-                                    time_window_days_hier = st.slider(
-                                        "遷移とみなす最大期間（日数）",
-                                        min_value=30,
-                                        max_value=365,
-                                        value=180,
-                                        step=30,
-                                        help="この期間内に連続して習得したスキルペアを分析対象とします",
-                                        key="hier_time_window"
-                                    )
-
-                                with col2:
-                                    min_transition_count_hier = st.slider(
-                                        "最小遷移人数",
-                                        min_value=1,
-                                        max_value=10,
-                                        value=3,
-                                        step=1,
-                                        help="この人数以上が同じ順序で学んだパターンのみを抽出します",
-                                        key="hier_min_transition"
-                                    )
-
-                                with col3:
-                                    confidence_threshold_hier = st.slider(
-                                        "依存関係の信頼度閾値",
-                                        min_value=0.1,
-                                        max_value=0.9,
-                                        value=0.3,
-                                        step=0.1,
-                                        help="この信頼度以上の遷移を依存関係とみなします",
-                                        key="hier_confidence"
-                                    )
-
-                                # 分析実行ボタン
-                                if st.button("📊 学習順序を分析", key="hier_analyze_dependency", type="primary"):
-                                    with st.spinner("スキル学習順序を分析中..."):
-                                        try:
-                                            # フィルタリングされたメンバーの力量データを取得
-                                            if 'filtered_member_codes' in st.session_state and st.session_state.filtered_member_codes:
-                                                filtered_competence_hier = member_competence[
-                                                    member_competence['メンバーコード'].isin(st.session_state.filtered_member_codes)
-                                                ]
-                                            else:
-                                                filtered_competence_hier = member_competence
-
-                                            # SkillDependencyAnalyzerをロード
-                                            analyzer_module = load_skill_dependency_analyzer()
-                                            SkillDependencyAnalyzer = analyzer_module.SkillDependencyAnalyzer
-
-                                            # アナライザーを初期化
-                                            analyzer_hier = SkillDependencyAnalyzer(
-                                                member_competence=filtered_competence_hier,
-                                                competence_master=competence_master,
-                                                time_window_days=time_window_days_hier,
-                                                min_transition_count=min_transition_count_hier,
-                                                confidence_threshold=confidence_threshold_hier
-                                            )
-
-                                            # 学習パスを生成
-                                            learning_paths_hier = analyzer_hier.generate_learning_paths()
-
-                                            # グラフデータを取得
-                                            graph_data_hier = analyzer_hier.get_dependency_graph_data()
-
-                                            # セッション状態に保存
-                                            st.session_state.hier_skill_dependencies = {
-                                                'analyzer': analyzer_hier,
-                                                'learning_paths': learning_paths_hier,
-                                                'graph_data': graph_data_hier
-                                            }
-
-                                            st.success(f"✅ 分析完了！{len(learning_paths_hier)}個のスキルの学習パスを生成しました")
-
-                                        except Exception as e:
-                                            st.error(f"❌ 分析エラー: {e}")
-                                            import traceback
-                                            with st.expander("エラー詳細"):
-                                                st.code(traceback.format_exc())
-
-                                # 分析結果表示
-                                if 'hier_skill_dependencies' in st.session_state:
-                                    dep_data_hier = st.session_state.hier_skill_dependencies
-                                    learning_paths_hier = dep_data_hier['learning_paths']
-                                    graph_data_hier = dep_data_hier['graph_data']
-
-                                    st.markdown("---")
-                                    st.markdown("#### 📊 分析サマリー")
-
-                                    col1, col2, col3 = st.columns(3)
-
-                                    with col1:
-                                        total_skills_hier = len(learning_paths_hier)
-                                        st.metric("分析スキル数", total_skills_hier)
-
-                                    with col2:
-                                        total_edges_hier = len(graph_data_hier.get('edges', []))
-                                        st.metric("依存関係数", total_edges_hier)
-
-                                    with col3:
-                                        strong_deps_hier = sum(1 for edge in graph_data_hier.get('edges', []) if edge.get('strength') == '強')
-                                        st.metric("強い依存関係", strong_deps_hier)
-
-                                    # グラフ表示
-                                    st.markdown("---")
-                                    st.markdown("#### 🕸️ スキル学習順序グラフ")
-
-                                    st.markdown("""
-                                    **グラフの見方:**
-                                    - 矢印の向き: 学習順序（A→B = Aを先に学ぶべき）
-                                    - 線の色:
-                                      - 🔴 赤（太線）: 強い依存関係（信頼度 ≥ 70%）
-                                      - 🟠 橙（中線）: 中程度の依存関係（信頼度 50-70%）
-                                      - ⚫ 灰（細線）: 弱い依存関係（信頼度 30-50%）
-                                    - 根拠: 実際のメンバーの取得パターンに基づく
-                                    """)
-
-                                    if graph_data_hier.get('edges'):
-                                        # visualization utilsをロード
-                                        viz_module = load_visualization_utils()
-                                        create_dependency_graph = viz_module.create_dependency_graph
-
-                                        fig_hier = create_dependency_graph(graph_data_hier)
-                                        st.plotly_chart(fig_hier, use_container_width=True)
-                                    else:
-                                        st.info("依存関係が見つかりませんでした。分析設定を調整してみてください。")
-
-                                    # 詳細データ
-                                    with st.expander("📋 学習パス詳細データ"):
-                                        path_data_hier = []
-                                        for code, path in learning_paths_hier.items():
-                                            path_data_hier.append({
-                                                '力量コード': code,
-                                                '力量名': path.competence_name,
-                                                'タイプ': path.competence_type,
-                                                '難易度': path.estimated_difficulty,
-                                                '前提スキル数': len(path.recommended_prerequisites),
-                                                '並列学習可能': len(path.can_learn_in_parallel),
-                                                'アンロック': len(path.unlocks),
-                                                '成功率': f"{int(path.success_rate * 100)}%"
-                                            })
-
-                                        df_paths_hier = pd.DataFrame(path_data_hier)
-                                        st.dataframe(df_paths_hier, use_container_width=True)
-
-                                else:
-                                    st.info("👆 上の「学習順序を分析」ボタンをクリックして分析を開始してください")
-
-                        with tab3:
-                            st.markdown(
                                 "### 📈 カテゴリー別スコア相関\n"
                                 "各カテゴリースコア間の相関関係を表示します"
                             )
@@ -2503,7 +2168,7 @@ elif model_type == "HierarchicalSEM（実データ）":
                             else:
                                 st.info("💡 カテゴリースコアが見つかりません")
 
-                        with tab4:
+                        with tab3:
                             st.markdown(
                                 "### 🎯 カテゴリー間因果関係（有向グラフ）\n"
                                 "統合層における力量カテゴリー間の因果関係と学習発展段階"
