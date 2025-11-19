@@ -238,6 +238,32 @@ class CausalGraphRecommender:
     def _get_effect(self, cause: str, effect: str) -> float:
         """因果効果を取得 (存在しない場合は0)"""
         if self.total_effects_ is None:
+            return 0.0
+
+        return self.total_effects_.get(cause, {}).get(effect, 0.0)
+
+    def _generate_explanation(self, item: Dict[str, Any]) -> str:
+        """推薦の説明文を生成"""
+        lines = []
+
+        # Readiness (準備完了度)
+        if item['readiness_reasons']:
+            lines.append("【習得の準備ができています】")
+            for skill_name, score in item['readiness_reasons'][:3]:  # 上位3つ
+                lines.append(f"・{skill_name} の経験があるため (因果効果: {score:.3f})")
+
+        # Bayesian Score
+        if item['bayesian_score'] > 0:
+            prob_pct = item['bayesian_score'] * 100
+            lines.append(f"・同様のスキルセットを持つ方の {prob_pct:.1f}% がこのスキルを習得しています")
+
+        # Utility (有用性)
+        if item['utility_reasons']:
+            lines.append("\n【このスキルが役立つ場面】")
+            for skill_name, score in item['utility_reasons'][:3]:  # 上位3つ
+                lines.append(f"・{skill_name} の習得に役立ちます (因果効果: {score:.3f})")
+
+        if not lines:
             lines.append("・基礎スキルとして推奨されます。")
-            
+
         return "\n".join(lines)
