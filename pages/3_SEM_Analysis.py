@@ -871,7 +871,67 @@ if model_type == "UnifiedSEM（実データ）":
             if use_efa:
                 st.success("✅ EFAを使用します。因子数は自動決定されます（Kaiser基準 + 累積寄与率80%）")
 
-                efa_advanced = st.checkbox("詳細設定", value=False)
+                # スキルフィルタリングオプション
+                st.markdown("---")
+                st.markdown("**🎯 スキルの事前フィルタリング（推奨）**")
+                st.caption("取得人数が少ないスキルを除外することで、統計的信頼性を向上させ、推定時間を短縮します。")
+
+                # 最低取得人数のスライダー
+                min_users_for_skill = st.slider(
+                    "最低取得人数（この人数未満のスキルは除外）",
+                    min_value=2,
+                    max_value=min(20, len(st.session_state.get('filtered_member_codes', member_competence['メンバーコード'].unique())) // 2),
+                    value=2,
+                    help="この人数以上のメンバーが取得しているスキルのみを分析に使用します"
+                )
+
+                # フィルタリング結果のプレビュー（リアルタイム表示）
+                # selected_competencesから一時的なpivot_dataを作成して計算
+                temp_selected_skill_codes = selected_competences['力量コード'].tolist()
+                temp_filtered_mc = member_competence[
+                    member_competence['力量コード'].isin(temp_selected_skill_codes)
+                ]
+
+                # フィルタリング対象のメンバーを特定
+                if 'filtered_member_codes' in st.session_state and st.session_state.filtered_member_codes:
+                    temp_filtered_mc = temp_filtered_mc[
+                        temp_filtered_mc['メンバーコード'].isin(st.session_state.filtered_member_codes)
+                    ]
+
+                temp_pivot = temp_filtered_mc.pivot_table(
+                    index='メンバーコード',
+                    columns='力量コード',
+                    values='正規化レベル',
+                    aggfunc='first'
+                ).fillna(0)
+
+                # 各スキルの取得人数を計算
+                skill_user_counts = (temp_pivot > 0).sum(axis=0)
+                n_skills_before = len(skill_user_counts)
+                n_skills_excluded = (skill_user_counts < min_users_for_skill).sum()
+                n_skills_after = (skill_user_counts >= min_users_for_skill).sum()
+
+                # プレビュー表示
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("元のスキル数", f"{n_skills_before}個")
+                with col2:
+                    st.metric("除外されるスキル", f"{n_skills_excluded}個", delta=f"-{n_skills_excluded}")
+                with col3:
+                    st.metric("残るスキル数", f"{n_skills_after}個", delta=f"{n_skills_after - n_skills_before}")
+
+                # 警告表示
+                if n_skills_after < 50:
+                    st.warning(f"⚠️ 残るスキル数が少なすぎます（{n_skills_after}個）。閾値を下げることを推奨します。")
+                elif n_skills_excluded > 0:
+                    reduction_pct = (n_skills_excluded / n_skills_before) * 100
+                    st.info(f"💡 {reduction_pct:.1f}%のスキルが除外されます。推定時間が約{reduction_pct * 0.7:.0f}%短縮される見込みです。")
+
+                # フィルタリング済みスキルリストをsession_stateに保存（後でEFA実行時に使用）
+                st.session_state['efa_filtered_skills'] = skill_user_counts[skill_user_counts >= min_users_for_skill].index.tolist()
+                st.session_state['efa_min_users'] = min_users_for_skill
+
+                efa_advanced = st.checkbox("詳細設定（因子数の手動指定）", value=False)
                 if efa_advanced:
                     col1, col2 = st.columns(2)
                     with col1:
@@ -937,9 +997,19 @@ if model_type == "UnifiedSEM（実データ）":
         # EFA使用判定とキャッシュ
         efa_result = None
         if use_efa:
-            # キャッシュキーを作成
-            skill_codes_key = "_".join(sorted(pivot_data.columns.tolist())[:10])  # 先頭10スキルでキー生成
-            cache_key_efa = f"efa_{len(pivot_data.columns)}_{len(pivot_data)}_{skill_codes_key}"
+            # スキルフィルタリングを適用
+            if 'efa_filtered_skills' in st.session_state and st.session_state.efa_filtered_skills:
+                filtered_skills = st.session_state.efa_filtered_skills
+                # フィルタリング済みスキルのみを使用
+                efa_pivot_data = pivot_data[filtered_skills]
+                st.info(f"📊 スキルフィルタリング適用: {len(pivot_data.columns)}個 → {len(efa_pivot_data.columns)}個")
+            else:
+                efa_pivot_data = pivot_data
+
+            # キャッシュキーを作成（フィルタリング設定を含む）
+            min_users_key = st.session_state.get('efa_min_users', 2)
+            skill_codes_key = "_".join(sorted(efa_pivot_data.columns.tolist())[:10])  # 先頭10スキルでキー生成
+            cache_key_efa = f"efa_{len(efa_pivot_data.columns)}_{len(efa_pivot_data)}_{min_users_key}_{skill_codes_key}"
 
             if cache_key_efa not in st.session_state:
                 with st.spinner("探索的因子分析（EFA）実行中..."):
@@ -948,14 +1018,14 @@ if model_type == "UnifiedSEM（実データ）":
                         efa_module = load_efa()
                         ExploratoryFactorAnalyzer = efa_module.ExploratoryFactorAnalyzer
 
-                        # スキル名マッピングを作成（ピボットデータのスキルコードに対応）
+                        # スキル名マッピングを作成（フィルタリング済みスキルに対応）
                         skill_code_to_name = dict(
                             zip(selected_competences['力量コード'], selected_competences['力量名'])
                         )
 
                         # EFA実行
                         efa = ExploratoryFactorAnalyzer(
-                            pivot_data=pivot_data,
+                            pivot_data=efa_pivot_data,
                             skill_name_mapping=skill_code_to_name,
                             n_factors=n_efa_factors,  # Noneの場合は自動決定
                         )
@@ -996,6 +1066,9 @@ if model_type == "UnifiedSEM（実データ）":
                     # EFAベースの測定モデル仕様
                     st.info("🔬 EFAで発見した因子を使用してSEMを構築します")
 
+                    # EFA用にフィルタリングしたpivot_dataを使用
+                    sem_pivot_data = efa_pivot_data
+
                     measurement_specs = []
                     valid_factors = []
 
@@ -1016,8 +1089,8 @@ if model_type == "UnifiedSEM（実データ）":
                     # 因子ごとにスキルをグループ化
                     factor_to_skills = defaultdict(list)
                     for skill_code, factor_idx in skill_primary_factor.items():
-                        # ピボットデータに存在するスキルのみ
-                        if skill_code in pivot_data.columns:
+                        # フィルタリング済みピボットデータに存在するスキルのみ
+                        if skill_code in sem_pivot_data.columns:
                             factor_to_skills[factor_idx].append(skill_code)
 
                     # measurement_specs作成
@@ -1052,6 +1125,9 @@ if model_type == "UnifiedSEM（実データ）":
 
                 else:
                     # カテゴリーベースの測定モデル仕様（従来）
+                    # EFA不使用時は元のpivot_dataを使用
+                    sem_pivot_data = pivot_data
+
                     measurement_specs = []
                     valid_categories = []
                     for category in selected_categories:
@@ -1061,7 +1137,7 @@ if model_type == "UnifiedSEM（実データ）":
                         skill_codes = cat_competences['力量コード'].tolist()
 
                         # ピボットデータに存在するスキルのみを使用
-                        skill_codes = [code for code in skill_codes if code in pivot_data.columns]
+                        skill_codes = [code for code in skill_codes if code in sem_pivot_data.columns]
 
                         if len(skill_codes) >= 2:  # 最低2個のスキルが必要
                             measurement_specs.append(
@@ -1091,7 +1167,7 @@ if model_type == "UnifiedSEM（実データ）":
 
                 # UnifiedSEM推定
                 sem = UnifiedSEMEstimator(measurement_specs, structural_specs, method='ML')
-                sem.fit(pivot_data)
+                sem.fit(sem_pivot_data)  # EFA使用時はフィルタリング済みデータを使用
 
                 # 推定結果をsession_stateに保存（スライダー変更時も結果を保持）
                 st.session_state['unified_sem_result'] = sem
