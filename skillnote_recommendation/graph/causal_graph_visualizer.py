@@ -199,7 +199,6 @@ class CausalGraphVisualizer:
             top_n=len(related_nodes), # 全ノード表示
             height=height,
             width="100%",
-            show_negative=show_negative,
             highlight_nodes=[center_node],
             member_skills=member_skills
         )
