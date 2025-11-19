@@ -236,7 +236,7 @@ with tab1:
 
             try:
                 # エゴネットワークをインタラクティブに表示
-                html_path = visualizer.visualize_ego_network_interactive(
+                html_path = visualizer.visualize_ego_network_pyvis(
                     center_node=center_node,
                     radius=1,
                     threshold=graph_threshold,

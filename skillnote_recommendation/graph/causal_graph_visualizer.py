@@ -162,7 +162,7 @@ class CausalGraphVisualizer:
         
         return dot
 
-    def visualize_ego_network_interactive(
+    def visualize_ego_network_pyvis(
         self,
         center_node: str,
         radius: int = 1,
