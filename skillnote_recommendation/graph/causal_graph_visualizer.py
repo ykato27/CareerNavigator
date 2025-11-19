@@ -138,7 +138,8 @@ class CausalGraphVisualizer:
         top_n: int = 50,
         height: str = "600px",
         width: str = "100%",
-        notebook: bool = False
+        notebook: bool = False,
+        show_negative: bool = False
     ) -> str:
         """
         PyVisを用いてインタラクティブなHTMLグラフを生成し、パスを返す。
@@ -150,6 +151,7 @@ class CausalGraphVisualizer:
             height: グラフの高さ
             width: グラフの幅
             notebook: Notebook環境かどうか
+            show_negative: 負の因果関係も表示するか（False=正のみ、True=正負両方）
             
         Returns:
             str: 生成されたHTMLファイルのパス
@@ -188,6 +190,10 @@ class CausalGraphVisualizer:
                 weight = self.adj_matrix.loc[from_node, to_node]
                 
                 if abs(weight) >= threshold:
+                    # 負の因果関係をスキップする場合
+                    if not show_negative and weight < 0:
+                        continue
+                    
                     # エッジの太さと色
                     width_val = max(1, abs(weight) * 5)
                     color = "#333333" if weight > 0 else "#DC3545" # Black for positive, Red for negative
