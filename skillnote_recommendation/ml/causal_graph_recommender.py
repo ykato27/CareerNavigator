@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple, Any
 import logging
 
 from skillnote_recommendation.ml.causal_structure_learner import CausalStructureLearner
+from skillnote_recommendation.ml.bayesian_network_recommender import BayesianNetworkRecommender
 from skillnote_recommendation.config import config
 from skillnote_recommendation.utils.logger import setup_logger
 
@@ -49,6 +50,7 @@ class CausalGraphRecommender:
             params['random_state'] = config.model.RANDOM_STATE
             
         self.learner = CausalStructureLearner(**params)
+        self.bn_recommender: Optional[BayesianNetworkRecommender] = None
         
         self.is_fitted = False
         self.skill_matrix_: Optional[pd.DataFrame] = None
@@ -108,7 +110,19 @@ class CausalGraphRecommender:
         self.learner.fit(skill_matrix_filtered)
         
         # 3. 総合効果の取得
+        # 3. 総合効果の取得
         self.total_effects_ = self.learner.get_causal_effects()
+        
+        # 4. ベイジアンネットワークの学習
+        try:
+            adj_matrix = self.learner.get_adjacency_matrix()
+            self.bn_recommender = BayesianNetworkRecommender(adj_matrix)
+            # バイナリデータ（0/1）に変換して学習
+            binary_data = (skill_matrix_filtered > 0).astype(int)
+            self.bn_recommender.fit(binary_data)
+        except Exception as e:
+            logger.error(f"ベイジアンネットワークの学習に失敗しました: {e}")
+            self.bn_recommender = None
         
         self.is_fitted = True
         logger.info("学習完了")
@@ -167,9 +181,26 @@ class CausalGraphRecommender:
                 if effect > 0.001:
                     utility_score += effect
                     utility_reasons.append((future, effect))
+                    utility_score += effect
+                    utility_reasons.append((future, effect))
+            
+            # 3. Bayesian Score: P(Target=1 | Owned)
+            bayesian_score = 0.0
+            if self.bn_recommender:
+                try:
+                    # ターゲットスキル名をコードから名前に変換する必要があるか確認
+                    # skill_matrixのカラム名は既に名前に変換されている(fitメソッド内で)
+                    # なので、target_skill (名前) をそのまま渡せばOK
+                    bayesian_score = self.bn_recommender.predict_probability(owned_skills, target_skill)
+                except Exception as e:
+                    logger.warning(f"ベイジアン推論エラー ({target_skill}): {e}")
             
             # 総合スコア: Readinessを重視（0.9）してユーザー固有の推薦を強化
-            total_score = readiness_score * 0.9 + utility_score * 0.1
+            # ベイジアン確率も考慮に入れる（Readinessの一部として解釈可能）
+            # 新スコア = (Readiness * 0.7 + Bayesian * 0.3) * 0.9 + Utility * 0.1 くらい？
+            # シンプルに: total = readiness * 0.6 + bayesian * 0.3 + utility * 0.1
+            
+            total_score = readiness_score * 0.6 + bayesian_score * 0.3 + utility_score * 0.1
             
             # Readiness Scoreが0のスキルは除外（ユーザー固有性を確保）
             # ただし、保有スキルが少ない場合は例外的に含める
@@ -182,6 +213,7 @@ class CausalGraphRecommender:
                     'total_score': total_score,
                     'readiness_score': readiness_score,
                     'utility_score': utility_score,
+                    'bayesian_score': bayesian_score,
                     'readiness_reasons': sorted(readiness_reasons, key=lambda x: x[1], reverse=True),
                     'utility_reasons': sorted(utility_reasons, key=lambda x: x[1], reverse=True)
                 })
