@@ -25,14 +25,26 @@ st.caption("LiNGAMの学習状況と推薦ロジックをデバッグ")
 @st.cache_data
 def load_all_data():
     """全データを読み込む"""
-    data_dir = project_root / "data"
+    import os
+    
+    # Streamlit Cloudではカレントディレクトリがプロジェクトルート
+    data_dir = Path("data")
+    
+    # ローカル環境の場合
+    if not data_dir.exists():
+        data_dir = project_root / "data"
     
     return {
         "member_competence": pd.read_csv(data_dir / "member_competence.csv"),
         "competence": pd.read_csv(data_dir / "competence.csv"),
     }
 
-td = load_all_data()
+try:
+    td = load_all_data()
+except Exception as e:
+    st.error(f"データ読み込みエラー: {e}")
+    st.info("他のページ（Causal Recommendation）でデータが正常に読み込まれているか確認してください。")
+    st.stop()
 
 # 推薦モデルの構築
 @st.cache_resource
