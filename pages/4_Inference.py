@@ -37,8 +37,8 @@ from skillnote_recommendation.utils.visualization import (
 )
 from skillnote_recommendation.core.models import Recommendation
 from skillnote_recommendation.utils.ui_components import (
-    apply_rich_ui_styles,
-    render_gradient_header,
+    apply_enterprise_styles,
+    render_page_header,
     render_section_divider,
     render_success_message
 )
@@ -489,11 +489,11 @@ st.set_page_config(
 )
 
 
-# Apply rich UI styles
-apply_rich_ui_styles()
+# Apply enterprise UI styles
+apply_enterprise_styles()
 
-# リッチなヘッダー
-render_gradient_header(
+# ページヘッダー
+render_page_header(
     title="🧭 CareerNavigator",
     icon="🎯",
     description="AI推薦実行 - 学習済みAIモデルを使用して、メンバーへの力量推薦を実行します"

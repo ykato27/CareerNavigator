@@ -14,8 +14,8 @@ try:
     from skillnote_recommendation.ml.acquisition_order_hierarchy import AcquisitionOrderHierarchy
     from skillnote_recommendation.ml.acquisition_order_sem_model import AcquisitionOrderSEMModel
     from skillnote_recommendation.utils.ui_components import (
-        apply_rich_ui_styles,
-        render_gradient_header
+        apply_enterprise_styles,
+        render_page_header
     )
     IMPORTS_OK = True
 except ImportError as e:
@@ -35,14 +35,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Apply rich UI styles
-apply_rich_ui_styles()
+# Apply enterprise UI styles
+apply_enterprise_styles()
 
-# Header
-render_gradient_header(
-    "【工事中】🎓 SEM階層的スキル推薦（取得順序ベース）",
-    # "【工事中】スキルの取得順序から学習する完全データドリブンな段階的学習パス推薦"
-    ""
+# ページヘッダー
+render_page_header(
+    title="【工事中】🎓 SEM階層的スキル推薦（取得順序ベース）",
+    icon="",
+    description=""
 )
 
 # =========================================================

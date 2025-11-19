@@ -21,8 +21,8 @@ from skillnote_recommendation.utils.streamlit_helpers import (
     display_error_details
 )
 from skillnote_recommendation.utils.ui_components import (
-    apply_rich_ui_styles,
-    render_gradient_header
+    apply_enterprise_styles,
+    render_page_header
 )
 
 # =========================================================
@@ -36,11 +36,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Apply rich UI styles
-apply_rich_ui_styles()
+# Apply enterprise UI styles
+apply_enterprise_styles()
 
-# リッチなヘッダー
-render_gradient_header(
+# ページヘッダー
+render_page_header(
     title="スキル依存関係分析",
     icon="🔗",
     description="時系列データから学習順序パターンを抽出し、推奨される学習パスを表示します"
