@@ -1,14 +1,22 @@
 """
 因果グラフ可視化モジュール
 
-学習された因果構造をGraphvizを用いて可視化します。
+学習された因果構造をGraphvizまたはPyVisを用いて可視化します。
+
+改善内容:
+1. PyVisによるインタラクティブなHTML可視化
+2. ノードフィルタリング（PageRank、次数中心性）
+3. クライアントサイドレンダリングによる高速化
 """
 
 import graphviz
 import pandas as pd
 import numpy as np
+import networkx as nx
 from typing import Dict, List, Optional, Tuple, Union
 import logging
+import tempfile
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -98,19 +106,284 @@ class CausalGraphVisualizer:
         """
         # 簡易実装: 関連するノードを抽出して visualize を呼ぶ
         related_nodes = {center_node}
-        
+
         # radius=1 の範囲 (親と子)
         # Parents (From -> Center)
         parents = self.adj_matrix.index[self.adj_matrix[center_node].abs() >= threshold].tolist()
         related_nodes.update(parents)
-        
+
         # Children (Center -> To)
         children = self.adj_matrix.columns[self.adj_matrix.loc[center_node].abs() >= threshold].tolist()
         related_nodes.update(children)
-        
+
         # サブセット作成
         sub_matrix = self.adj_matrix.loc[list(related_nodes), list(related_nodes)]
-        
+
         # サブクラス作成して可視化
         sub_visualizer = CausalGraphVisualizer(sub_matrix)
         return sub_visualizer.visualize(threshold=threshold, highlight_nodes=[center_node])
+
+    def _filter_nodes_by_centrality(
+        self,
+        top_n: int = 50,
+        method: str = "pagerank",
+        threshold: float = 0.1
+    ) -> List[str]:
+        """
+        中心性指標に基づいてノードをフィルタリング
+
+        Args:
+            top_n: 上位N個のノードを選択
+            method: 中心性の計算方法 ("pagerank" または "degree")
+            threshold: エッジを考慮する最小係数
+
+        Returns:
+            選択されたノード名のリスト
+        """
+        # NetworkXグラフに変換
+        G = nx.DiGraph()
+
+        nodes = self.adj_matrix.columns.tolist()
+
+        for from_node in nodes:
+            for to_node in nodes:
+                if from_node == to_node:
+                    continue
+
+                weight = self.adj_matrix.loc[from_node, to_node]
+
+                if abs(weight) >= threshold:
+                    G.add_edge(from_node, to_node, weight=abs(weight))
+
+        # 中心性を計算
+        if method == "pagerank":
+            centrality = nx.pagerank(G, weight='weight')
+        elif method == "degree":
+            # 次数中心性（重み付き）
+            centrality = dict(G.degree(weight='weight'))
+        else:
+            raise ValueError(f"Unknown method: {method}")
+
+        # 中心性でソートして上位N個を取得
+        sorted_nodes = sorted(centrality.items(), key=lambda x: x[1], reverse=True)
+        top_nodes = [node for node, _ in sorted_nodes[:top_n]]
+
+        logger.info(f"Selected {len(top_nodes)} nodes using {method} centrality")
+
+        return top_nodes
+
+    def visualize_interactive(
+        self,
+        output_path: str = None,
+        threshold: float = 0.1,
+        top_n: int = 50,
+        centrality_method: str = "pagerank",
+        highlight_nodes: Optional[List[str]] = None,
+        physics_enabled: bool = True,
+        height: str = "750px",
+        width: str = "100%"
+    ) -> str:
+        """
+        PyVisを用いてインタラクティブなHTMLグラフを生成
+
+        Args:
+            output_path: 出力先HTMLファイルパス（Noneの場合は一時ファイル）
+            threshold: エッジを表示する最小の係数（絶対値）
+            top_n: 表示する最大ノード数（中心性でフィルタ）
+            centrality_method: 中心性の計算方法 ("pagerank" または "degree")
+            highlight_nodes: ハイライトするノード名のリスト
+            physics_enabled: 物理演算を有効にするか
+            height: グラフの高さ
+            width: グラフの幅
+
+        Returns:
+            生成されたHTMLファイルのパス
+        """
+        try:
+            from pyvis.network import Network
+        except ImportError:
+            raise ImportError(
+                "pyvis is not installed. Please install it with: pip install pyvis>=0.3.2"
+            )
+
+        # ノードをフィルタリング
+        if top_n < len(self.adj_matrix.columns):
+            selected_nodes = self._filter_nodes_by_centrality(
+                top_n=top_n,
+                method=centrality_method,
+                threshold=threshold
+            )
+        else:
+            selected_nodes = self.adj_matrix.columns.tolist()
+
+        # PyVisネットワークを作成
+        net = Network(
+            height=height,
+            width=width,
+            directed=True,
+            notebook=False
+        )
+
+        # 物理演算の設定
+        if physics_enabled:
+            net.set_options("""
+            {
+                "physics": {
+                    "enabled": true,
+                    "barnesHut": {
+                        "gravitationalConstant": -30000,
+                        "centralGravity": 0.3,
+                        "springLength": 200,
+                        "springConstant": 0.04,
+                        "damping": 0.09,
+                        "avoidOverlap": 0.5
+                    },
+                    "stabilization": {
+                        "enabled": true,
+                        "iterations": 100
+                    }
+                }
+            }
+            """)
+        else:
+            net.toggle_physics(False)
+
+        highlight_set = set(highlight_nodes) if highlight_nodes else set()
+
+        # ノードを追加
+        for node in selected_nodes:
+            color = "#97C2FC" if node in highlight_set else "#DDDDDD"
+            title = f"<b>{node}</b>"  # ホバー時の情報
+
+            net.add_node(
+                node,
+                label=node,
+                color=color,
+                title=title,
+                size=20 if node in highlight_set else 15,
+                font={"size": 14}
+            )
+
+        # エッジを追加
+        selected_nodes_set = set(selected_nodes)
+
+        for from_node in selected_nodes:
+            for to_node in selected_nodes:
+                if from_node == to_node:
+                    continue
+
+                weight = self.adj_matrix.loc[from_node, to_node]
+
+                if abs(weight) >= threshold:
+                    # 係数の大きさで線の太さを変える
+                    edge_width = max(1, abs(weight) * 5)
+
+                    # 正の因果は青、負の因果は赤
+                    color = "#4169E1" if weight > 0 else "#DC143C"
+
+                    # ホバー時の情報
+                    title = f"{from_node} → {to_node}<br>係数: {weight:.3f}"
+
+                    net.add_edge(
+                        from_node,
+                        to_node,
+                        value=edge_width,
+                        color=color,
+                        title=title,
+                        label=f"{weight:.2f}",
+                        arrows="to"
+                    )
+
+        # 出力パスの決定
+        if output_path is None:
+            # 一時ファイルを作成
+            fd, output_path = tempfile.mkstemp(suffix=".html", prefix="causal_graph_")
+            os.close(fd)
+
+        # HTMLファイルを生成
+        net.save_graph(output_path)
+
+        logger.info(f"Interactive graph saved to: {output_path}")
+        logger.info(f"Nodes: {len(selected_nodes)}, Edges: {net.num_edges()}")
+
+        return output_path
+
+    def visualize_interactive_ego_network(
+        self,
+        center_node: str,
+        radius: int = 1,
+        threshold: float = 0.1,
+        output_path: str = None,
+        physics_enabled: bool = True,
+        height: str = "750px",
+        width: str = "100%"
+    ) -> str:
+        """
+        特定のノードを中心としたエゴネットワークをインタラクティブに可視化
+
+        Args:
+            center_node: 中心ノード
+            radius: ネットワークの半径（深さ）
+            threshold: エッジを表示する最小の係数
+            output_path: 出力先HTMLファイルパス
+            physics_enabled: 物理演算を有効にするか
+            height: グラフの高さ
+            width: グラフの幅
+
+        Returns:
+            生成されたHTMLファイルのパス
+        """
+        # エゴネットワークのノードを抽出
+        related_nodes = {center_node}
+
+        # NetworkXグラフに変換してBFS
+        G = nx.DiGraph()
+        nodes = self.adj_matrix.columns.tolist()
+
+        for from_node in nodes:
+            for to_node in nodes:
+                if from_node == to_node:
+                    continue
+
+                weight = self.adj_matrix.loc[from_node, to_node]
+                if abs(weight) >= threshold:
+                    G.add_edge(from_node, to_node, weight=weight)
+
+        # エゴネットワーク抽出（両方向）
+        if center_node in G:
+            # 外向き（子孫）
+            descendants = set()
+            for _ in range(radius):
+                new_nodes = set()
+                for node in list(related_nodes):
+                    if node in G:
+                        new_nodes.update(G.successors(node))
+                related_nodes.update(new_nodes)
+                descendants.update(new_nodes)
+
+            # 内向き（祖先）
+            ancestors = set()
+            for _ in range(radius):
+                new_nodes = set()
+                for node in list(related_nodes):
+                    if node in G:
+                        new_nodes.update(G.predecessors(node))
+                related_nodes.update(new_nodes)
+                ancestors.update(new_nodes)
+
+        # サブ隣接行列を作成
+        related_nodes_list = list(related_nodes)
+        sub_matrix = self.adj_matrix.loc[related_nodes_list, related_nodes_list]
+
+        # サブビジュアライザーを作成してインタラクティブ可視化
+        sub_visualizer = CausalGraphVisualizer(sub_matrix)
+
+        return sub_visualizer.visualize_interactive(
+            output_path=output_path,
+            threshold=threshold,
+            top_n=len(related_nodes_list),  # 全ノード表示
+            highlight_nodes=[center_node],
+            physics_enabled=physics_enabled,
+            height=height,
+            width=width
+        )
