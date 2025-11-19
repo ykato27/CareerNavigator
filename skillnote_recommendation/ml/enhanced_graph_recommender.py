@@ -143,6 +143,7 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
         - 時間減衰重み付け
         - 詳細な統計情報の保存
         - 効率的な計算（連続ペアのみ）
+        - ベクトル化演算による高速化 (groupby + shift)
 
         Returns:
             有向グラフ
@@ -154,63 +155,74 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
         df["取得日_dt"] = pd.to_datetime(df["取得日"], errors="coerce")
         df = df[df["取得日_dt"].notna()]
 
+        if df.empty:
+            return G
+
         # 現在日時（時間減衰の基準点）
         now = pd.Timestamp.now()
 
-        # メンバーごとに学習順序を抽出
-        transition_data = {}
+        # ベクトル化演算による遷移ペア抽出
+        # Step 1: メンバーコードと取得日でソート
+        df = df.sort_values(["メンバーコード", "取得日_dt"]).reset_index(drop=True)
 
-        for member in df["メンバーコード"].unique():
-            member_skills = df[df["メンバーコード"] == member].sort_values("取得日_dt")
+        # Step 2: 次のスキルと取得日をshift
+        df["next_skill"] = df.groupby("メンバーコード")["力量コード"].shift(-1)
+        df["next_date"] = df.groupby("メンバーコード")["取得日_dt"].shift(-1)
 
-            skills = member_skills[["力量コード", "取得日_dt"]].values
+        # Step 3: 時間差を計算
+        df["time_diff"] = (df["next_date"] - df["取得日_dt"]).dt.days
 
-            # 連続するスキルペアのみを抽出（効率化）
-            for i in range(len(skills) - 1):
-                source_skill, source_date = skills[i]
-                target_skill, target_date = skills[i + 1]
+        # Step 4: 有効な遷移のみをフィルタリング
+        transitions = df[
+            (df["next_skill"].notna()) & (df["time_diff"] <= self.time_window_days)
+        ].copy()
 
-                # 時間窓内の遷移のみ
-                time_diff = (target_date - source_date).days
-                if time_diff <= self.time_window_days:
-                    edge = (source_skill, target_skill)
+        if transitions.empty:
+            logger.warning("有効なスキル遷移が見つかりませんでした")
+            return G
 
-                    if edge not in transition_data:
-                        transition_data[edge] = {"transitions": [], "acquisition_dates": []}
+        # Step 5: 時間減衰重みを計算
+        transitions["days_ago"] = (now - transitions["next_date"]).dt.days
+        if self.use_time_decay:
+            transitions["decay_weight"] = np.exp(
+                -self.time_decay_factor * transitions["days_ago"] / 365
+            )
+        else:
+            transitions["decay_weight"] = 1.0
 
-                    # 時間減衰重みを計算
-                    days_ago = (now - target_date).days
-                    if self.use_time_decay:
-                        decay_weight = np.exp(-self.time_decay_factor * days_ago / 365)
-                    else:
-                        decay_weight = 1.0
+        # Step 6: エッジごとに集約
+        edge_groups = transitions.groupby(["力量コード", "next_skill"])
 
-                    transition_data[edge]["transitions"].append(
-                        {
-                            "time_diff": time_diff,
-                            "decay_weight": decay_weight,
-                            "acquisition_date": target_date,
-                        }
-                    )
-                    transition_data[edge]["acquisition_dates"].append(target_date)
+        # 統計情報を一括計算
+        edge_stats = edge_groups.agg(
+            {
+                "time_diff": ["count", "mean", lambda x: np.median(x), "std"],
+                "decay_weight": "sum",
+                "next_date": "max",
+            }
+        )
+        edge_stats.columns = [
+            "count",
+            "avg_time_diff",
+            "median_time_diff",
+            "std_time_diff",
+            "weighted_count",
+            "latest_transition",
+        ]
+        edge_stats = edge_stats.reset_index()
 
-        # エッジを追加
-        for (source, target), data in transition_data.items():
-            transitions = data["transitions"]
-            count = len(transitions)
+        # Step 7: エッジを追加
+        for _, row in edge_stats.iterrows():
+            source = row["力量コード"]
+            target = row["next_skill"]
+            count = int(row["count"])
 
             if count >= self.min_transition_count:
-                # 時間減衰重み付きカウント
-                weighted_count = sum(t["decay_weight"] for t in transitions)
-
-                # 統計情報を計算
-                time_diffs = [t["time_diff"] for t in transitions]
-                avg_time_diff = np.mean(time_diffs)
-                median_time_diff = np.median(time_diffs)
-                std_time_diff = np.std(time_diffs)
-
-                # 最新の遷移日
-                latest_transition = max(data["acquisition_dates"])
+                weighted_count = row["weighted_count"]
+                avg_time_diff = row["avg_time_diff"]
+                median_time_diff = row["median_time_diff"]
+                std_time_diff = row["std_time_diff"] if not pd.isna(row["std_time_diff"]) else 0.0
+                latest_transition = row["latest_transition"]
                 recency_days = (now - latest_transition).days
 
                 # エッジを追加
@@ -225,7 +237,21 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
                     recency_days=recency_days,
                 )
 
-                # 詳細情報を保存
+                # 詳細情報を保存（transitions の詳細は省略して軽量化）
+                # 個別の遷移情報が必要な場合は、元のループ版を使用
+                edge_transitions = transitions[
+                    (transitions["力量コード"] == source) & (transitions["next_skill"] == target)
+                ]
+
+                transition_list = [
+                    {
+                        "time_diff": int(row_t["time_diff"]),
+                        "decay_weight": row_t["decay_weight"],
+                        "acquisition_date": row_t["next_date"],
+                    }
+                    for _, row_t in edge_transitions.iterrows()
+                ]
+
                 self.edge_details[(source, target)] = {
                     "count": count,
                     "weighted_count": weighted_count,
@@ -233,8 +259,13 @@ class EnhancedSkillTransitionGraphRecommender(BaseRecommender):
                     "median_days": median_time_diff,
                     "std_days": std_time_diff,
                     "recency_days": recency_days,
-                    "transitions": transitions,
+                    "transitions": transition_list,
                 }
+
+        logger.info(
+            f"  ベクトル化演算により {len(edge_stats)} 個のエッジ候補を処理 "
+            f"({G.number_of_edges()} 個を追加)"
+        )
 
         return G
 

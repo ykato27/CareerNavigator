@@ -48,6 +48,7 @@ class DiversityReranker:
         - 類似度計算のキャッシング
         - Position-aware ranking: 上位は精度重視、下位は多様性重視
         - 早期終了による高速化
+        - 行列演算による一括類似度計算（候補数が多い場合に有効）
 
         Args:
             candidates: (力量コード, スコア)のリスト（スコア降順でソート済み想定）
@@ -61,6 +62,25 @@ class DiversityReranker:
         if len(candidates) == 0:
             return []
 
+        # 候補数が少ない場合は従来の方式で高速処理
+        if len(candidates) <= 20:
+            return self._rerank_mmr_original(
+                candidates, competence_info, k, use_position_aware
+            )
+
+        # 候補数が多い場合は行列演算版を使用
+        return self._rerank_mmr_vectorized(candidates, competence_info, k, use_position_aware)
+
+    def _rerank_mmr_original(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        use_position_aware: bool = False,
+    ) -> List[Tuple[str, float]]:
+        """
+        オリジナルのMMR実装（候補数が少ない場合用）
+        """
         # 力量情報をマッピング
         competence_dict = competence_info.set_index("力量コード").to_dict("index")
 
@@ -119,6 +139,96 @@ class DiversityReranker:
                 break  # 早期終了
 
         return selected
+
+    def _rerank_mmr_vectorized(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        use_position_aware: bool = False,
+    ) -> List[Tuple[str, float]]:
+        """
+        行列演算を使用したMMR実装（候補数が多い場合用）
+
+        O(k·N) → O(N²) の事前計算 + O(k·N) のベクトル演算による高速化
+        """
+        # 力量情報をマッピング
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
+
+        # Step 1: 類似度行列を事前計算 (N x N)
+        n = len(candidates)
+        similarity_matrix = self._precompute_similarity_matrix(candidates, competence_dict)
+
+        # Step 2: 初期化
+        candidate_codes = [code for code, _ in candidates]
+        scores = np.array([score for _, score in candidates])
+        max_score = scores[0] if len(scores) > 0 else 1.0
+
+        selected_indices = []
+        remaining_indices = np.arange(n)
+
+        # Step 3: 反復選択（ベクトル演算）
+        while len(selected_indices) < k and len(remaining_indices) > 0:
+            # Position-aware ranking
+            if use_position_aware:
+                position_ratio = len(selected_indices) / k
+                current_lambda = self.lambda_relevance * (1 - 0.3 * position_ratio)
+            else:
+                current_lambda = self.lambda_relevance
+
+            # 関連性スコア（ベクトル）
+            rel_scores = scores[remaining_indices] / max_score if max_score > 0 else 0
+
+            # 多様性スコア（ベクトル演算）
+            if len(selected_indices) == 0:
+                diversity_scores = np.ones(len(remaining_indices))
+            else:
+                # 類似度行列から選択済みとの最大類似度を計算
+                # remaining_indices x selected_indices の部分行列を取得
+                sub_matrix = similarity_matrix[np.ix_(remaining_indices, selected_indices)]
+                max_similarities = sub_matrix.max(axis=1)
+                diversity_scores = 1.0 - max_similarities
+
+            # MMRスコア（ベクトル演算）
+            mmr_scores = current_lambda * rel_scores + (1 - current_lambda) * diversity_scores
+
+            # 最良のアイテムを選択
+            best_local_idx = mmr_scores.argmax()
+            best_global_idx = remaining_indices[best_local_idx]
+
+            selected_indices.append(best_global_idx)
+            remaining_indices = np.delete(remaining_indices, best_local_idx)
+
+        # 結果を構築
+        selected = [candidates[i] for i in selected_indices]
+        return selected
+
+    def _precompute_similarity_matrix(
+        self, candidates: List[Tuple[str, float]], competence_dict: Dict
+    ) -> np.ndarray:
+        """
+        候補間の類似度行列を事前計算
+
+        Args:
+            candidates: (力量コード, スコア)のリスト
+            competence_dict: 力量情報の辞書
+
+        Returns:
+            類似度行列 (N x N)
+        """
+        n = len(candidates)
+        similarity_matrix = np.zeros((n, n))
+
+        # 上三角行列のみ計算（対称性を利用）
+        for i in range(n):
+            comp1 = competence_dict.get(candidates[i][0], {})
+            for j in range(i + 1, n):
+                comp2 = competence_dict.get(candidates[j][0], {})
+                sim = self._calculate_similarity(comp1, comp2)
+                similarity_matrix[i, j] = sim
+                similarity_matrix[j, i] = sim  # 対称性
+
+        return similarity_matrix
 
     def rerank_category_diversity(
         self,
