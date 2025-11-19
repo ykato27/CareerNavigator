@@ -7,8 +7,8 @@ import graphviz
 from skillnote_recommendation.ml.causal_graph_recommender import CausalGraphRecommender
 from skillnote_recommendation.graph.causal_graph_visualizer import CausalGraphVisualizer
 from skillnote_recommendation.utils.ui_components import (
-    apply_rich_ui_styles,
-    render_gradient_header
+    apply_enterprise_styles,
+    render_page_header
 )
 
 # =========================================================
@@ -20,9 +20,9 @@ st.set_page_config(
     layout="wide"
 )
 
-apply_rich_ui_styles()
+apply_enterprise_styles()
 
-render_gradient_header(
+render_page_header(
     title="因果推論推薦 (LiNGAM)",
     icon="🔗",
     description="データからスキル間の因果関係を発見し、説得力のある推薦を行います"

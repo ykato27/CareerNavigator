@@ -14,8 +14,8 @@ import plotly.express as px
 from skillnote_recommendation.ml.career_path_hierarchy import CareerPathHierarchy
 from skillnote_recommendation.ml.career_path_sem_model import CareerPathSEMModel
 from skillnote_recommendation.utils.ui_components import (
-    apply_rich_ui_styles,
-    render_gradient_header
+    apply_enterprise_styles,
+    render_page_header
 )
 
 
@@ -29,14 +29,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Apply rich UI styles
-apply_rich_ui_styles()
+# Apply enterprise UI styles
+apply_enterprise_styles()
 
-# Header
-render_gradient_header(
-    "【工事中】🎯 キャリアパス因果構造推薦",
-    # "【工事中】役職ごとの標準的なスキル習得パスに基づくキャリア支援"
-    ""
+# ページヘッダー
+render_page_header(
+    title="【工事中】🎯 キャリアパス因果構造推薦",
+    icon="",
+    description=""
 )
 
 # =========================================================

@@ -10,8 +10,8 @@ import plotly.graph_objects as go
 
 from skillnote_recommendation.ml.ml_recommender import MLRecommender
 from skillnote_recommendation.utils.ui_components import (
-    apply_rich_ui_styles,
-    render_gradient_header
+    apply_enterprise_styles,
+    render_page_header
 )
 from skillnote_recommendation.ml.optuna_visualization_helper import (
     generate_optuna_visualizations,
@@ -31,11 +31,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Apply rich UI styles
-apply_rich_ui_styles()
+# Apply enterprise UI styles
+apply_enterprise_styles()
 
-# リッチなヘッダー
-render_gradient_header(
+# ページヘッダー
+render_page_header(
     title="🧭 CareerNavigator",
     icon="🤖",
     description="モデル学習と分析 - AIモデルを学習し、学習結果を分析します"
