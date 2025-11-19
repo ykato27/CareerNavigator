@@ -317,8 +317,7 @@ with tab2:
                     threshold=threshold,
                     top_n=top_n,
                     height="800px",
-                    width="100%",
-                    show_negative=show_negative
+                    width="100%"
                 )
 
                 # HTMLファイルを読み込んで表示
