@@ -235,18 +235,24 @@ with tab1:
             member_skill_names = [code_to_name.get(c, c) for c in member_skills_codes]
 
             try:
-                # エゴネットワークは静的グラフで表示
-                dot = visualizer.visualize_ego_network(
+                # エゴネットワークをインタラクティブに表示
+                html_path = visualizer.visualize_ego_network_interactive(
                     center_node=center_node,
                     radius=1,
                     threshold=graph_threshold,
                     show_negative=show_negative_ego,
-                    member_skills=member_skill_names
+                    member_skills=member_skill_names,
+                    output_path="ego_network.html",
+                    height="600px"
                 )
-                st.graphviz_chart(dot, use_container_width=True)
+                
+                # HTMLファイルを読み込んで表示
+                with open(html_path, 'r', encoding='utf-8') as f:
+                    source_code = f.read()
+                components.html(source_code, height=600, scrolling=False)
                 
                 # 凡例を表示
-                st.caption(f"💡 **{center_node}** を中心とした因果関係")
+                st.caption(f"💡 **{center_node}** を中心とした因果関係（拡大・移動可能）")
                 st.caption(
                     "🟦 **青**: 推奨スキル（中心） | "
                     "🟩 **緑**: あなたの保有スキル（なぜ推奨されるか） | "

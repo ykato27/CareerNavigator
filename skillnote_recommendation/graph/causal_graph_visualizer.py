@@ -162,6 +162,48 @@ class CausalGraphVisualizer:
         
         return dot
 
+    def visualize_ego_network_interactive(
+        self,
+        center_node: str,
+        radius: int = 1,
+        threshold: float = 0.1,
+        show_negative: bool = False,
+        member_skills: Optional[List[str]] = None,
+        output_path: str = "ego_network.html",
+        height: str = "500px"
+    ) -> str:
+        """
+        エゴネットワークをインタラクティブに可視化
+        """
+        # 簡易実装: 関連するノードを抽出して visualize_interactive を呼ぶ
+        related_nodes = {center_node}
+
+        # radius=1 の範囲 (親と子)
+        # Parents (From -> Center)
+        parents = self.adj_matrix.index[self.adj_matrix[center_node].abs() >= threshold].tolist()
+        related_nodes.update(parents)
+
+        # Children (Center -> To)
+        children = self.adj_matrix.columns[self.adj_matrix.loc[center_node].abs() >= threshold].tolist()
+        related_nodes.update(children)
+
+        # サブセット作成
+        sub_matrix = self.adj_matrix.loc[list(related_nodes), list(related_nodes)]
+
+        # サブクラス作成して可視化
+        sub_visualizer = CausalGraphVisualizer(sub_matrix)
+        
+        return sub_visualizer.visualize_interactive(
+            output_path=output_path,
+            threshold=threshold,
+            top_n=len(related_nodes), # 全ノード表示
+            height=height,
+            width="100%",
+            show_negative=show_negative,
+            highlight_nodes=[center_node],
+            member_skills=member_skills
+        )
+
     def visualize_interactive(
         self,
         output_path: str = "temp_graph.html",
@@ -170,7 +212,9 @@ class CausalGraphVisualizer:
         height: str = "600px",
         width: str = "100%",
         notebook: bool = False,
-        show_negative: bool = False
+        show_negative: bool = False,
+        highlight_nodes: Optional[List[str]] = None,
+        member_skills: Optional[List[str]] = None
     ) -> str:
         """
         PyVisを用いてインタラクティブなHTMLグラフを生成し、パスを返す。
@@ -208,8 +252,45 @@ class CausalGraphVisualizer:
         # 2. ノードの追加
         for node in top_nodes:
             # ノードのサイズを次数に比例させる
-            size = 10 + degrees[node] * 2
-            net.add_node(node, label=node, title=node, size=size, color="#2E7D32") # Green theme
+            size = 20 + degrees[node] * 3
+            
+            # 色の決定
+            # デフォルト: 白（将来のスキル）
+            color = {
+                'background': '#FFFFFF', 
+                'border': '#333333',
+                'highlight': {'background': '#F0F0F0', 'border': '#333333'}
+            }
+            font = {'color': '#333333'}
+            
+            if highlight_nodes and node in highlight_nodes:
+                # 推奨スキル: 青
+                color = {
+                    'background': '#E3F2FD', 
+                    'border': '#1976D2',
+                    'highlight': {'background': '#BBDEFB', 'border': '#1565C0'}
+                }
+                font = {'color': '#0D47A1', 'face': 'arial', 'size': 20}
+                size = 30 # 少し大きく
+                
+            elif member_skills and node in member_skills:
+                # 保有スキル: 緑
+                color = {
+                    'background': '#E8F5E9', 
+                    'border': '#388E3C',
+                    'highlight': {'background': '#C8E6C9', 'border': '#2E7D32'}
+                }
+                font = {'color': '#1B5E20'}
+            
+            net.add_node(
+                node, 
+                label=node, 
+                title=node, 
+                size=size, 
+                color=color,
+                font=font,
+                shape='box'
+            )
             
         # 3. エッジの追加
         # 上位ノード間のエッジのみ追加
