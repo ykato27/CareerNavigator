@@ -367,6 +367,52 @@ ML予測スコアに基づく推薦結果を多様性の観点から再ランキ
 4. **ハイブリッド戦略**
    - 上記3手法を組み合わせた総合的な多様性確保
 
+### 階層的ベイジアン推薦 (NEW!)
+
+統計的妥当性を確保した3層アーキテクチャによる推薦システム：
+
+#### Layer 1: ベイジアンネットワーク
+- **手法**: Hill Climb Search + BIC Score
+- **対象**: L1カテゴリ（大カテゴリ、10-20個）
+- **制約**: max_indegree=3（過学習防止）
+- **目的**: 統計的妥当性の確保（176サンプル vs 10-20変数）
+
+#### Layer 2: 条件付き確率学習
+- **手法**: P(中カテゴリ | 大カテゴリ)の学習
+- **目的**: カテゴリ階層に基づく確率計算
+
+#### Layer 3: カテゴリ別行列分解
+- **手法**: 各L2カテゴリごとに独立したMF
+- **目的**: スキルレベルの精密な推薦
+
+#### スコア統合
+```python
+最終スコア = (L1_準備度^0.3) × (L2_確率^0.3) × (L3_スキルスコア^0.4)
+```
+
+#### 使用例
+```python
+from skillnote_recommendation.ml.hierarchical_bayesian_recommender import (
+    HierarchicalBayesianRecommender
+)
+
+# 推薦システムを初期化
+recommender = HierarchicalBayesianRecommender(
+    member_competence=member_competence_df,
+    competence_master=competence_master_df,
+    category_csv_path='data/categories/competence_category_skillnote.csv',
+    skill_csv_path='data/skills/skill_skillnote.csv',
+    max_indegree=3,
+    n_components=10
+)
+
+# 学習
+recommender.fit()
+
+# 推薦生成（階層的説明付き）
+recommendations = recommender.recommend(member_code='m48', top_n=10)
+```
+
 ## カスタマイズ
 
 ### パラメータ調整
