@@ -137,7 +137,7 @@ class HierarchicalBayesianRecommender(BaseRecommender):
         """
         # member_competenceからSKILLタイプのみを抽出
         skill_data = self.member_competence[
-            self.member_competence['力量タイプ  ###[competence_type]###'] == 'SKILL'
+            self.member_competence['力量タイプ'] == 'SKILL'
         ].copy()
         
         # ピボットしてユーザー×スキルマトリクスを作成
@@ -218,7 +218,7 @@ class HierarchicalBayesianRecommender(BaseRecommender):
         """
         user_data = self.member_competence[
             (self.member_competence['メンバーコード'] == member_code) &
-            (self.member_competence['力量タイプ  ###[competence_type]###'] == 'SKILL')
+            (self.member_competence['力量タイプ'] == 'SKILL')
         ]
         
         return dict(zip(user_data['力量コード'], user_data['レベル']))
@@ -425,6 +425,18 @@ class HierarchicalBayesianRecommender(BaseRecommender):
         
         return explanation
     
+    def explain(self, recommendations: List[Dict[str, Any]]) -> List[str]:
+        """
+        推薦結果の説明を生成
+        
+        Args:
+            recommendations: 推薦結果のリスト
+            
+        Returns:
+            説明文のリスト
+        """
+        return [rec.get('説明', '') for rec in recommendations]
+
     def _get_skill_info(self, skill_code: str) -> Dict[str, str]:
         """
         スキル情報を取得
@@ -436,7 +448,7 @@ class HierarchicalBayesianRecommender(BaseRecommender):
             スキル情報の辞書
         """
         skill_info = self.competence_master[
-            self.competence_master['力量コード  ###[skill_code]###'] == skill_code
+            self.competence_master['力量コード'] == skill_code
         ]
         
         if len(skill_info) > 0:
@@ -445,7 +457,7 @@ class HierarchicalBayesianRecommender(BaseRecommender):
             category_name = self.hierarchy.category_names.get(category_code, '')
             
             return {
-                '力量名': row.get('力量名  ###[skill_name]###', skill_code),
+                '力量名': row.get('力量名', skill_code),
                 'カテゴリ': category_name
             }
         else:

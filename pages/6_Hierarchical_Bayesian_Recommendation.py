@@ -114,6 +114,7 @@ with st.sidebar:
                 )
                 
                 st.success("✅ モデル初期化完了！")
+                st.session_state.hb_initialized = True  # 初期化フラグを設定
                 
             except Exception as e:
                 st.error(f"❌ モデル初期化エラー: {e}")
@@ -123,7 +124,8 @@ with st.sidebar:
     st.divider()
     
     # モデル学習
-    if st.session_state.hb_recommender is not None:
+    # 初期化済み（hb_recommenderが存在）または初期化フラグがTrueの場合に表示
+    if st.session_state.hb_recommender is not None or st.session_state.get('hb_initialized', False):
         st.subheader("🧠 モデル学習")
         
         if st.button("🚀 モデルを学習", use_container_width=True):
