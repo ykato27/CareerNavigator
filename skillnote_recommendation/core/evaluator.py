@@ -32,7 +32,9 @@ class RecommendationEvaluator:
         self, member_competence: pd.DataFrame, split_date: str = None, train_ratio: float = 0.8
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        時系列による学習・評価データ分割
+        時系列による学習・評価データ分割（メンバー単位、データリーケージ防止）
+
+        グローバル分割方式: 全メンバー共通で、split_date以前のスキル取得を訓練、以降を予測
 
         Args:
             member_competence: メンバー習得力量データ（取得日カラム必須）
@@ -41,9 +43,16 @@ class RecommendationEvaluator:
 
         Returns:
             (学習データ, 評価データ)のタプル
+            - 学習データ: split_date以前に取得された全ての力量
+            - 評価データ: split_date以降に取得された力量（訓練セットに存在するメンバーのみ）
 
         Raises:
             ValueError: 取得日カラムがない場合
+
+        注意:
+            - Cold-start問題: 訓練セットに存在しないメンバーは評価データから除外されます
+            - データリーケージ防止: 各メンバーについて、時系列の整合性を保証します
+            - 同一メンバーのデータが訓練とテストに分散することはありません（時系列順）
         """
         # 取得日カラムの確認
         if "取得日" not in member_competence.columns:
@@ -61,20 +70,46 @@ class RecommendationEvaluator:
 
         # 分割日の決定
         if split_date is None:
-            # データを時系列でソートし、train_ratio位置で分割
-            sorted_dates = df["取得日_dt"].sort_values()
-            split_idx = int(len(sorted_dates) * train_ratio)
-            split_datetime = sorted_dates.iloc[split_idx]
+            # ユニークな日付を取得し、train_ratio位置で分割
+            unique_dates = df["取得日_dt"].sort_values().unique()
+            split_idx = int(len(unique_dates) * train_ratio)
+            split_datetime = unique_dates[split_idx]
         else:
             split_datetime = pd.to_datetime(split_date)
 
-        # 学習データと評価データに分割
+        # グローバル分割: split_date以前/以降で分割
+        # これにより、各メンバーについて時系列の整合性が保証される
         train_data = df[df["取得日_dt"] < split_datetime].copy()
-        test_data = df[df["取得日_dt"] >= split_datetime].copy()
+        test_data_raw = df[df["取得日_dt"] >= split_datetime].copy()
+
+        # Cold-start問題への対応: 訓練セットに存在しないメンバーを除外
+        train_members = set(train_data["メンバーコード"].unique())
+        test_data = test_data_raw[test_data_raw["メンバーコード"].isin(train_members)].copy()
+
+        # 除外されたメンバー数をログ出力
+        excluded_members = set(test_data_raw["メンバーコード"].unique()) - train_members
+        excluded_records = len(test_data_raw) - len(test_data)
+        if excluded_members:
+            logger.warning(
+                f"Cold-start問題により{len(excluded_members)}名のメンバー（{excluded_records}レコード）を評価データから除外しました "
+                f"（訓練セットに存在しないメンバー）"
+            )
 
         # 一時カラムを削除
         train_data = train_data.drop(columns=["取得日_dt"])
         test_data = test_data.drop(columns=["取得日_dt"])
+
+        # 統計情報をログ出力
+        logger.info(f"時系列分割完了:")
+        logger.info(f"  分割日: {split_datetime.strftime('%Y-%m-%d')}")
+        logger.info(f"  訓練データ: {len(train_data)}レコード, {len(train_members)}名のメンバー")
+        logger.info(
+            f"  評価データ: {len(test_data)}レコード, {test_data['メンバーコード'].nunique()}名のメンバー"
+        )
+
+        # 評価データが空の場合は警告
+        if len(test_data) == 0:
+            logger.warning("評価データが空です。split_dateまたはtrain_ratioを調整してください。")
 
         return train_data, test_data
 
@@ -351,58 +386,127 @@ class RecommendationEvaluator:
         competence_master: pd.DataFrame,
         n_splits: int = 5,
         top_k: int = 10,
+        min_test_size: int = None,
     ) -> List[Dict[str, float]]:
         """
-        時系列クロスバリデーション
+        時系列クロスバリデーション（TimeSeriesSplit方式、データリーケージ防止）
 
-        データを時系列で複数のfoldに分割し、各foldで評価を実行
+        データを時系列で複数のfoldに分割し、各foldで評価を実行。
+        各foldで訓練データを累積的に増やし、次の時間窓をテストデータとする。
 
         Args:
-            member_competence: メンバー習得力量データ
+            member_competence: メンバー習得力量データ（取得日カラム必須）
             competence_master: 力量マスタ
-            n_splits: 分割数
+            n_splits: 分割数（デフォルト: 5）
             top_k: 推薦する上位K件
+            min_test_size: テストデータの最小レコード数（Noneの場合は自動計算）
 
         Returns:
             各foldの評価メトリクスリスト
+
+        注意:
+            - TimeSeriesSplit方式を採用（scikit-learnと同様）
+            - 各foldで時系列の整合性を保証
+            - Cold-start問題を考慮した分割
+            - メンバー単位でのデータリーケージを防止
         """
         # 取得日でソート
         df = member_competence.copy()
         df["取得日_dt"] = pd.to_datetime(df["取得日"], errors="coerce")
         df = df[df["取得日_dt"].notna()].sort_values("取得日_dt")
-        df = df.drop(columns=["取得日_dt"])
 
-        # データサイズ
-        total_size = len(df)
-        fold_size = total_size // (n_splits + 1)
+        # ユニークな日付を取得
+        unique_dates = df["取得日_dt"].unique()
+        unique_dates = np.sort(unique_dates)
+
+        if len(unique_dates) < n_splits + 1:
+            logger.warning(
+                f"ユニークな日付数({len(unique_dates)})が分割数+1({n_splits + 1})より少ないため、"
+                f"分割数を{len(unique_dates) - 1}に調整します"
+            )
+            n_splits = len(unique_dates) - 1
+
+        if n_splits <= 0:
+            raise ValueError("クロスバリデーションに十分なデータがありません")
+
+        # 最小テストサイズの決定
+        if min_test_size is None:
+            min_test_size = max(100, len(df) // (n_splits * 10))
 
         results = []
 
+        # TimeSeriesSplit方式でfoldを作成
+        # 累積的に学習データを増やし、次の時間窓をテストデータとする
+        date_fold_size = len(unique_dates) // (n_splits + 1)
+
         for i in range(n_splits):
-            # 累積的に学習データを増やし、次のfoldをテストデータとする
-            train_end = (i + 1) * fold_size
-            test_start = train_end
-            test_end = test_start + fold_size
+            # 訓練期間: 最初 ~ (i+1)番目の時間窓まで
+            train_end_idx = (i + 1) * date_fold_size
+            train_end_date = unique_dates[train_end_idx]
 
-            train_data = df.iloc[:train_end]
-            test_data = df.iloc[test_start:test_end]
+            # テスト期間: (i+1)番目の時間窓の次 ~ (i+2)番目の時間窓まで
+            test_start_idx = train_end_idx
+            test_end_idx = min(test_start_idx + date_fold_size, len(unique_dates))
+            test_start_date = (
+                unique_dates[test_start_idx] if test_start_idx < len(unique_dates) else train_end_date
+            )
+            test_end_date = (
+                unique_dates[test_end_idx - 1] if test_end_idx > test_start_idx else test_start_date
+            )
 
-            if len(train_data) == 0 or len(test_data) == 0:
+            # データを分割
+            train_data = df[df["取得日_dt"] < train_end_date].copy()
+            test_data_raw = df[
+                (df["取得日_dt"] >= test_start_date) & (df["取得日_dt"] <= test_end_date)
+            ].copy()
+
+            # Cold-start問題への対応: 訓練セットに存在しないメンバーを除外
+            train_members = set(train_data["メンバーコード"].unique())
+            test_data = test_data_raw[test_data_raw["メンバーコード"].isin(train_members)].copy()
+
+            # 一時カラムを削除
+            train_data = train_data.drop(columns=["取得日_dt"])
+            test_data = test_data.drop(columns=["取得日_dt"])
+
+            # テストデータが少なすぎる場合はスキップ
+            if len(train_data) == 0 or len(test_data) < min_test_size:
+                logger.warning(
+                    f"Fold {i + 1}: テストデータが少なすぎるためスキップ "
+                    f"(train={len(train_data)}, test={len(test_data)}, min_required={min_test_size})"
+                )
                 continue
 
             # 評価実行
-            metrics = self.evaluate_recommendations(
-                train_data=train_data,
-                test_data=test_data,
-                competence_master=competence_master,
-                top_k=top_k,
+            logger.info(f"\n=== Fold {i + 1}/{n_splits} ===")
+            logger.info(f"  訓練期間: ~ {train_end_date.strftime('%Y-%m-%d')}")
+            logger.info(
+                f"  テスト期間: {test_start_date.strftime('%Y-%m-%d')} ~ {test_end_date.strftime('%Y-%m-%d')}"
             )
 
-            metrics["fold"] = i + 1
-            metrics["train_size"] = len(train_data)
-            metrics["test_size"] = len(test_data)
+            try:
+                metrics = self.evaluate_recommendations(
+                    train_data=train_data,
+                    test_data=test_data,
+                    competence_master=competence_master,
+                    top_k=top_k,
+                )
 
-            results.append(metrics)
+                metrics["fold"] = i + 1
+                metrics["train_size"] = len(train_data)
+                metrics["test_size"] = len(test_data)
+                metrics["train_members"] = len(train_members)
+                metrics["test_members"] = test_data["メンバーコード"].nunique()
+                metrics["train_end_date"] = train_end_date.strftime("%Y-%m-%d")
+                metrics["test_start_date"] = test_start_date.strftime("%Y-%m-%d")
+                metrics["test_end_date"] = test_end_date.strftime("%Y-%m-%d")
+
+                results.append(metrics)
+            except Exception as e:
+                logger.error(f"Fold {i + 1}の評価中にエラーが発生: {e}")
+                continue
+
+        if not results:
+            raise ValueError("全てのfoldで評価に失敗しました")
 
         return results
 
@@ -1164,3 +1268,121 @@ class RecommendationEvaluator:
         }
 
         return summary
+
+    def validate_temporal_split(
+        self,
+        train_data: pd.DataFrame,
+        test_data: pd.DataFrame,
+        split_date: str = None,
+    ) -> Dict[str, any]:
+        """
+        時系列分割の妥当性を検証（データリーケージ検出）
+
+        データリーケージが発生していないかを確認します。
+
+        Args:
+            train_data: 学習データ
+            test_data: 評価データ
+            split_date: 分割日（検証用、Noneの場合は自動計算）
+
+        Returns:
+            検証結果の辞書
+            {
+                "is_valid": bool,  # 分割が妥当かどうか
+                "issues": List[str],  # 検出された問題のリスト
+                "train_date_range": Tuple[str, str],
+                "test_date_range": Tuple[str, str],
+                "leakage_members": int,  # データリーケージが発生しているメンバー数
+                "cold_start_members": int,  # Cold-startメンバー数
+            }
+        """
+        issues = []
+
+        # 取得日の確認
+        if "取得日" not in train_data.columns or "取得日" not in test_data.columns:
+            issues.append("取得日カラムが存在しません")
+            return {"is_valid": False, "issues": issues}
+
+        # 日付変換
+        train_df = train_data.copy()
+        test_df = test_data.copy()
+        train_df["取得日_dt"] = pd.to_datetime(train_df["取得日"], errors="coerce")
+        test_df["取得日_dt"] = pd.to_datetime(test_df["取得日"], errors="coerce")
+
+        # 日付範囲
+        train_min = train_df["取得日_dt"].min()
+        train_max = train_df["取得日_dt"].max()
+        test_min = test_df["取得日_dt"].min()
+        test_max = test_df["取得日_dt"].max()
+
+        # データリーケージチェック: テストデータの日付が訓練データより前にある
+        if pd.notna(test_min) and pd.notna(train_max) and test_min < train_max:
+            issues.append(
+                f"データリーケージの可能性: テストデータの最小日付({test_min.strftime('%Y-%m-%d')}) "
+                f"が訓練データの最大日付({train_max.strftime('%Y-%m-%d')})より前です"
+            )
+
+        # メンバー単位のリーケージチェック
+        train_members = set(train_df["メンバーコード"].unique())
+        test_members = set(test_df["メンバーコード"].unique())
+
+        # Cold-startメンバー（訓練セットに存在しないメンバー）
+        cold_start_members = test_members - train_members
+        if cold_start_members:
+            issues.append(
+                f"Cold-startメンバーが{len(cold_start_members)}名存在します "
+                f"（評価精度に影響する可能性があります）"
+            )
+
+        # 各メンバーについて、訓練データとテストデータの時系列整合性をチェック
+        leakage_count = 0
+        for member_code in test_members & train_members:
+            member_train = train_df[train_df["メンバーコード"] == member_code]
+            member_test = test_df[test_df["メンバーコード"] == member_code]
+
+            member_train_max = member_train["取得日_dt"].max()
+            member_test_min = member_test["取得日_dt"].min()
+
+            if pd.notna(member_test_min) and pd.notna(member_train_max):
+                if member_test_min < member_train_max:
+                    leakage_count += 1
+
+        if leakage_count > 0:
+            issues.append(
+                f"メンバー単位のデータリーケージが{leakage_count}名で検出されました "
+                f"（訓練データの方が新しい日付のデータを含んでいます）"
+            )
+
+        # 分割日の確認
+        if split_date:
+            split_datetime = pd.to_datetime(split_date)
+            # 訓練データが分割日以前かチェック
+            train_after_split = (train_df["取得日_dt"] >= split_datetime).sum()
+            if train_after_split > 0:
+                issues.append(
+                    f"訓練データに分割日以降のレコードが{train_after_split}件含まれています"
+                )
+
+            # テストデータが分割日以降かチェック
+            test_before_split = (test_df["取得日_dt"] < split_datetime).sum()
+            if test_before_split > 0:
+                issues.append(f"テストデータに分割日以前のレコードが{test_before_split}件含まれています")
+
+        validation_result = {
+            "is_valid": len(issues) == 0,
+            "issues": issues,
+            "train_date_range": (
+                train_min.strftime("%Y-%m-%d") if pd.notna(train_min) else None,
+                train_max.strftime("%Y-%m-%d") if pd.notna(train_max) else None,
+            ),
+            "test_date_range": (
+                test_min.strftime("%Y-%m-%d") if pd.notna(test_min) else None,
+                test_max.strftime("%Y-%m-%d") if pd.notna(test_max) else None,
+            ),
+            "leakage_members": leakage_count,
+            "cold_start_members": len(cold_start_members),
+            "train_members": len(train_members),
+            "test_members": len(test_members),
+        }
+
+        return validation_result
