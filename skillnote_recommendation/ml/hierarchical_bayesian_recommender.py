@@ -108,10 +108,10 @@ class HierarchicalBayesianRecommender(BaseRecommender):
         
         # 3. Layer 1: ベイジアンネットワークを学習
         logger.info("Phase 2: Layer 1 ベイジアンネットワークを学習中")
-        self.network_learner = CategoryNetworkLearner(
-            max_indegree=self.max_indegree
-        )
         try:
+            self.network_learner = CategoryNetworkLearner(
+                max_indegree=self.max_indegree
+            )
             self.network_learner.fit(
                 user_skills,
                 self.hierarchy,
@@ -119,6 +119,10 @@ class HierarchicalBayesianRecommender(BaseRecommender):
                 n_bins=3
             )
             logger.info("Layer 1 学習完了")
+        except ImportError as e:
+            logger.warning(f"Layer 1 初期化エラー（pgmpyが利用できません）: {e}")
+            logger.info("Layer 1をスキップして学習を続行します")
+            self.network_learner = None
         except Exception as e:
             logger.warning(f"Layer 1 学習エラー: {e}")
             self.network_learner = None
