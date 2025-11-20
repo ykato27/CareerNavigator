@@ -241,57 +241,73 @@ class CategoryHierarchyExtractor:
     
     def _build_parent_child_relationships(self, hierarchy: CategoryHierarchy):
         """
-        カテゴリコードの接頭辞に基づいて親子関係を構築
-        
-        カテゴリコードの形式:
-        - L1: CTG100000000 (最初の3桁が100)
-        - L2: CTG101000000 (最初の6桁が101000)
-        - L3: CTG101010000 (最初の9桁が101010000)
-        
+        カテゴリの階層名に基づいて親子関係を構築
+
+        カテゴリ名の形式例:
+        - L1: "技術"
+        - L2: "技術 > プログラミング"
+        - L3: "技術 > プログラミング > Python"
+
         Args:
             hierarchy: 構築中のCategoryHierarchy
         """
         all_categories = (
-            hierarchy.level1_categories + 
-            hierarchy.level2_categories + 
+            hierarchy.level1_categories +
+            hierarchy.level2_categories +
             hierarchy.level3_categories
         )
-        
+
+        # デバッグ: カテゴリコードのサンプルを表示
+        if all_categories:
+            sample_codes = all_categories[:min(5, len(all_categories))]
+            logger.info(f"カテゴリコードサンプル: {sample_codes}")
+            for code in sample_codes:
+                if code in hierarchy.category_names:
+                    logger.info(f"  {code}: {hierarchy.category_names[code]}")
+
         # 各カテゴリについて親を探す
         for category_code in all_categories:
-            # カテゴリコードから数値部分を抽出
-            if not category_code.startswith('CTG'):
+            if category_code not in hierarchy.category_names:
                 continue
-            
-            code_num = category_code[3:]  # 'CTG'を除去
-            
-            # 親候補を探す（より短い接頭辞を持つカテゴリ）
-            potential_parents = []
+
+            full_name = hierarchy.category_names[category_code]
+            name_parts = [part.strip() for part in full_name.split('>')]
+
+            # L1カテゴリ（階層の最上位）には親がいない
+            if len(name_parts) <= 1:
+                continue
+
+            # 親のカテゴリ名を構築（最後の部分を除く）
+            parent_name = ' > '.join(name_parts[:-1])
+
+            # 親カテゴリを探す
+            parent_code = None
             for other_code in all_categories:
                 if other_code == category_code:
                     continue
-                if not other_code.startswith('CTG'):
-                    continue
-                
-                other_num = other_code[3:]
-                # category_codeがother_codeの接頭辞で始まり、かつより長い場合
-                if code_num.startswith(other_num) and len(code_num) > len(other_num):
-                    # ゼロでない部分の長さで親の近さを判定
-                    non_zero_len = len(other_num.rstrip('0'))
-                    potential_parents.append((other_code, non_zero_len))
-            
-            # 最も近い親（最も長い接頭辞）を選択
-            if potential_parents:
-                potential_parents.sort(key=lambda x: x[1], reverse=True)
-                parent_code = potential_parents[0][0]
+                if other_code in hierarchy.category_names:
+                    if hierarchy.category_names[other_code] == parent_name:
+                        parent_code = other_code
+                        break
+
+            # 親が見つかった場合、関係を記録
+            if parent_code:
                 hierarchy.parent_mapping[category_code] = parent_code
-                
+
                 # 子リストに追加
                 if parent_code not in hierarchy.children_mapping:
                     hierarchy.children_mapping[parent_code] = []
                 hierarchy.children_mapping[parent_code].append(category_code)
-        
+
         logger.info(f"親子関係構築完了: {len(hierarchy.parent_mapping)}個の親子関係")
+
+        # デバッグ: 親子関係のサンプルを表示
+        if hierarchy.parent_mapping:
+            sample_pairs = list(hierarchy.parent_mapping.items())[:3]
+            for child, parent in sample_pairs:
+                child_name = hierarchy.category_names.get(child, child)
+                parent_name = hierarchy.category_names.get(parent, parent)
+                logger.info(f"  子: {child_name} -> 親: {parent_name}")
     
     def _build_skill_category_mapping(
         self,
