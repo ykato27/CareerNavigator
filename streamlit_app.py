@@ -116,6 +116,11 @@ def build_transformed_data(raw_data: dict) -> dict:
         "members_clean": members_clean,
         "valid_members": valid_members,
     }
+
+    # categoriesがraw_dataに存在する場合は追加
+    if "categories" in raw_data and raw_data["categories"] is not None:
+        transformed_data["categories"] = raw_data["categories"]
+
     return transformed_data
 
 
