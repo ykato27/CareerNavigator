@@ -16,12 +16,19 @@ from ..ml.ml_recommender import MLRecommender
 from ..ml.content_based_recommender import ContentBasedRecommender
 from ..ml.feature_engineering import FeatureEngineer
 from ..core.models import Recommendation
+from ..core.hybrid_weight_optimizer import (
+    HybridWeightOptimizer,
+    OptimizationResult,
+    ComplementarityAnalysis,
+)
 
 
 # デフォルト設定値
-DEFAULT_GRAPH_WEIGHT = 0.4  # グラフベース（RWR）の重み
-DEFAULT_CF_WEIGHT = 0.3  # 協調フィルタリング（NMF）の重み
-DEFAULT_CONTENT_WEIGHT = 0.3  # コンテンツベースの重み
+# ⚠️ 注意: これらの重みは初期値であり、理論的根拠はありません
+# 本番環境では optimize_weights() で最適化した重みを使用してください
+DEFAULT_GRAPH_WEIGHT = 0.4  # グラフベース（RWR）の重み（初期値）
+DEFAULT_CF_WEIGHT = 0.3  # 協調フィルタリング（NMF）の重み（初期値）
+DEFAULT_CONTENT_WEIGHT = 0.3  # コンテンツベースの重み（初期値）
 DEFAULT_RESTART_PROB = 0.15
 CANDIDATE_MULTIPLIER = 3  # 候補を多めに取得する倍率
 HYBRID_BOOST_FACTOR = 1.15  # 複数手法で推薦された場合のブースト
@@ -71,6 +78,25 @@ class HybridGraphRecommender:
         3. コンテンツベースで属性ベースのスコアを計算
         4. 3つのスコアを融合して最終ランキングを生成
         5. 推薦パスと理由を付与
+
+    重み最適化:
+        - デフォルト重み（0.4:0.3:0.3）は初期値であり、理論的根拠はありません
+        - optimize_weights()でベイズ最適化による重み探索が可能
+        - analyze_complementarity()で手法間の補完性を検証可能
+
+    Usage:
+        >>> # 1. デフォルト重みで使用（非推奨）
+        >>> recommender = HybridGraphRecommender(...)
+        >>> recommendations = recommender.recommend(member_code='M001')
+        >>>
+        >>> # 2. 重みを最適化して使用（推奨）
+        >>> result = recommender.optimize_weights(
+        ...     member_competence=df,
+        ...     competence_master=master_df,
+        ...     n_trials=100
+        ... )
+        >>> recommender.update_weights(result.best_weights)
+        >>> recommendations = recommender.recommend(member_code='M001')
     """
 
     def __init__(
@@ -458,3 +484,225 @@ class HybridGraphRecommender:
             "rwr_explanation": rwr_explanation,
             "hybrid_score": None,  # 実装省略
         }
+
+    def optimize_weights(
+        self,
+        member_competence: pd.DataFrame,
+        competence_master: pd.DataFrame,
+        n_trials: int = 100,
+        metric: str = 'ndcg@10',
+        n_splits: int = 3,
+        top_k: int = 10,
+        random_state: int = 42,
+    ) -> OptimizationResult:
+        """
+        ベイズ最適化でハイブリッド重みを最適化
+
+        従来の恣意的な重み設定（0.4:0.3:0.3）を改善し、
+        時系列評価データに基づいて理論的根拠のある重みを探索する。
+
+        Args:
+            member_competence: メンバー×力量データフレーム
+            competence_master: 力量マスタ
+            n_trials: Optunaの試行回数（多いほど精度向上、推奨100-200）
+            metric: 最適化する評価指標 ('precision@k', 'recall@k', 'ndcg@k')
+            n_splits: 時系列クロスバリデーションの分割数
+            top_k: Top-K推薦の件数
+            random_state: 乱数シード
+
+        Returns:
+            OptimizationResult（最適な重み、スコア、study等）
+
+        Example:
+            >>> result = hybrid_recommender.optimize_weights(
+            ...     member_competence=df,
+            ...     competence_master=master_df,
+            ...     n_trials=100,
+            ...     metric='ndcg@10'
+            ... )
+            >>> print(f"Optimized weights: {result.best_weights}")
+            >>> # 最適化された重みを使用
+            >>> hybrid_recommender.update_weights(result.best_weights)
+        """
+        from ..core.evaluator import RecommendationEvaluator
+
+        # Evaluatorを作成
+        evaluator = RecommendationEvaluator(
+            member_competence=member_competence,
+            competence_master=competence_master,
+        )
+
+        # Optimizerを作成
+        optimizer = HybridWeightOptimizer(
+            evaluator=evaluator,
+            random_state=random_state,
+        )
+
+        # スコアリング関数を定義
+        def scoring_function(member_code: str, weights: Dict[str, float]) -> List[Tuple[str, float]]:
+            """
+            特定の重みでハイブリッド推薦を実行
+
+            Args:
+                member_code: メンバーコード
+                weights: ハイブリッド重み
+
+            Returns:
+                [(力量コード, スコア), ...] のリスト
+            """
+            # 一時的に重みを更新
+            original_weights = {
+                'graph_weight': self.graph_weight,
+                'cf_weight': self.cf_weight,
+                'content_weight': self.content_weight,
+            }
+
+            try:
+                # 重みを更新
+                total = sum(weights.values())
+                self.graph_weight = weights['graph_weight'] / total
+                self.cf_weight = weights['cf_weight'] / total
+                self.content_weight = weights['content_weight'] / total
+
+                # RWRで推薦
+                rwr_results = self.rwr.recommend(
+                    member_code=member_code,
+                    top_n=top_k * CANDIDATE_MULTIPLIER,
+                    return_paths=False,
+                )
+                rwr_dict = {comp: score for comp, score, _ in rwr_results}
+
+                # NMFで推薦
+                nmf_results = self.ml_recommender.recommend(
+                    member_code=member_code,
+                    top_n=top_k * CANDIDATE_MULTIPLIER,
+                )
+                nmf_dict = {rec.competence_code: rec.priority_score for rec in nmf_results}
+
+                # コンテンツベースで推薦
+                content_results = self.content_recommender.recommend(
+                    member_code=member_code,
+                    top_n=top_k * CANDIDATE_MULTIPLIER,
+                )
+                content_dict = {rec.competence_code: rec.priority_score for rec in content_results}
+
+                # スコアを融合
+                # _fuse_scores expects rwr_dict: {competence_code: (score, paths)}
+                rwr_dict_with_paths = {k: (v, []) for k, v in rwr_dict.items()}
+                hybrid_scores = self._fuse_scores(
+                    rwr_dict=rwr_dict_with_paths,
+                    nmf_dict=nmf_dict,
+                    content_dict=content_dict,
+                )
+
+                # スコア順にソート
+                sorted_scores = sorted(
+                    hybrid_scores.items(),
+                    key=lambda x: x[1]['score'],
+                    reverse=True
+                )
+
+                # (力量コード, スコア)のリストを返す
+                return [(comp_code, data['score']) for comp_code, data in sorted_scores]
+
+            finally:
+                # 重みを元に戻す
+                self.graph_weight = original_weights['graph_weight']
+                self.cf_weight = original_weights['cf_weight']
+                self.content_weight = original_weights['content_weight']
+
+        # 最適化を実行
+        result = optimizer.optimize(
+            member_competence=member_competence,
+            scoring_function=scoring_function,
+            n_trials=n_trials,
+            metric=metric,
+            n_splits=n_splits,
+            top_k=top_k,
+        )
+
+        return result
+
+    def update_weights(self, weights: Dict[str, float]) -> None:
+        """
+        ハイブリッド重みを更新
+
+        Args:
+            weights: 新しい重み {'graph_weight': float, 'cf_weight': float, 'content_weight': float}
+
+        Example:
+            >>> result = hybrid_recommender.optimize_weights(...)
+            >>> hybrid_recommender.update_weights(result.best_weights)
+        """
+        total = sum(weights.values())
+        self.graph_weight = weights['graph_weight'] / total
+        self.cf_weight = weights['cf_weight'] / total
+        self.content_weight = weights['content_weight'] / total
+
+        print(f"\n重みを更新しました:")
+        print(f"  グラフベース重み: {self.graph_weight:.3f}")
+        print(f"  協調フィルタリング重み: {self.cf_weight:.3f}")
+        print(f"  コンテンツベース重み: {self.content_weight:.3f}")
+
+    def analyze_complementarity(
+        self,
+        member_code: str,
+        top_n: int = 50,
+    ) -> ComplementarityAnalysis:
+        """
+        手法間の補完性を分析
+
+        RWR、NMF、コンテンツベースの3つの推薦手法の予測スコアの相関を分析し、
+        手法間の補完性を評価する。高い補完性（低い相関）はハイブリッド化の
+        理論的根拠となる。
+
+        Args:
+            member_code: 分析対象のメンバーコード
+            top_n: 各手法で生成する推薦数（多いほど分析精度が向上）
+
+        Returns:
+            ComplementarityAnalysis（相関行列、多様性スコア等）
+
+        Example:
+            >>> analysis = hybrid_recommender.analyze_complementarity(
+            ...     member_code='M001',
+            ...     top_n=50
+            ... )
+            >>> print(analysis.correlation_matrix)
+            >>> print(f"Complementarity: {analysis.complementarity_score:.3f}")
+        """
+        # 1. RWRで推薦
+        rwr_results = self.rwr.recommend(
+            member_code=member_code,
+            top_n=top_n,
+            return_paths=False,
+        )
+        rwr_scores = {comp: score for comp, score, _ in rwr_results}
+
+        # 2. NMFで推薦
+        nmf_results = self.ml_recommender.recommend(
+            member_code=member_code,
+            top_n=top_n,
+        )
+        nmf_scores = {rec.competence_code: rec.priority_score for rec in nmf_results}
+
+        # 3. コンテンツベースで推薦
+        content_results = self.content_recommender.recommend(
+            member_code=member_code,
+            top_n=top_n,
+        )
+        content_scores = {rec.competence_code: rec.priority_score for rec in content_results}
+
+        # Optimizerを使って分析
+        optimizer = HybridWeightOptimizer(
+            evaluator=None,  # 分析のみなので不要
+            random_state=42,
+        )
+
+        analysis = optimizer.analyze_complementarity(
+            graph_scores=rwr_scores,
+            cf_scores=nmf_scores,
+            content_scores=content_scores,
+        )
+
+        return analysis
