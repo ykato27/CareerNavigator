@@ -25,3 +25,4 @@ pyvis>=0.3.2
 python-louvain>=0.16
 semopy>=2.3.9
 pgmpy>=0.1.23
+implicit>=0.7.0

@@ -1,13 +1,17 @@
 """
 Matrix Factorizationベースの推薦モデル
 
-NMF (Non-negative Matrix Factorization)を使用してメンバー×力量マトリクスを
-潜在因子に分解し、未習得力量のスコアを予測する
+NMF (Non-negative Matrix Factorization)またはALS (Alternating Least Squares)を
+使用してメンバー×力量マトリクスを潜在因子に分解し、未習得力量のスコアを予測する
 
 改善内容:
-1. Weighted NMF対応（暗黙的フィードバック考慮）
+1. Implicit feedback対応（ALS with confidence weighting）
 2. 正規化レベルに基づくconfidence weighting
 3. より適切なスコアリング
+
+注意:
+- confidence weighting使用時はALS（implicitライブラリ）を使用（推奨）
+- NMFはconfidence weightingに非対応（理論的に不正確）
 """
 
 import numpy as np
@@ -15,6 +19,16 @@ import pandas as pd
 from typing import List, Tuple, Optional
 from sklearn.decomposition import NMF
 import pickle
+import warnings
+
+try:
+    from implicit.als import AlternatingLeastSquares
+    from scipy.sparse import csr_matrix
+    IMPLICIT_AVAILABLE = True
+except ImportError:
+    IMPLICIT_AVAILABLE = False
+    AlternatingLeastSquares = None
+    csr_matrix = None
 
 
 class MatrixFactorizationModel:
@@ -39,14 +53,16 @@ class MatrixFactorizationModel:
             n_components: 潜在因子の数（次元数）
             random_state: 乱数シード
             use_confidence_weighting: confidence weightingを使用するか
+                                     Trueの場合、ALS (implicit library)を使用（推奨）
+                                     NMFはconfidence weightingに理論的に非対応
             confidence_alpha: confidence weight計算の係数 (confidence = 1 + alpha * rating)
-            early_stopping: Early stoppingを使用するか
+            early_stopping: Early stoppingを使用するか（NMFのみ）
             early_stopping_patience: Early stopping用の待機回数（改善が見られないエポック数）
             early_stopping_min_delta: 改善とみなす最小の誤差減少量
             early_stopping_batch_size: Early stopping用のイテレーションバッチサイズ（デフォルト: 50）
                                        大きくすると高速化するが、Early stoppingの精度が下がる
                                        推奨値: 50（標準）、100（高速）、200（最速）
-            **nmf_params: NMFへの追加パラメータ
+            **nmf_params: NMFまたはALSへの追加パラメータ
         """
         self.n_components = n_components
         self.random_state = random_state
@@ -58,17 +74,44 @@ class MatrixFactorizationModel:
         self.early_stopping_batch_size = early_stopping_batch_size
         self.nmf_params = nmf_params
 
-        # NMFモデル
-        # max_iterがnmf_paramsに含まれていない場合はデフォルト値500を使用
-        default_params = {"init": "nndsvda", "max_iter": 500}
-        final_params = {**default_params, **nmf_params}
+        # モデルの種類を決定
+        self.model_type = None  # 'nmf' or 'als'
 
-        self.model = NMF(n_components=n_components, random_state=random_state, **final_params)
+        if use_confidence_weighting:
+            # Confidence weighting使用時はALSを使用
+            if not IMPLICIT_AVAILABLE:
+                raise ImportError(
+                    "confidence weighting使用時は implicit ライブラリが必要です。\n"
+                    "以下のコマンドでインストールしてください:\n"
+                    "  pip install implicit"
+                )
+
+            self.model_type = 'als'
+            # ALSモデル（implicit library）
+            # iterations, regularizationなどのパラメータを取得
+            als_iterations = nmf_params.get('iterations', nmf_params.get('max_iter', 15))
+            als_regularization = nmf_params.get('regularization', 0.01)
+
+            self.model = AlternatingLeastSquares(
+                factors=n_components,
+                iterations=als_iterations,
+                regularization=als_regularization,
+                random_state=random_state,
+                use_gpu=False,  # CPU使用（GPUは環境依存）
+            )
+        else:
+            # Confidence weightingなしの場合はNMFを使用
+            self.model_type = 'nmf'
+            # NMFモデル
+            # max_iterがnmf_paramsに含まれていない場合はデフォルト値500を使用
+            default_params = {"init": "nndsvda", "max_iter": 500}
+            final_params = {**default_params, **nmf_params}
+            self.model = NMF(n_components=n_components, random_state=random_state, **final_params)
 
         # 学習後のデータ
         self.X = None  # 元のデータマトリクス（再構成誤差計算用）
-        self.W = None  # メンバー因子行列
-        self.H = None  # 力量因子行列
+        self.W = None  # メンバー因子行列（item factors for ALS）
+        self.H = None  # 力量因子行列（user factors for ALS）
         self.member_codes = None  # メンバーコードのリスト
         self.competence_codes = None  # 力量コードのリスト
         self.member_index = None  # メンバーコード → インデックス
@@ -81,14 +124,15 @@ class MatrixFactorizationModel:
         モデルを学習
 
         改善点:
-        - confidence weightingにより、高レベルのスキルをより重視
+        - ALS使用時: confidence weightingにより、高レベルのスキルをより重視（Hu et al. 2008）
+        - NMF使用時: 標準的な非負値行列分解
         - 暗黙的フィードバック（有無のみ）と明示的フィードバック（レベル）の両方に対応
-        - Early stoppingによる効率的な学習
+        - Early stoppingによる効率的な学習（NMFのみ）
         - 検証セット監視による過学習防止
 
         Args:
             skill_matrix: メンバー×力量マトリクス (index=メンバーコード, columns=力量コード)
-            validation_matrix: 検証用マトリクス（Early stopping時に使用）
+            validation_matrix: 検証用マトリクス（Early stopping時に使用、NMFのみ）
 
         Returns:
             self
@@ -101,32 +145,67 @@ class MatrixFactorizationModel:
         self.member_index = {code: idx for idx, code in enumerate(self.member_codes)}
         self.competence_index = {code: idx for idx, code in enumerate(self.competence_codes)}
 
-        # 学習用マトリクスを準備
-        if self.use_confidence_weighting:
-            # 正規化レベルにconfidence weightを適用
-            weighted_matrix = skill_matrix.copy()
-            non_zero_mask = weighted_matrix > 0
-            weighted_matrix[non_zero_mask] = (
-                1 + self.confidence_alpha * weighted_matrix[non_zero_mask]
-            )
-            training_matrix = weighted_matrix.values
+        if self.model_type == 'als':
+            # ALS（implicit library）を使用した学習
+            self._fit_als(skill_matrix)
         else:
+            # NMFを使用した学習
             training_matrix = skill_matrix.values
 
-        # 検証用マトリクスを準備
-        if validation_matrix is not None:
-            validation_matrix_values = validation_matrix.values
-        else:
-            validation_matrix_values = None
+            # 検証用マトリクスを準備
+            if validation_matrix is not None:
+                validation_matrix_values = validation_matrix.values
+            else:
+                validation_matrix_values = None
 
-        # Early stoppingの有無で分岐
-        if self.early_stopping:
-            self._fit_with_early_stopping(training_matrix, validation_matrix_values)
-        else:
-            self._fit_normal(training_matrix)
+            # Early stoppingの有無で分岐
+            if self.early_stopping:
+                self._fit_with_early_stopping(training_matrix, validation_matrix_values)
+            else:
+                self._fit_normal(training_matrix)
 
         self.is_fitted = True
         return self
+
+    def _fit_als(self, skill_matrix: pd.DataFrame) -> None:
+        """
+        ALS (Alternating Least Squares)を使用した学習
+
+        implicit libraryのALSを使用し、confidence weightingを適切に適用。
+        Hu et al. (2008)のimplicit feedbackアプローチに基づく。
+
+        Args:
+            skill_matrix: メンバー×力量マトリクス (index=メンバーコード, columns=力量コード)
+        """
+        # Preference matrix (binary: 1 if acquired, 0 otherwise)
+        preference_matrix = (skill_matrix > 0).astype(np.float32)
+
+        # Confidence matrix: c = 1 + alpha * rating
+        # ratingは正規化されたスキルレベル（0-1）
+        confidence_matrix = 1 + self.confidence_alpha * skill_matrix.values
+
+        # Weighted matrix for ALS: preference * confidence
+        # implicit libraryではスパース行列を使用
+        # 転置が必要: implicit libraryはitem×userを期待（我々はmember×competence）
+        user_item_data = csr_matrix((preference_matrix * confidence_matrix).T)
+
+        # ALSで学習
+        print(f"[ALS] 学習開始（factors={self.n_components}, iterations={self.model.iterations}）")
+        self.model.fit(user_item_data, show_progress=True)
+
+        # 因子行列を取得
+        # implicit library: item_factors (competence×factors), user_factors (member×factors)
+        # 我々の定義: W (member×factors), H (factors×competence)
+        self.W = self.model.user_factors  # member × factors
+        self.H = self.model.item_factors.T  # factors × competence
+
+        # 元のデータマトリクスを保存（再構成誤差計算用）
+        self.X = skill_matrix.values
+
+        # イテレーション数を保存
+        self.actual_n_iter_ = self.model.iterations
+
+        print(f"[ALS] 学習完了")
 
     def _fit_normal(self, X: np.ndarray) -> None:
         """通常の学習（Early stoppingなし）"""
@@ -684,4 +763,8 @@ class MatrixFactorizationModel:
 
     def __repr__(self):
         status = "fitted" if self.is_fitted else "not fitted"
-        return f"MatrixFactorizationModel(n_components={self.n_components}, " f"status={status})"
+        model_info = f"model_type={self.model_type}" if self.model_type else "model_type=unknown"
+        return (
+            f"MatrixFactorizationModel(n_components={self.n_components}, "
+            f"{model_info}, status={status})"
+        )
