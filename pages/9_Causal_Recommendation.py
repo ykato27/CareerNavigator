@@ -394,18 +394,31 @@ with tab1:
         
         # スコアの説明
         with st.expander("📖 スコアの見方", expanded=False):
-            st.markdown("""
-            推奨スコアは以下の2つの要素から計算されます:
-            
+            # 現在の重みを取得
+            weights = recommender.get_weights() if hasattr(recommender, 'get_weights') else recommender.weights
+
+            st.markdown(f"""
+            推奨スコアは以下の3つの要素から計算されます:
+
             - **Readiness（準備度）**: 現在の保有スキルが、推奨スキルの習得をどれだけサポートするか
               - 高いほど、今すぐ学習を始めやすいスキル
               - 保有スキルから推奨スキルへの因果関係の強さで評価
-            
+
+            - **Bayesian（確率）**: 同様のスキルセットを持つ人が、そのスキルを習得している確率
+              - 高いほど、あなたのようなスキルパターンの人が習得している可能性が高い
+              - ベイジアンネットワークによる確率推論で評価
+
             - **Utility（将来性）**: 推奨スキルを習得することで、将来的にどれだけ多くのスキル習得が可能になるか
               - 高いほど、キャリアの選択肢を広げるスキル
               - 推奨スキルから他のスキルへの因果関係の強さで評価
-            
-            **総合スコア** = Readiness × 0.6 + Utility × 0.4
+
+            ---
+
+            **現在の重み設定:**
+
+            **総合スコア** = Readiness × {weights['readiness']:.1%} + Bayesian × {weights['bayesian']:.1%} + Utility × {weights['utility']:.1%}
+
+            ※重みは「推薦スコアの重み調整」セクションで変更できます
             """)
         
         recommendations = recommender.recommend(selected_member_code, top_n=10)
@@ -420,15 +433,17 @@ with tab1:
             for i, rec in enumerate(recommendations, 1):
                 with st.container():
                     st.markdown(f"#### {i}. {rec['competence_name']}")
-                    
-                    col1, col2, col3 = st.columns([2, 1, 1])
+
+                    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
                     with col1:
                         st.metric("総合スコア", f"{rec['score']:.2f}")
                     with col2:
                         details = rec['details']
-                        st.metric("準備度", f"{details['readiness_score']:.2f}")
+                        st.metric("準備度", f"{details['readiness_score_normalized']:.2f}")
                     with col3:
-                        st.metric("将来性", f"{details['utility_score']:.2f}")
+                        st.metric("確率", f"{details['bayesian_score_normalized']:.2f}")
+                    with col4:
+                        st.metric("将来性", f"{details['utility_score_normalized']:.2f}")
                     
                     
                     st.info(rec['explanation'])
@@ -436,7 +451,7 @@ with tab1:
                     # 詳細な理由を表示
                     with st.expander("📋 詳細な推薦理由"):
                         details = rec['details']
-                        
+
                         st.markdown("**🟢 準備度（Readiness）**: なぜこのスキルが推奨されるか")
                         if details['readiness_reasons']:
                             st.markdown("あなたの以下の保有スキルが、このスキルの習得を後押しします:")
@@ -444,7 +459,14 @@ with tab1:
                                 st.write(f"- **{skill}** → 因果効果: {effect:.3f}")
                         else:
                             st.write("保有スキルからの直接的な因果関係は検出されませんでした。")
-                        
+
+                        st.markdown("**🟣 確率（Bayesian）**: 同様のスキルパターンを持つ人の習得状況")
+                        if details['bayesian_score'] > 0:
+                            prob_pct = details['bayesian_score'] * 100
+                            st.write(f"- あなたと同様のスキルセットを持つ方の **{prob_pct:.1f}%** がこのスキルを習得しています")
+                        else:
+                            st.write("ベイジアンネットワークによる確率推論ができませんでした。")
+
                         st.markdown("**🔵 将来性（Utility）**: このスキルを習得すると何ができるか")
                         if details['utility_reasons']:
                             st.markdown("このスキルを習得すると、以下のスキル習得がスムーズになります:")
