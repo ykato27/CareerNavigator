@@ -101,6 +101,152 @@ recommender = st.session_state.causal_recommender
 st.info(f"📊 学習済みモデル: メンバー数 {len(recommender.skill_matrix_.index)}人、スキル数 {len(recommender.skill_matrix_.columns)}個")
 
 # =========================================================
+# 重み最適化セクション
+# =========================================================
+st.markdown("---")
+st.subheader("⚙️ 推薦スコアの重み調整")
+
+with st.expander("💡 重みの最適化について", expanded=False):
+    st.markdown("""
+    推薦スコアは以下の3つの要素から計算されます：
+
+    - **Readiness（準備度）**: 保有スキルから推奨スキルへの因果効果
+    - **Bayesian（確率）**: 同様のスキルパターンを持つ人の習得確率
+    - **Utility（将来性）**: 推奨スキルから将来のスキルへの因果効果
+
+    これらの重みは、ベイズ最適化により自動調整できます。
+    評価指標にはNDCG@K（推薦順位の精度）を使用します。
+    """)
+
+# 現在の重みを表示
+current_weights = recommender.get_weights()
+
+# 手動調整タブと自動最適化タブ
+tab_adjust, tab_auto = st.tabs(["🎚️ 手動調整", "🤖 自動最適化"])
+
+with tab_adjust:
+    st.markdown("**スライダーで重みを調整し、推薦結果への影響をリアルタイムで確認できます**")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        readiness_weight = st.slider(
+            "Readiness（準備度）",
+            min_value=0.0,
+            max_value=1.0,
+            value=current_weights['readiness'],
+            step=0.05,
+            help="保有スキルから推奨スキルへの因果効果の重み"
+        )
+
+    with col2:
+        bayesian_weight = st.slider(
+            "Bayesian（確率）",
+            min_value=0.0,
+            max_value=1.0,
+            value=current_weights['bayesian'],
+            step=0.05,
+            help="同様のスキルパターンを持つ人の習得確率の重み"
+        )
+
+    with col3:
+        utility_weight = st.slider(
+            "Utility（将来性）",
+            min_value=0.0,
+            max_value=1.0,
+            value=current_weights['utility'],
+            step=0.05,
+            help="推奨スキルから将来のスキルへの因果効果の重み"
+        )
+
+    # 合計を表示
+    total_weight = readiness_weight + bayesian_weight + utility_weight
+
+    if abs(total_weight - 1.0) > 0.01:
+        st.warning(f"⚠️ 重みの合計が {total_weight:.2f} です。適用時に自動的に正規化されます。")
+    else:
+        st.success(f"✅ 重みの合計: {total_weight:.2f}")
+
+    # 適用ボタン
+    if st.button("📝 この重みを適用", type="primary"):
+        new_weights = {
+            'readiness': readiness_weight,
+            'bayesian': bayesian_weight,
+            'utility': utility_weight
+        }
+        recommender.set_weights(new_weights)
+        st.success("✅ 重みを更新しました！下の推薦結果に反映されています。")
+        st.rerun()
+
+    # 現在の設定を表示
+    st.info(f"**現在の重み**: Readiness {current_weights['readiness']:.1%} | Bayesian {current_weights['bayesian']:.1%} | Utility {current_weights['utility']:.1%}")
+
+with tab_auto:
+    st.markdown("**ベイズ最適化により、データから最適な重みを自動で探索します**")
+
+    # 最適化設定
+    col_opt1, col_opt2 = st.columns(2)
+    with col_opt1:
+        n_trials = st.number_input(
+            "最適化試行回数",
+            min_value=10,
+            max_value=200,
+            value=50,
+            step=10,
+            help="多いほど精度が上がりますが、時間がかかります"
+        )
+    with col_opt2:
+        n_jobs = st.number_input(
+            "並列ジョブ数",
+            min_value=1,
+            max_value=16,
+            value=-1,
+            help="-1で全コア使用（推奨）"
+        )
+
+    # 最適化実行ボタン
+    if st.button("🎯 最適な重みを自動計算", type="primary"):
+        with st.spinner(f"ベイズ最適化を実行中... ({n_trials}回の試行、並列処理で高速化)"):
+            try:
+                best_weights = recommender.optimize_weights(
+                    n_trials=n_trials,
+                    n_jobs=n_jobs,
+                    holdout_ratio=0.2,
+                    top_k=10
+                )
+
+                st.success("✅ 最適化が完了しました！")
+                st.balloons()
+
+                # 結果を表示
+                st.markdown("### 🎉 最適な重み")
+                col_r1, col_r2, col_r3 = st.columns(3)
+                with col_r1:
+                    st.metric(
+                        "Readiness",
+                        f"{best_weights['readiness']:.1%}",
+                        delta=f"{(best_weights['readiness'] - current_weights['readiness']):.1%}"
+                    )
+                with col_r2:
+                    st.metric(
+                        "Bayesian",
+                        f"{best_weights['bayesian']:.1%}",
+                        delta=f"{(best_weights['bayesian'] - current_weights['bayesian']):.1%}"
+                    )
+                with col_r3:
+                    st.metric(
+                        "Utility",
+                        f"{best_weights['utility']:.1%}",
+                        delta=f"{(best_weights['utility'] - current_weights['utility']):.1%}"
+                    )
+
+                st.info("新しい重みが自動的に適用されました。下の推薦結果に反映されています。")
+
+            except Exception as e:
+                st.error(f"最適化中にエラーが発生しました: {e}")
+                st.exception(e)
+
+# =========================================================
 # 推薦 & 可視化セクション
 # =========================================================
 st.markdown("---")

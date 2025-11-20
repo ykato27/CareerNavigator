@@ -33,25 +33,30 @@ class CausalGraphRecommender:
         self,
         member_competence: pd.DataFrame,
         competence_master: pd.DataFrame,
-        learner_params: Optional[Dict[str, Any]] = None
+        learner_params: Optional[Dict[str, Any]] = None,
+        weights: Optional[Dict[str, float]] = None
     ):
         """
         Args:
             member_competence: メンバー力量データ
             competence_master: 力量マスタ
             learner_params: CausalStructureLearnerのパラメータ
+            weights: スコア重み {'readiness': 0.6, 'bayesian': 0.3, 'utility': 0.1}
         """
         self.member_competence = member_competence
         self.competence_master = competence_master
-        
+
         params = learner_params or {}
         # デフォルトパラメータをconfigから取得してマージすることも可能
         if 'random_state' not in params:
             params['random_state'] = config.model.RANDOM_STATE
-            
+
         self.learner = CausalStructureLearner(**params)
         self.bn_recommender: Optional[BayesianNetworkRecommender] = None
-        
+
+        # 重みのデフォルト値
+        self.weights = weights or {'readiness': 0.6, 'bayesian': 0.3, 'utility': 0.1}
+
         self.is_fitted = False
         self.skill_matrix_: Optional[pd.DataFrame] = None
         self.total_effects_: Optional[Dict[str, Dict[str, float]]] = None
@@ -181,8 +186,6 @@ class CausalGraphRecommender:
                 if effect > 0.001:
                     utility_score += effect
                     utility_reasons.append((future, effect))
-                    utility_score += effect
-                    utility_reasons.append((future, effect))
             
             # 3. Bayesian Score: P(Target=1 | Owned)
             bayesian_score = 0.0
@@ -195,29 +198,54 @@ class CausalGraphRecommender:
                 except Exception as e:
                     logger.warning(f"ベイジアン推論エラー ({target_skill}): {e}")
             
-            # 総合スコア: Readinessを重視（0.9）してユーザー固有の推薦を強化
-            # ベイジアン確率も考慮に入れる（Readinessの一部として解釈可能）
-            # 新スコア = (Readiness * 0.7 + Bayesian * 0.3) * 0.9 + Utility * 0.1 くらい？
-            # シンプルに: total = readiness * 0.6 + bayesian * 0.3 + utility * 0.1
-            
-            total_score = readiness_score * 0.6 + bayesian_score * 0.3 + utility_score * 0.1
-            
             # Readiness Scoreが0のスキルは除外（ユーザー固有性を確保）
             # ただし、保有スキルが少ない場合は例外的に含める
             min_readiness = 0.0 if len(owned_skills) < 3 else 0.001
-            
-            if total_score > 0 and readiness_score >= min_readiness:
+
+            # 仮の総合スコアでフィルタリング（正規化前）
+            temp_total_score = (
+                readiness_score * self.weights['readiness'] +
+                bayesian_score * self.weights['bayesian'] +
+                utility_score * self.weights['utility']
+            )
+
+            if temp_total_score > 0 and readiness_score >= min_readiness:
                 scores.append({
                     'skill_name': target_skill,
                     'skill_code': self.name_to_code.get(target_skill, target_skill),
-                    'total_score': total_score,
+                    'total_score': 0.0,  # 正規化後に再計算
                     'readiness_score': readiness_score,
                     'utility_score': utility_score,
                     'bayesian_score': bayesian_score,
                     'readiness_reasons': sorted(readiness_reasons, key=lambda x: x[1], reverse=True),
                     'utility_reasons': sorted(utility_reasons, key=lambda x: x[1], reverse=True)
                 })
-        
+
+        # スコアの正規化（全候補スキル間で0〜1に正規化）
+        if scores:
+            # 各スコアの最大値を取得
+            max_readiness = max(s['readiness_score'] for s in scores)
+            max_utility = max(s['utility_score'] for s in scores)
+            # bayesian_scoreは既に0〜1なので正規化不要
+
+            # 正規化を実行し、正規化後の値で総合スコアを再計算
+            for s in scores:
+                # 0除算を防ぐ
+                s['readiness_score_normalized'] = (
+                    s['readiness_score'] / max_readiness if max_readiness > 0 else 0.0
+                )
+                s['utility_score_normalized'] = (
+                    s['utility_score'] / max_utility if max_utility > 0 else 0.0
+                )
+                s['bayesian_score_normalized'] = s['bayesian_score']  # 既に0〜1
+
+                # 総合スコアを正規化後の値で計算
+                s['total_score'] = (
+                    s['readiness_score_normalized'] * self.weights['readiness'] +
+                    s['bayesian_score_normalized'] * self.weights['bayesian'] +
+                    s['utility_score_normalized'] * self.weights['utility']
+                )
+
         # ソート
         scores.sort(key=lambda x: x['total_score'], reverse=True)
         
@@ -267,3 +295,70 @@ class CausalGraphRecommender:
             lines.append("・基礎スキルとして推奨されます。")
 
         return "\n".join(lines)
+
+    def set_weights(self, weights: Dict[str, float]) -> None:
+        """
+        推薦スコアの重みを設定
+
+        Args:
+            weights: {'readiness': float, 'bayesian': float, 'utility': float}
+                     合計が1.0になることを推奨
+        """
+        # 合計が1.0でない場合は正規化
+        total = sum(weights.values())
+        if abs(total - 1.0) > 1e-6:
+            logger.warning(f"重みの合計が1.0ではありません ({total:.4f})。正規化します。")
+            self.weights = {k: v / total for k, v in weights.items()}
+        else:
+            self.weights = weights
+
+        logger.info(f"重みを更新しました: {self.weights}")
+
+    def get_weights(self) -> Dict[str, float]:
+        """
+        現在の重みを取得
+
+        Returns:
+            {'readiness': float, 'bayesian': float, 'utility': float}
+        """
+        return self.weights.copy()
+
+    def optimize_weights(
+        self,
+        n_trials: int = 50,
+        n_jobs: int = -1,
+        holdout_ratio: float = 0.2,
+        top_k: int = 10
+    ) -> Dict[str, float]:
+        """
+        ベイズ最適化により最適な重みを自動探索
+
+        Args:
+            n_trials: 試行回数
+            n_jobs: 並列ジョブ数（-1で全コア使用）
+            holdout_ratio: 評価用データの割合
+            top_k: 評価時の推薦件数
+
+        Returns:
+            最適な重み
+        """
+        if not self.is_fitted:
+            raise RuntimeError("モデルが学習されていません。fit()を実行してください。")
+
+        from skillnote_recommendation.ml.weight_optimizer import WeightOptimizer
+
+        optimizer = WeightOptimizer(
+            recommender=self,
+            n_trials=n_trials,
+            n_jobs=n_jobs
+        )
+
+        best_weights = optimizer.optimize(
+            holdout_ratio=holdout_ratio,
+            top_k=top_k
+        )
+
+        # 最適な重みを自動的に設定
+        self.set_weights(best_weights)
+
+        return best_weights
