@@ -60,7 +60,9 @@ class TestTemporalSplit:
 
         assert len(train_data) > 0
         assert len(test_data) > 0
-        assert len(train_data) + len(test_data) == len(temporal_member_competence)
+        # Cold-start問題により、テストデータから一部のメンバーが除外される可能性があるため、
+        # 合計が元のデータと一致しない場合がある
+        assert len(train_data) + len(test_data) <= len(temporal_member_competence)
 
     def test_temporal_split_with_date(self, temporal_member_competence):
         """明示的な分割日での分割"""
@@ -152,6 +154,78 @@ class TestTemporalSplit:
 
             # 比率が概ね一致（±10%の誤差を許容）
             assert abs(actual_ratio - ratio) < 0.1
+
+    def test_validate_temporal_split_valid_split(self, temporal_member_competence):
+        """正しい時系列分割の検証"""
+        evaluator = RecommendationEvaluator()
+
+        train_data, test_data = evaluator.temporal_train_test_split(
+            temporal_member_competence, split_date="2023-07-01"
+        )
+
+        validation = evaluator.validate_temporal_split(
+            train_data, test_data, split_date="2023-07-01"
+        )
+
+        # 正しい分割の場合、データリーケージは検出されない
+        assert validation["is_valid"]
+        assert validation["leakage_members"] == 0
+        assert len(validation["issues"]) == 0
+
+    def test_validate_temporal_split_with_leakage(self):
+        """データリーケージが発生している場合の検証"""
+        evaluator = RecommendationEvaluator()
+
+        # 意図的にリーケージを作成
+        train_data = pd.DataFrame(
+            {
+                "メンバーコード": ["m001", "m001"],
+                "力量コード": ["s001", "s002"],
+                "取得日": ["2023-06-01", "2023-08-01"],  # 後の日付が含まれる
+            }
+        )
+
+        test_data = pd.DataFrame(
+            {
+                "メンバーコード": ["m001"],
+                "力量コード": ["s003"],
+                "取得日": ["2023-07-01"],  # 前の日付
+            }
+        )
+
+        validation = evaluator.validate_temporal_split(train_data, test_data)
+
+        # データリーケージが検出される
+        assert not validation["is_valid"]
+        assert validation["leakage_members"] > 0
+        assert len(validation["issues"]) > 0
+
+    def test_validate_temporal_split_cold_start(self):
+        """Cold-startメンバーの検出"""
+        evaluator = RecommendationEvaluator()
+
+        train_data = pd.DataFrame(
+            {
+                "メンバーコード": ["m001"],
+                "力量コード": ["s001"],
+                "取得日": ["2023-01-01"],
+            }
+        )
+
+        test_data = pd.DataFrame(
+            {
+                "メンバーコード": ["m002"],  # 訓練セットに存在しない
+                "力量コード": ["s002"],
+                "取得日": ["2023-06-01"],
+            }
+        )
+
+        validation = evaluator.validate_temporal_split(train_data, test_data)
+
+        # Cold-startメンバーが検出される
+        assert not validation["is_valid"]
+        assert validation["cold_start_members"] == 1
+        assert any("Cold-start" in issue for issue in validation["issues"])
 
 
 # ==================== NDCG計算テスト ====================

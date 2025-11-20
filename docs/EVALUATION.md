@@ -7,6 +7,123 @@ CareerNavigator推薦システムは、時系列分割による評価機能を�
 
 > **関連ドキュメント**: モデル評価の詳細については、[MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md)も参照してください。
 
+## ⚠️ データリーケージ防止とベストプラクティス
+
+### データリーケージとは
+
+**データリーケージ（Data Leakage）**は、訓練データにテスト期間の情報が紛れ込むことで、評価メトリクスが20-40%過大評価される深刻な問題です。これにより、本番環境での推薦精度が期待値を大きく下回る結果となります。
+
+### 本システムの対策
+
+CareerNavigatorでは、以下の3つの仕組みでデータリーケージを完全に防止しています：
+
+#### 1. **グローバル分割方式**
+
+全メンバー共通の分割日（split_date）を使用し、以下を保証します：
+
+```python
+# ✅ 正しい実装（グローバル分割）
+train_data, test_data = evaluator.temporal_train_test_split(
+    member_competence,
+    split_date="2023-07-01"
+)
+# → 全メンバーについて、2023-07-01以前のスキルを訓練、以降を予測
+```
+
+**保証される性質：**
+- 各メンバーについて、訓練データの最新日 < テストデータの最古日
+- 時系列の整合性が厳密に保たれる
+- 同一メンバーのデータが訓練とテストに分散しない（時系列順）
+
+#### 2. **Cold-start問題の自動処理**
+
+訓練セットに存在しないメンバー（Cold-startメンバー）は評価データから自動的に除外されます：
+
+```python
+train_data, test_data = evaluator.temporal_train_test_split(
+    member_competence,
+    split_date="2023-07-01"
+)
+
+# ログ出力例:
+# WARNING: Cold-start問題により3名のメンバー（15レコード）を評価データから除外しました
+#          （訓練セットに存在しないメンバー）
+# INFO: 時系列分割完了:
+#   分割日: 2023-07-01
+#   訓練データ: 1200レコード, 50名のメンバー
+#   評価データ: 300レコード, 47名のメンバー  ← Cold-startメンバー3名を除外
+```
+
+#### 3. **データリーケージの検証機能**
+
+`validate_temporal_split` メソッドで、分割の妥当性を自動検証できます：
+
+```python
+# 分割の妥当性を検証
+validation = evaluator.validate_temporal_split(
+    train_data,
+    test_data,
+    split_date="2023-07-01"
+)
+
+if not validation["is_valid"]:
+    print("⚠️ データリーケージが検出されました！")
+    for issue in validation["issues"]:
+        print(f"  - {issue}")
+
+    # 詳細情報
+    print(f"\n【検証結果】")
+    print(f"訓練期間: {validation['train_date_range'][0]} ~ {validation['train_date_range'][1]}")
+    print(f"テスト期間: {validation['test_date_range'][0]} ~ {validation['test_date_range'][1]}")
+    print(f"データリーケージ発生メンバー: {validation['leakage_members']}名")
+    print(f"Cold-startメンバー: {validation['cold_start_members']}名")
+else:
+    print("✅ データリーケージなし。正しい分割です。")
+```
+
+### レベルアップデータの扱い
+
+同一力量のレベルアップ（例: Python Lv2 → Lv3）がある場合：
+
+**力量コードにレベルが含まれる場合（推奨）:**
+```python
+# 例: 力量コード = "Python_Lv2", "Python_Lv3"
+# → 異なる力量コードとして扱われるため、データリーケージの心配なし
+```
+
+**同一力量コードでレベルカラムのみ変わる場合:**
+```python
+# 例: 力量コード = "Python", 正規化レベル = 2 → 3
+# → 両レコードが別々に扱われるが、時系列順序が保たれるため問題なし
+# （グローバル分割により、レベルアップ前後が正しく訓練/テストに分割される）
+```
+
+### 推奨される使用方法
+
+```python
+# 1. 時系列分割を実行
+train_data, test_data = evaluator.temporal_train_test_split(
+    member_competence,
+    split_date="2023-07-01"
+)
+
+# 2. 分割の妥当性を確認（本番運用前に必ず実行）
+validation = evaluator.validate_temporal_split(
+    train_data, test_data, split_date="2023-07-01"
+)
+
+if not validation["is_valid"]:
+    raise ValueError(f"データリーケージが検出されました: {validation['issues']}")
+
+# 3. 評価実行
+metrics = evaluator.evaluate_recommendations(
+    train_data=train_data,
+    test_data=test_data,
+    competence_master=competence_master,
+    top_k=10
+)
+```
+
 ## 評価の流れ
 
 ### 1. 時系列分割（Temporal Split）
@@ -235,7 +352,17 @@ print(low_performers[['member_code', 'precision@10', 'recall@10']])
 
 ## 時系列クロスバリデーション
 
-複数の時間窓で評価を実行し、安定性を確認:
+### TimeSeriesSplit方式
+
+CareerNavigatorは、scikit-learnと同様の**TimeSeriesSplit方式**を採用しています。これにより、複数の時間窓で評価を実行し、モデルの安定性を確認できます。
+
+**特徴：**
+- ✅ **累積的な学習データ**: 各foldで訓練データを段階的に増やす
+- ✅ **時系列整合性の保証**: 日付ベースの分割で、メンバー単位のデータリーケージを防止
+- ✅ **Cold-start問題の自動処理**: 各foldで訓練セットに存在しないメンバーを除外
+- ✅ **最小テストサイズ**: 不十分なfoldを自動スキップ
+
+### 基本的な使用方法
 
 ```python
 # 5分割クロスバリデーション
@@ -248,18 +375,68 @@ cv_results = evaluator.cross_validate_temporal(
 
 # 各foldの結果を表示
 for result in cv_results:
-    print(f"Fold {result['fold']}: "
-          f"Precision={result['precision@10']:.3f}, "
-          f"Recall={result['recall@10']:.3f}")
+    print(f"\nFold {result['fold']}:")
+    print(f"  訓練期間: ~ {result['train_end_date']}")
+    print(f"  テスト期間: {result['test_start_date']} ~ {result['test_end_date']}")
+    print(f"  訓練データ: {result['train_size']}レコード, {result['train_members']}名")
+    print(f"  テストデータ: {result['test_size']}レコード, {result['test_members']}名")
+    print(f"  Precision@10: {result['precision@10']:.3f}")
+    print(f"  Recall@10: {result['recall@10']:.3f}")
 
 # 平均メトリクスを計算
 import numpy as np
 avg_precision = np.mean([r['precision@10'] for r in cv_results])
 avg_recall = np.mean([r['recall@10'] for r in cv_results])
+std_precision = np.std([r['precision@10'] for r in cv_results])
+std_recall = np.std([r['recall@10'] for r in cv_results])
 
-print(f"\n平均 Precision@10: {avg_precision:.3f}")
-print(f"平均 Recall@10: {avg_recall:.3f}")
+print(f"\n【クロスバリデーション結果】")
+print(f"平均 Precision@10: {avg_precision:.3f} ± {std_precision:.3f}")
+print(f"平均 Recall@10: {avg_recall:.3f} ± {std_recall:.3f}")
 ```
+
+### 高度な設定
+
+```python
+# 最小テストサイズを指定
+cv_results = evaluator.cross_validate_temporal(
+    member_competence=member_competence,
+    competence_master=competence_master,
+    n_splits=5,
+    top_k=10,
+    min_test_size=200  # 各foldで最低200レコード必要
+)
+
+# ログ出力例:
+# INFO: === Fold 1/5 ===
+# INFO:   訓練期間: ~ 2023-03-01
+# INFO:   テスト期間: 2023-03-01 ~ 2023-06-01
+# WARNING: Fold 5: テストデータが少なすぎるためスキップ (train=1500, test=50, min_required=200)
+```
+
+### TimeSeriesSplit方式の仕組み
+
+```
+データ全体: [--------------------時系列データ-------------------->]
+
+Fold 1: [train  ] [test]
+Fold 2: [----train----] [test]
+Fold 3: [---------train--------] [test]
+Fold 4: [-------------train-------------] [test]
+Fold 5: [------------------train------------------] [test]
+
+各foldで：
+- 訓練データが累積的に増加
+- テストデータは次の時間窓
+- 時系列の整合性を厳密に保証
+```
+
+**ランダムクロスバリデーションとの違い：**
+
+| 方式 | 時系列整合性 | データリーケージ | 本番環境への適用 |
+|------|------------|----------------|-----------------|
+| **TimeSeriesSplit** | ✅ 保証 | ✅ 防止 | ✅ 高い信頼性 |
+| ランダムKFold | ❌ 無視 | ❌ 発生 | ❌ 過大評価 |
 
 ## 特定メンバーのみ評価
 
@@ -388,9 +565,53 @@ print(cv_df[['precision@10', 'recall@10', 'ndcg@10', 'hit_rate']].describe())
 
 ## トラブルシューティング
 
+### 問題: Cold-startメンバーが多数除外される
+
+**原因**: 訓練セットに存在しないメンバーがテストデータに多く含まれている
+
+**症状**:
+```
+WARNING: Cold-start問題により50名のメンバー（500レコード）を評価データから除外しました
+```
+
+**解決策**:
+
+1. **分割日を調整する**:
+```python
+# 分割日を早める（訓練データを増やす）
+train_data, test_data = evaluator.temporal_train_test_split(
+    member_competence,
+    train_ratio=0.9  # 90%を訓練に使用
+)
+```
+
+2. **データの状況を確認する**:
+```python
+# 時系列でメンバー数の推移を確認
+df = member_competence.copy()
+df["取得日_dt"] = pd.to_datetime(df["取得日"], errors="coerce")
+df["年月"] = df["取得日_dt"].dt.to_period("M")
+
+member_trend = df.groupby("年月")["メンバーコード"].nunique()
+print("月別のアクティブメンバー数:")
+print(member_trend)
+
+# 新規メンバーの流入が多い時期を避けて分割日を設定
+```
+
+3. **Cold-start専用の評価を実施する**:
+```python
+# Cold-startメンバーのみを対象とした評価
+cold_start_members = set(test_data_raw["メンバーコード"].unique()) - train_members
+
+if cold_start_members:
+    print(f"Cold-startメンバー: {len(cold_start_members)}名")
+    # ベースライン推薦（人気度ベース等）で対応を検討
+```
+
 ### 問題: 評価対象メンバーが0になる
 
-**原因**: テストデータに習得記録がない、または学習データに存在しないメンバー
+**原因**: テストデータに習得記録がない、または学習データに存在しないメンバー（Cold-start問題）
 
 **解決策**:
 ```python
@@ -403,6 +624,12 @@ train_members = set(train_data['メンバーコード'].unique())
 test_members = set(test_data['メンバーコード'].unique())
 common_members = train_members & test_members
 print(f"共通メンバー数: {len(common_members)}")
+
+# Cold-startメンバーの確認
+cold_start_members = test_members - train_members
+if cold_start_members:
+    print(f"⚠️ Cold-startメンバー: {len(cold_start_members)}名")
+    print(f"  これらのメンバーは自動的に評価から除外されます")
 ```
 
 ### 問題: メトリクスが全て0.0
@@ -440,6 +667,66 @@ recommendations = ml_recommender.recommend(
 print(f"メンバー {sample_member} の推薦:")
 for rec in recommendations[:5]:
     print(f"  - {rec.competence_name} (スコア: {rec.priority_score:.2f})")
+```
+
+### 問題: データリーケージが検出される
+
+**原因**: 時系列分割が正しく実装されていない、または手動で分割したデータに問題がある
+
+**症状**:
+```python
+validation = evaluator.validate_temporal_split(train_data, test_data)
+# is_valid: False
+# issues: ['メンバー単位のデータリーケージが10名で検出されました']
+```
+
+**解決策**:
+
+1. **必ず `temporal_train_test_split` を使用する**:
+```python
+# ❌ 手動で分割しない
+train_data = member_competence[member_competence["メンバーコード"] < "m050"]
+test_data = member_competence[member_competence["メンバーコード"] >= "m050"]
+
+# ✅ 公式メソッドを使用
+train_data, test_data = evaluator.temporal_train_test_split(
+    member_competence,
+    split_date="2023-07-01"
+)
+```
+
+2. **検出されたリーケージの詳細を確認**:
+```python
+validation = evaluator.validate_temporal_split(train_data, test_data)
+
+if not validation["is_valid"]:
+    print("⚠️ データリーケージの詳細:")
+    for issue in validation["issues"]:
+        print(f"  - {issue}")
+
+    # リーケージが発生しているメンバーの詳細調査
+    if validation["leakage_members"] > 0:
+        # メンバーごとの日付範囲を確認
+        for member in test_data["メンバーコード"].unique()[:5]:
+            train_dates = train_data[train_data["メンバーコード"] == member]["取得日"]
+            test_dates = test_data[test_data["メンバーコード"] == member]["取得日"]
+            print(f"\nメンバー {member}:")
+            print(f"  訓練: {train_dates.min()} ~ {train_dates.max()}")
+            print(f"  テスト: {test_dates.min()} ~ {test_dates.max()}")
+```
+
+3. **外部で作成した分割データを検証**:
+```python
+# 外部ツールで分割したデータを使用する場合は必ず検証
+validation = evaluator.validate_temporal_split(
+    train_data, test_data, split_date="2023-07-01"
+)
+
+if not validation["is_valid"]:
+    raise ValueError(
+        f"データリーケージが検出されました。公式の temporal_train_test_split を使用してください。"
+        f"\n問題: {validation['issues']}"
+    )
 ```
 
 ### 問題: 取得日カラムがない
