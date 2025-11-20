@@ -94,10 +94,15 @@ with st.sidebar:
     
     st.divider()
     
-    # モデル初期化
-    if st.button("🔧 モデルを初期化", use_container_width=True):
-        with st.spinner("モデルを初期化中..."):
+    st.divider()
+    
+    # モデル学習（初期化も含む）
+    st.subheader("🧠 モデル学習")
+    
+    if st.button("🚀 モデルを学習", use_container_width=True, type="primary"):
+        with st.spinner("モデルを初期化・学習中... (数分かかる場合があります)"):
             try:
+                # 1. モデル初期化
                 # カテゴリとスキルのCSVパス
                 data_dir = project_root / 'data'
                 category_csv = data_dir / 'categories' / 'competence_category_skillnote.csv'
@@ -113,52 +118,38 @@ with st.sidebar:
                     n_components=10
                 )
                 
-                st.success("✅ モデル初期化完了！")
-                st.session_state.hb_initialized = True  # 初期化フラグを設定
+                # 2. モデル学習
+                st.session_state.hb_recommender.fit()
+                st.session_state.hb_trained = True
+                st.success("✅ 学習完了！")
                 
+                # モデル情報を表示
+                if st.session_state.hb_recommender.hierarchy:
+                    hierarchy = st.session_state.hb_recommender.hierarchy
+                    st.info(f"""
+                    **カテゴリ階層**:
+                    - L1カテゴリ: {len(hierarchy.level1_categories)}個
+                    - L2カテゴリ: {len(hierarchy.level2_categories)}個
+                    - L3カテゴリ: {len(hierarchy.level3_categories)}個
+                    - 総スキル数: {len(hierarchy.skill_to_category)}個
+                    """)
+                
+                if st.session_state.hb_recommender.network_learner:
+                    network_info = st.session_state.hb_recommender.network_learner.get_network_info()
+                    if network_info:
+                        st.info(f"""
+                        **ベイジアンネットワーク (Layer 1)**:
+                        - ノード数: {network_info.get('n_nodes', 'N/A')}
+                        - エッジ数: {network_info.get('n_edges', 'N/A')}
+                        """)
+                
+                # UIを更新するためにリラン
+                st.rerun()
+                    
             except Exception as e:
-                st.error(f"❌ モデル初期化エラー: {e}")
+                st.error(f"❌ 学習エラー: {e}")
                 import traceback
                 st.code(traceback.format_exc())
-    
-    st.divider()
-    
-    # モデル学習
-    # 初期化済み（hb_recommenderが存在）または初期化フラグがTrueの場合に表示
-    if st.session_state.hb_recommender is not None or st.session_state.get('hb_initialized', False):
-        st.subheader("🧠 モデル学習")
-        
-        if st.button("🚀 モデルを学習", use_container_width=True):
-            with st.spinner("モデルを学習中... (数分かかる場合があります)"):
-                try:
-                    st.session_state.hb_recommender.fit()
-                    st.session_state.hb_trained = True
-                    st.success("✅ 学習完了！")
-                    
-                    # モデル情報を表示
-                    if st.session_state.hb_recommender.hierarchy:
-                        hierarchy = st.session_state.hb_recommender.hierarchy
-                        st.info(f"""
-                        **カテゴリ階層**:
-                        - L1カテゴリ: {len(hierarchy.level1_categories)}個
-                        - L2カテゴリ: {len(hierarchy.level2_categories)}個
-                        - L3カテゴリ: {len(hierarchy.level3_categories)}個
-                        - 総スキル数: {len(hierarchy.skill_to_category)}個
-                        """)
-                    
-                    if st.session_state.hb_recommender.network_learner:
-                        network_info = st.session_state.hb_recommender.network_learner.get_network_info()
-                        if network_info:
-                            st.info(f"""
-                            **ベイジアンネットワーク (Layer 1)**:
-                            - ノード数: {network_info.get('n_nodes', 'N/A')}
-                            - エッジ数: {network_info.get('n_edges', 'N/A')}
-                            """)
-                    
-                except Exception as e:
-                    st.error(f"❌ 学習エラー: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
 
 # メインエリア: 推薦生成
 if st.session_state.hb_trained:
@@ -251,9 +242,9 @@ else:
     st.info("""
     👈 サイドバーから以下の手順で開始してください：
     
-    1. **モデルを初期化** ボタンをクリック
-    2. **モデルを学習** ボタンをクリック
-    3. メンバーを選択して推薦を生成
+    1. **モデルを学習** ボタンをクリック
+       （初期化と学習が一括で実行されます）
+    2. メンバーを選択して推薦を生成
     
     ※ データは既にStreamlit appで読み込まれたものを使用します
     """)
