@@ -257,6 +257,18 @@ class CategoryHierarchyExtractor:
             hierarchy.level3_categories
         )
 
+        # カテゴリ名を正規化（名前 -> [コードのリスト]）
+        name_to_codes = {}
+        for code in all_categories:
+            if code in hierarchy.category_names:
+                # 空白を正規化（複数の空白を1つに、前後をトリム）
+                name = ' '.join(hierarchy.category_names[code].split())
+                if name not in name_to_codes:
+                    name_to_codes[name] = []
+                name_to_codes[name].append(code)
+
+        logger.info(f"正規化後のユニークなカテゴリ名数: {len(name_to_codes)}")
+
         # デバッグ: カテゴリコードのサンプルを表示
         if all_categories:
             sample_codes = all_categories[:min(5, len(all_categories))]
@@ -270,7 +282,7 @@ class CategoryHierarchyExtractor:
             if category_code not in hierarchy.category_names:
                 continue
 
-            full_name = hierarchy.category_names[category_code]
+            full_name = ' '.join(hierarchy.category_names[category_code].split())
             name_parts = [part.strip() for part in full_name.split('>')]
 
             # L1カテゴリ（階層の最上位）には親がいない
@@ -280,15 +292,11 @@ class CategoryHierarchyExtractor:
             # 親のカテゴリ名を構築（最後の部分を除く）
             parent_name = ' > '.join(name_parts[:-1])
 
-            # 親カテゴリを探す
+            # 親カテゴリを探す（正規化された名前でマッチング）
             parent_code = None
-            for other_code in all_categories:
-                if other_code == category_code:
-                    continue
-                if other_code in hierarchy.category_names:
-                    if hierarchy.category_names[other_code] == parent_name:
-                        parent_code = other_code
-                        break
+            if parent_name in name_to_codes:
+                # 複数のコードがある場合は最初のものを使用
+                parent_code = name_to_codes[parent_name][0]
 
             # 親が見つかった場合、関係を記録
             if parent_code:
@@ -308,6 +316,16 @@ class CategoryHierarchyExtractor:
                 child_name = hierarchy.category_names.get(child, child)
                 parent_name = hierarchy.category_names.get(parent, parent)
                 logger.info(f"  子: {child_name} -> 親: {parent_name}")
+        else:
+            logger.warning("親子関係が1つも構築されませんでした！")
+            # サンプルのカテゴリ名を表示して問題を診断
+            if all_categories:
+                logger.warning("カテゴリ名のサンプル:")
+                for code in all_categories[:5]:
+                    if code in hierarchy.category_names:
+                        name = hierarchy.category_names[code]
+                        level = hierarchy.get_level(code)
+                        logger.warning(f"  L{level}: {name}")
     
     def _build_skill_category_mapping(
         self,
