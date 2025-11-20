@@ -69,6 +69,81 @@ with st.expander("設定と学習", expanded=not st.session_state.get("causal_mo
             help="この値以上の相関があるスキル同士を同じグループにします"
         )
 
+    # 重み設定方法の選択
+    st.markdown("---")
+    st.markdown("### ⚙️ 推薦スコアの重み設定")
+
+    weight_mode = st.radio(
+        "重みの設定方法を選択",
+        ["デフォルト重み（推奨）", "手動で重みを指定", "学習後に自動最適化"],
+        help="デフォルトは Readiness:60%, Bayesian:30%, Utility:10%"
+    )
+
+    initial_weights = {'readiness': 0.6, 'bayesian': 0.3, 'utility': 0.1}
+    run_optimization_after = False
+
+    if weight_mode == "手動で重みを指定":
+        st.markdown("**スライダーで初期重みを設定**")
+        col_w1, col_w2, col_w3 = st.columns(3)
+
+        with col_w1:
+            readiness_w = st.slider(
+                "Readiness（準備度）",
+                0.0, 1.0, 0.6, 0.05,
+                key="init_readiness"
+            )
+        with col_w2:
+            bayesian_w = st.slider(
+                "Bayesian（確率）",
+                0.0, 1.0, 0.3, 0.05,
+                key="init_bayesian"
+            )
+        with col_w3:
+            utility_w = st.slider(
+                "Utility（将来性）",
+                0.0, 1.0, 0.1, 0.05,
+                key="init_utility"
+            )
+
+        total_w = readiness_w + bayesian_w + utility_w
+        if abs(total_w - 1.0) > 0.01:
+            st.warning(f"⚠️ 合計: {total_w:.2f}（適用時に正規化されます）")
+
+        initial_weights = {
+            'readiness': readiness_w,
+            'bayesian': bayesian_w,
+            'utility': utility_w
+        }
+
+    elif weight_mode == "学習後に自動最適化":
+        st.info("💡 モデル学習後、ベイズ最適化で自動的に最適な重みを探索します（数分かかります）")
+        run_optimization_after = True
+
+        # 最適化パラメータ
+        col_opt1, col_opt2 = st.columns(2)
+        with col_opt1:
+            opt_trials = st.number_input(
+                "最適化試行回数",
+                min_value=10,
+                max_value=200,
+                value=50,
+                step=10,
+                key="init_opt_trials"
+            )
+        with col_opt2:
+            opt_jobs_option = st.selectbox(
+                "並列ジョブ数",
+                options=["全コア使用（推奨）", "1", "2", "4", "8", "16"],
+                index=0,
+                key="init_opt_jobs",
+                help="並列実行するジョブの数"
+            )
+            # 選択肢を数値に変換
+            if opt_jobs_option == "全コア使用（推奨）":
+                opt_jobs = -1
+            else:
+                opt_jobs = int(opt_jobs_option)
+
     if st.button("🚀 因果モデルを学習開始", type="primary"):
         with st.spinner("因果構造を学習中... (これには数分かかる場合があります)"):
             try:
@@ -78,14 +153,33 @@ with st.expander("設定と学習", expanded=not st.session_state.get("causal_mo
                     learner_params={
                         "correlation_threshold": corr_threshold,
                         "min_cluster_size": 3
-                    }
+                    },
+                    weights=initial_weights
                 )
 
                 recommender.fit(min_members_per_skill=min_members)
 
                 st.session_state.causal_recommender = recommender
                 st.session_state.causal_model_trained = True
-                st.success("✅ 学習が完了しました！")
+                st.success("✅ 因果構造の学習が完了しました！")
+
+                # 自動最適化を実行
+                if run_optimization_after:
+                    st.info("🔄 重みの自動最適化を開始します...")
+                    with st.spinner(f"ベイズ最適化を実行中... ({opt_trials}回の試行、並列処理で高速化)"):
+                        try:
+                            best_weights = recommender.optimize_weights(
+                                n_trials=opt_trials,
+                                n_jobs=opt_jobs,
+                                holdout_ratio=0.2,
+                                top_k=10
+                            )
+                            st.success(f"✅ 最適化完了！最適な重み: Readiness {best_weights['readiness']:.1%}, Bayesian {best_weights['bayesian']:.1%}, Utility {best_weights['utility']:.1%}")
+                        except Exception as opt_error:
+                            st.warning(f"⚠️ 最適化に失敗しました: {opt_error}")
+                            st.info("デフォルト重みで続行します。")
+
+                st.balloons()
                 st.rerun()
 
             except Exception as e:
@@ -208,13 +302,17 @@ with tab_auto:
             help="多いほど精度が上がりますが、時間がかかります"
         )
     with col_opt2:
-        n_jobs = st.number_input(
+        n_jobs_option = st.selectbox(
             "並列ジョブ数",
-            min_value=1,
-            max_value=16,
-            value=-1,
-            help="-1で全コア使用（推奨）"
+            options=["全コア使用（推奨）", "1", "2", "4", "8", "16"],
+            index=0,
+            help="並列実行するジョブの数"
         )
+        # 選択肢を数値に変換
+        if n_jobs_option == "全コア使用（推奨）":
+            n_jobs = -1
+        else:
+            n_jobs = int(n_jobs_option)
 
     # 最適化実行ボタン
     if st.button("🎯 最適な重みを自動計算", type="primary"):
