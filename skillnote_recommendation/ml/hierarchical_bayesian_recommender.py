@@ -56,7 +56,11 @@ class HierarchicalBayesianRecommender(BaseRecommender):
             max_indegree: ベイジアンネットワークの最大入次数
             n_components: 行列分解の潜在因子数
         """
-        super().__init__(member_competence, competence_master)
+        super().__init__(name="HierarchicalBayesianRecommender", interpretability_score=4)
+
+        # データを保存
+        self.member_competence = member_competence
+        self.competence_master = competence_master
 
         self.category_csv_path = category_csv_path
         self.skill_csv_path = skill_csv_path
