@@ -450,3 +450,194 @@ class UnifiedSEMEstimator:
         lines.append("=" * 80)
 
         return "\n".join(lines)
+
+    def predict_latent_scores(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        観測データから潜在変数スコアを推定
+
+        因子スコアは回帰法（Regression method）で推定されます：
+        f = (Λ'Θ^(-1)Λ)^(-1)Λ'Θ^(-1)(x - μ)
+
+        Parameters:
+        -----------
+        data: pd.DataFrame
+            観測データ（各列が観測変数）
+
+        Returns:
+        --------
+        pd.DataFrame
+            潜在変数スコア（行=サンプル、列=潜在変数名）
+
+        Raises:
+        -------
+        RuntimeError
+            モデルが未学習の場合
+        """
+        if not self.is_fitted:
+            raise RuntimeError("モデルが学習されていません。先にfit()を実行してください。")
+
+        logger.info("Predicting latent variable scores...")
+
+        try:
+            # semopyのpredict機能を試す
+            if hasattr(self.model, 'predict'):
+                latent_scores = self.model.predict(data)
+                logger.info(f"Successfully predicted latent scores using semopy.predict()")
+                return latent_scores
+        except Exception as e:
+            logger.debug(f"semopy.predict() failed or not available: {e}")
+
+        # 手動で因子スコアを計算（回帰法）
+        try:
+            latent_scores = self._compute_factor_scores_regression(data)
+            logger.info(f"Successfully computed factor scores using regression method")
+            return latent_scores
+        except Exception as e:
+            logger.error(f"Failed to compute factor scores: {e}")
+            raise RuntimeError(f"潜在変数スコアの計算に失敗しました: {e}")
+
+    def _compute_factor_scores_regression(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        回帰法で因子スコアを計算
+
+        Parameters:
+        -----------
+        data: pd.DataFrame
+            観測データ
+
+        Returns:
+        --------
+        pd.DataFrame
+            因子スコア
+        """
+        # パラメータ推定値を取得
+        params_df = self.model.inspect()
+
+        # ファクターローディング行列を構築
+        loading_matrix, latent_names, observed_names = self._build_loading_matrix(params_df)
+
+        # データを観測変数の順序に合わせる
+        data_aligned = data[observed_names].values
+
+        # 平均を引く（標準化）
+        data_centered = data_aligned - np.mean(data_aligned, axis=0)
+
+        # 測定誤差の分散を取得
+        error_variances = self._get_error_variances(params_df, observed_names)
+
+        # Θ^(-1): 測定誤差の逆共分散行列（対角行列と仮定）
+        theta_inv = np.diag(1.0 / error_variances)
+
+        # (Λ'Θ^(-1)Λ)^(-1)を計算
+        lambda_t_theta_inv = loading_matrix.T @ theta_inv
+        lambda_t_theta_inv_lambda = lambda_t_theta_inv @ loading_matrix
+
+        # 正則化：特異性を避けるため小さな値を対角に追加
+        lambda_t_theta_inv_lambda += np.eye(lambda_t_theta_inv_lambda.shape[0]) * 1e-6
+
+        lambda_t_theta_inv_lambda_inv = np.linalg.inv(lambda_t_theta_inv_lambda)
+
+        # 因子スコアを計算: f = (Λ'Θ^(-1)Λ)^(-1)Λ'Θ^(-1)(x - μ)
+        factor_scores = (lambda_t_theta_inv_lambda_inv @ lambda_t_theta_inv @ data_centered.T).T
+
+        # DataFrameに変換
+        factor_scores_df = pd.DataFrame(
+            factor_scores,
+            index=data.index,
+            columns=latent_names
+        )
+
+        return factor_scores_df
+
+    def _build_loading_matrix(self, params_df: pd.DataFrame) -> Tuple[np.ndarray, List[str], List[str]]:
+        """
+        ファクターローディング行列を構築
+
+        Parameters:
+        -----------
+        params_df: pd.DataFrame
+            パラメータ推定値（model.inspect()の結果）
+
+        Returns:
+        --------
+        Tuple[np.ndarray, List[str], List[str]]
+            (ローディング行列, 潜在変数名リスト, 観測変数名リスト)
+        """
+        # 測定モデルのパラメータを抽出（op == '=~'）
+        measurement_params = params_df[params_df['op'] == '=~'].copy()
+
+        # 潜在変数と観測変数のリストを取得
+        latent_names = []
+        for spec in self.measurement_specs:
+            if spec.latent_name not in latent_names:
+                latent_names.append(spec.latent_name)
+
+        observed_names = []
+        for spec in self.measurement_specs:
+            for obs in spec.observed_vars:
+                if obs not in observed_names:
+                    observed_names.append(obs)
+
+        # ローディング行列を初期化
+        n_observed = len(observed_names)
+        n_latent = len(latent_names)
+        loading_matrix = np.zeros((n_observed, n_latent))
+
+        # パラメータからローディング値を取得
+        for _, row in measurement_params.iterrows():
+            latent = row['lval']
+            observed = row['rval']
+            loading = row['Estimate']
+
+            if latent in latent_names and observed in observed_names:
+                latent_idx = latent_names.index(latent)
+                observed_idx = observed_names.index(observed)
+                loading_matrix[observed_idx, latent_idx] = loading
+
+        return loading_matrix, latent_names, observed_names
+
+    def _get_error_variances(self, params_df: pd.DataFrame, observed_names: List[str]) -> np.ndarray:
+        """
+        測定誤差の分散を取得
+
+        Parameters:
+        -----------
+        params_df: pd.DataFrame
+            パラメータ推定値
+        observed_names: List[str]
+            観測変数名のリスト
+
+        Returns:
+        --------
+        np.ndarray
+            誤差分散の配列
+        """
+        # 誤差分散パラメータを抽出（op == '~~' かつ lval == rval）
+        variance_params = params_df[
+            (params_df['op'] == '~~') & (params_df['lval'] == params_df['rval'])
+        ].copy()
+
+        error_variances = np.ones(len(observed_names))
+
+        for i, obs_name in enumerate(observed_names):
+            matching = variance_params[variance_params['lval'] == obs_name]
+            if len(matching) > 0:
+                error_var = matching.iloc[0]['Estimate']
+                # 負の分散を避ける
+                error_variances[i] = max(error_var, 1e-6)
+            else:
+                # デフォルト値（観測変数の分散が推定されていない場合）
+                error_variances[i] = 1.0
+
+        return error_variances
+
+    @property
+    def params(self) -> Dict[str, SEMParameter]:
+        """
+        パラメータ辞書を取得（後方互換性のため）
+
+        Returns:
+        --------
+        Dict[str, SEMParameter]
+        """
+        return self.parameters_

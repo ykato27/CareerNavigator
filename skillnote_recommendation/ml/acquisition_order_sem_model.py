@@ -301,12 +301,15 @@ class AcquisitionOrderSEMModel:
             # パス係数を抽出
             path_coefs = []
             for structural_spec in structural_models:
-                param_name = (
-                    f"β_{structural_spec.from_latent}→{structural_spec.to_latent}"
-                )
+                # semopyのパラメータ形式に合わせる: "{to} ~ {from}"
+                param_name = f"{structural_spec.to_latent} ~ {structural_spec.from_latent}"
+
                 if param_name in sem_model.params:
                     path_coefs.append(sem_model.params[param_name].value)
                 else:
+                    # パラメータが見つからない場合、警告を出力
+                    logger.warning(f"  ⚠️ パラメータ '{param_name}' が見つかりません")
+                    logger.debug(f"  利用可能なパラメータ: {list(sem_model.params.keys())[:10]}")
                     path_coefs.append(0.0)
 
             logger.info(f"  パス係数抽出完了: {path_coefs}")
