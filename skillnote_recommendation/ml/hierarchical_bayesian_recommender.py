@@ -143,7 +143,7 @@ class HierarchicalBayesianRecommender(BaseRecommender):
     def _prepare_user_skill_matrix(self) -> pd.DataFrame:
         """
         ユーザー×スキルマトリクスを準備
-        
+
         Returns:
             ユーザー×スキルのDataFrame
         """
@@ -151,15 +151,19 @@ class HierarchicalBayesianRecommender(BaseRecommender):
         skill_data = self.member_competence[
             self.member_competence['力量タイプ'] == 'SKILL'
         ].copy()
-        
+
+        # レベルを数値型に変換（文字列として保存されている場合に対応）
+        skill_data['レベル'] = pd.to_numeric(skill_data['レベル'], errors='coerce').fillna(0)
+
         # ピボットしてユーザー×スキルマトリクスを作成
         user_skill_matrix = skill_data.pivot_table(
             index='メンバーコード',
             columns='力量コード',
             values='レベル',
-            fill_value=0
+            fill_value=0,
+            aggfunc='mean'
         )
-        
+
         return user_skill_matrix
     
     def recommend(
@@ -221,18 +225,21 @@ class HierarchicalBayesianRecommender(BaseRecommender):
     def _get_user_skills(self, member_code: str) -> Dict[str, float]:
         """
         ユーザーの保有スキルとレベルを取得
-        
+
         Args:
             member_code: メンバーコード
-            
+
         Returns:
             スキルコードとレベルの辞書
         """
         user_data = self.member_competence[
             (self.member_competence['メンバーコード'] == member_code) &
             (self.member_competence['力量タイプ'] == 'SKILL')
-        ]
-        
+        ].copy()
+
+        # レベルを数値型に変換（文字列として保存されている場合に対応）
+        user_data['レベル'] = pd.to_numeric(user_data['レベル'], errors='coerce').fillna(0)
+
         return dict(zip(user_data['力量コード'], user_data['レベル']))
     
     def _calculate_skill_score(
