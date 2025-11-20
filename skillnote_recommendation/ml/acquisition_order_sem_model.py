@@ -401,35 +401,92 @@ class AcquisitionOrderSEMModel:
         Returns:
             推薦スキルのリスト
         """
-        if not self.is_fitted:
-            logger.warning("⚠️ モデルが学習されていません")
-            return []
+        try:
+            # モデル学習状態のチェック
+            if not self.is_fitted:
+                logger.warning("⚠️ SEMモデルが学習されていません。ルールベース推薦にフォールバックします")
+                # フォールバック: ルールベース推薦（取得順序のみ）
+                return self._recommend_fallback(member_code, top_n)
 
-        # 基本推薦を取得（取得順序ベース）
-        recommendations = self.acquisition_hierarchy.get_next_stage_skills(
-            member_code, top_n
-        )
+            # メンバーの存在確認
+            member_skills = self.member_competence[
+                self.member_competence["メンバーコード"] == member_code
+            ]
+            if member_skills.empty:
+                logger.warning(f"⚠️ メンバー '{member_code}' のスキルデータが見つかりません")
+                return []
 
-        # 潜在変数スコアで調整
-        latent_scores = self.get_member_latent_scores(member_code)
-
-        if latent_scores:
-            for rec in recommendations:
-                stage_id = rec["stage"]
-                latent_score = latent_scores.get(stage_id, 0.0)
-
-                # 潜在変数スコアを考慮した優先度調整
-                rec["latent_score"] = latent_score
-                rec["adjusted_priority_score"] = rec["priority_score"] * (
-                    1 + latent_score * 0.2
-                )
-
-            # 調整後のスコアでソート
-            recommendations.sort(
-                key=lambda x: x["adjusted_priority_score"], reverse=True
+            # 基本推薦を取得（取得順序ベース）
+            recommendations = self.acquisition_hierarchy.get_next_stage_skills(
+                member_code, top_n
             )
 
-        return recommendations
+            if not recommendations:
+                logger.info(f"ℹ️ メンバー '{member_code}' に推薦できるスキルがありません")
+                return []
+
+            # 潜在変数スコアで調整
+            latent_scores = self.get_member_latent_scores(member_code)
+
+            if latent_scores:
+                for rec in recommendations:
+                    stage_id = rec["stage"]
+                    latent_score = latent_scores.get(stage_id, 0.0)
+
+                    # 潜在変数スコアを考慮した優先度調整
+                    rec["latent_score"] = latent_score
+                    rec["adjusted_priority_score"] = rec["priority_score"] * (
+                        1 + latent_score * 0.2
+                    )
+
+                # 調整後のスコアでソート
+                recommendations.sort(
+                    key=lambda x: x["adjusted_priority_score"], reverse=True
+                )
+            else:
+                logger.warning(f"⚠️ メンバー '{member_code}' の潜在変数スコアが取得できませんでした")
+                # フォールバック: adjusted_priority_scoreがない場合はpriority_scoreを使用
+                for rec in recommendations:
+                    rec["latent_score"] = 0.0
+                    rec["adjusted_priority_score"] = rec["priority_score"]
+
+            return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ 推薦生成エラー（メンバー: {member_code}）: {e}", exc_info=True)
+            # フォールバック: ルールベース推薦
+            return self._recommend_fallback(member_code, top_n)
+
+    def _recommend_fallback(self, member_code: str, top_n: int = 10) -> List[Dict]:
+        """
+        フォールバック推薦（ルールベース）
+
+        SEMモデルが利用できない場合の代替推薦方法
+
+        Args:
+            member_code: メンバーコード
+            top_n: 推薦数
+
+        Returns:
+            推薦スキルのリスト
+        """
+        try:
+            logger.info(f"ℹ️ ルールベース推薦を実行中（メンバー: {member_code}）")
+            recommendations = self.acquisition_hierarchy.get_next_stage_skills(
+                member_code, top_n
+            )
+
+            # adjusted_priority_scoreを設定（SEMなし）
+            for rec in recommendations:
+                rec["latent_score"] = 0.0
+                rec["adjusted_priority_score"] = rec["priority_score"]
+                rec["recommendation_method"] = "fallback_rule_based"
+
+            return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ フォールバック推薦エラー: {e}", exc_info=True)
+            return []
 
     def get_statistics(self) -> pd.DataFrame:
         """
