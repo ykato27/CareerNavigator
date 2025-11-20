@@ -81,6 +81,16 @@ class CategoryWiseMatrixFactorization:
             skills_in_category = self._get_skills_in_l2_category(l2_code, hierarchy)
             logger.debug(f"  取得したスキル数: {len(skills_in_category)}")
 
+            # デバッグ: L2の子カテゴリを表示
+            if l2_code in hierarchy.children_mapping:
+                l3_children = [c for c in hierarchy.children_mapping[l2_code]
+                              if c in hierarchy.level3_categories]
+                logger.debug(f"  L3子カテゴリ数: {len(l3_children)}")
+                if len(l3_children) > 0:
+                    logger.debug(f"  L3子カテゴリ例: {[hierarchy.category_names.get(c, c) for c in l3_children[:3]]}")
+            else:
+                logger.debug(f"  {l2_code} は children_mapping に存在しません")
+
             if len(skills_in_category) < 2:
                 logger.warning(
                     f"L2カテゴリ {l2_name} のスキル数が不足（{len(skills_in_category)}個）"
