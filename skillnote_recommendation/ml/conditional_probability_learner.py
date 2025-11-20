@@ -40,23 +40,32 @@ class ConditionalProbabilityLearner:
             条件付き確率の辞書 {L1_code: {L2_code: probability}}
         """
         logger.info("条件付き確率 P(L2|L1) を学習中")
-        
+
         self.hierarchy = hierarchy
         self.conditional_probs = {}
-        
+
+        logger.info(f"L1カテゴリ数: {len(hierarchy.level1_categories)}")
+        logger.info(f"L2カテゴリ数: {len(hierarchy.level2_categories)}")
+        logger.info(f"親子マッピング数: {len(hierarchy.children_mapping)}")
+
         # 各L1カテゴリについて処理
         for l1_code in hierarchy.level1_categories:
             l1_name = hierarchy.category_names.get(l1_code, l1_code)
-            
+            logger.debug(f"処理中のL1カテゴリ: {l1_name} ({l1_code})")
+
             # このL1の子カテゴリ（L2）を取得
             l2_children = []
             if l1_code in hierarchy.children_mapping:
+                logger.debug(f"  {l1_code} の子カテゴリ: {hierarchy.children_mapping[l1_code]}")
                 for child in hierarchy.children_mapping[l1_code]:
                     if child in hierarchy.level2_categories:
                         l2_children.append(child)
-            
+                        logger.debug(f"    L2子を追加: {hierarchy.category_names.get(child, child)}")
+            else:
+                logger.debug(f"  {l1_code} は children_mapping に存在しません")
+
             if not l2_children:
-                logger.debug(f"L1カテゴリ {l1_name} にL2子カテゴリがありません")
+                logger.warning(f"L1カテゴリ {l1_name} にL2子カテゴリがありません")
                 continue
             
             # L1とL2のスキルレベルを集約

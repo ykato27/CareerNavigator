@@ -65,19 +65,24 @@ class CategoryWiseMatrixFactorization:
             カテゴリコードとMFモデルの辞書
         """
         logger.info("カテゴリ別行列分解モデルを学習中")
-        
+
         self.hierarchy = hierarchy
         self.category_models = {}
-        
+
+        logger.info(f"L2カテゴリ数: {len(hierarchy.level2_categories)}")
+        logger.info(f"親子マッピング数: {len(hierarchy.children_mapping)}")
+
         # 各L2カテゴリについて処理
         for l2_code in hierarchy.level2_categories:
             l2_name = hierarchy.category_names.get(l2_code, l2_code)
-            
+            logger.debug(f"処理中のL2カテゴリ: {l2_name} ({l2_code})")
+
             # このL2カテゴリに属するスキルを取得
             skills_in_category = self._get_skills_in_l2_category(l2_code, hierarchy)
-            
+            logger.debug(f"  取得したスキル数: {len(skills_in_category)}")
+
             if len(skills_in_category) < 2:
-                logger.debug(
+                logger.warning(
                     f"L2カテゴリ {l2_name} のスキル数が不足（{len(skills_in_category)}個）"
                 )
                 continue
