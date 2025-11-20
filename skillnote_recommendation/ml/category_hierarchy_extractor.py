@@ -1,0 +1,332 @@
+"""
+カテゴリ階層抽出モジュール
+
+CSVファイルから3レベルのカテゴリ階層（L1: 大カテゴリ、L2: 中カテゴリ、L3: 小カテゴリ）を抽出し、
+スキルとカテゴリのマッピングを構築します。
+"""
+
+import pandas as pd
+from dataclasses import dataclass, field
+from typing import Dict, List, Set, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+
+@dataclass
+class CategoryHierarchy:
+    """カテゴリ階層を表すデータクラス"""
+    
+    # カテゴリコード -> カテゴリ名のマッピング
+    category_names: Dict[str, str] = field(default_factory=dict)
+    
+    # レベル別カテゴリコードのリスト
+    level1_categories: List[str] = field(default_factory=list)  # 大カテゴリ
+    level2_categories: List[str] = field(default_factory=list)  # 中カテゴリ
+    level3_categories: List[str] = field(default_factory=list)  # 小カテゴリ
+    
+    # 親子関係のマッピング
+    # child_code -> parent_code
+    parent_mapping: Dict[str, str] = field(default_factory=dict)
+    
+    # 子のリスト
+    # parent_code -> [child_codes]
+    children_mapping: Dict[str, List[str]] = field(default_factory=dict)
+    
+    # スキルコード -> カテゴリコード（最も詳細なレベル）のマッピング
+    skill_to_category: Dict[str, str] = field(default_factory=dict)
+    
+    # カテゴリコード -> スキルコードのリスト
+    category_to_skills: Dict[str, List[str]] = field(default_factory=dict)
+    
+    def get_level(self, category_code: str) -> int:
+        """カテゴリのレベルを取得（1, 2, 3）"""
+        if category_code in self.level1_categories:
+            return 1
+        elif category_code in self.level2_categories:
+            return 2
+        elif category_code in self.level3_categories:
+            return 3
+        else:
+            return 0
+    
+    def get_ancestors(self, category_code: str) -> List[str]:
+        """カテゴリの祖先（親、祖父母など）をリストで取得"""
+        ancestors = []
+        current = category_code
+        while current in self.parent_mapping:
+            parent = self.parent_mapping[current]
+            ancestors.append(parent)
+            current = parent
+        return ancestors
+    
+    def get_l1_category(self, category_code: str) -> Optional[str]:
+        """カテゴリのL1（大カテゴリ）を取得"""
+        if category_code in self.level1_categories:
+            return category_code
+        ancestors = self.get_ancestors(category_code)
+        # 祖先の中でL1に属するものを探す
+        for ancestor in ancestors:
+            if ancestor in self.level1_categories:
+                return ancestor
+        return None
+    
+    def get_l2_category(self, category_code: str) -> Optional[str]:
+        """カテゴリのL2（中カテゴリ）を取得"""
+        if category_code in self.level2_categories:
+            return category_code
+        # L3の場合、親がL2のはず
+        if category_code in self.level3_categories:
+            parent = self.parent_mapping.get(category_code)
+            if parent and parent in self.level2_categories:
+                return parent
+        return None
+
+
+class CategoryHierarchyExtractor:
+    """カテゴリ階層抽出クラス"""
+    
+    def __init__(
+        self,
+        category_csv_path: str,
+        skill_csv_path: str
+    ):
+        """
+        初期化
+        
+        Args:
+            category_csv_path: カテゴリマスタCSVのパス
+            skill_csv_path: スキルマスタCSVのパス
+        """
+        self.category_csv_path = category_csv_path
+        self.skill_csv_path = skill_csv_path
+        self.hierarchy: Optional[CategoryHierarchy] = None
+    
+    def extract_hierarchy(self) -> CategoryHierarchy:
+        """
+        カテゴリ階層を抽出
+        
+        Returns:
+            CategoryHierarchy: 抽出された階層構造
+        """
+        logger.info("カテゴリ階層の抽出を開始")
+        
+        # カテゴリマスタを読み込み
+        category_df = pd.read_csv(self.category_csv_path)
+        logger.info(f"カテゴリマスタ読み込み: {len(category_df)}行")
+        
+        # スキルマスタを読み込み
+        skill_df = pd.read_csv(self.skill_csv_path)
+        logger.info(f"スキルマスタ読み込み: {len(skill_df)}行")
+        
+        # 階層構造を構築
+        hierarchy = CategoryHierarchy()
+        
+        # カテゴリ階層を解析
+        self._parse_category_hierarchy(category_df, hierarchy)
+        
+        # スキルとカテゴリのマッピングを構築
+        self._build_skill_category_mapping(skill_df, hierarchy)
+        
+        # 統計情報をログ出力
+        logger.info(
+            f"階層抽出完了: L1={len(hierarchy.level1_categories)}, "
+            f"L2={len(hierarchy.level2_categories)}, "
+            f"L3={len(hierarchy.level3_categories)}, "
+            f"スキル={len(hierarchy.skill_to_category)}"
+        )
+        
+        self.hierarchy = hierarchy
+        return hierarchy
+    
+    def _parse_category_hierarchy(
+        self,
+        category_df: pd.DataFrame,
+        hierarchy: CategoryHierarchy
+    ):
+        """
+        カテゴリマスタから階層構造を解析
+        
+        Args:
+            category_df: カテゴリマスタのDataFrame
+            hierarchy: 構築中のCategoryHierarchy
+        """
+        # カテゴリ名のカラムを特定（"力量カテゴリー名"で始まるカラム）
+        name_columns = [col for col in category_df.columns 
+                       if '力量カテゴリー名' in col]
+        
+        logger.info(f"カテゴリ名カラム数: {len(name_columns)}")
+        
+        # 各行を処理
+        for _, row in category_df.iterrows():
+            category_code = row['力量カテゴリーコード  ###[competence_category_code]###']
+            
+            # 各レベルのカテゴリ名を取得（空でない最も深いレベルを特定）
+            category_names = []
+            for col in name_columns:
+                name = row[col]
+                if pd.notna(name) and str(name).strip():
+                    category_names.append(str(name).strip())
+            
+            if not category_names:
+                continue
+            
+            # カテゴリのレベルを判定（非空のカラム数）
+            level = len(category_names)
+            
+            # カテゴリ名を結合（階層パス）
+            full_name = ' > '.join(category_names)
+            hierarchy.category_names[category_code] = full_name
+            
+            # レベル別に分類
+            if level == 1:
+                hierarchy.level1_categories.append(category_code)
+            elif level == 2:
+                hierarchy.level2_categories.append(category_code)
+            elif level >= 3:
+                # レベル3以上は全てL3として扱う
+                hierarchy.level3_categories.append(category_code)
+        
+        # 親子関係を構築（カテゴリコードの接頭辞ベース）
+        self._build_parent_child_relationships(hierarchy)
+        
+        logger.info(
+            f"カテゴリ階層解析完了: L1={len(hierarchy.level1_categories)}, "
+            f"L2={len(hierarchy.level2_categories)}, "
+            f"L3={len(hierarchy.level3_categories)}"
+        )
+    
+    def _build_parent_child_relationships(self, hierarchy: CategoryHierarchy):
+        """
+        カテゴリコードの接頭辞に基づいて親子関係を構築
+        
+        カテゴリコードの形式:
+        - L1: CTG100000000 (最初の3桁が100)
+        - L2: CTG101000000 (最初の6桁が101000)
+        - L3: CTG101010000 (最初の9桁が101010000)
+        
+        Args:
+            hierarchy: 構築中のCategoryHierarchy
+        """
+        all_categories = (
+            hierarchy.level1_categories + 
+            hierarchy.level2_categories + 
+            hierarchy.level3_categories
+        )
+        
+        # 各カテゴリについて親を探す
+        for category_code in all_categories:
+            # カテゴリコードから数値部分を抽出
+            if not category_code.startswith('CTG'):
+                continue
+            
+            code_num = category_code[3:]  # 'CTG'を除去
+            
+            # 親候補を探す（より短い接頭辞を持つカテゴリ）
+            potential_parents = []
+            for other_code in all_categories:
+                if other_code == category_code:
+                    continue
+                if not other_code.startswith('CTG'):
+                    continue
+                
+                other_num = other_code[3:]
+                # category_codeがother_codeの接頭辞で始まり、かつより長い場合
+                if code_num.startswith(other_num) and len(code_num) > len(other_num):
+                    # ゼロでない部分の長さで親の近さを判定
+                    non_zero_len = len(other_num.rstrip('0'))
+                    potential_parents.append((other_code, non_zero_len))
+            
+            # 最も近い親（最も長い接頭辞）を選択
+            if potential_parents:
+                potential_parents.sort(key=lambda x: x[1], reverse=True)
+                parent_code = potential_parents[0][0]
+                hierarchy.parent_mapping[category_code] = parent_code
+                
+                # 子リストに追加
+                if parent_code not in hierarchy.children_mapping:
+                    hierarchy.children_mapping[parent_code] = []
+                hierarchy.children_mapping[parent_code].append(category_code)
+        
+        logger.info(f"親子関係構築完了: {len(hierarchy.parent_mapping)}個の親子関係")
+    
+    def _build_skill_category_mapping(
+        self,
+        skill_df: pd.DataFrame,
+        hierarchy: CategoryHierarchy
+    ):
+        """
+        スキルとカテゴリのマッピングを構築
+        
+        Args:
+            skill_df: スキルマスタのDataFrame
+            hierarchy: 構築中のCategoryHierarchy
+        """
+        # 力量タイプがSKILLのものだけを対象
+        skill_rows = skill_df[
+            skill_df['力量タイプ  ###[competence_type]###'] == 'SKILL'
+        ]
+        
+        for _, row in skill_rows.iterrows():
+            skill_code = row['力量コード  ###[skill_code]###']
+            category_code = row['力量カテゴリーコード  ###[competence_category_code]###']
+            
+            # スキル -> カテゴリのマッピング
+            hierarchy.skill_to_category[skill_code] = category_code
+            
+            # カテゴリ -> スキルのマッピング
+            if category_code not in hierarchy.category_to_skills:
+                hierarchy.category_to_skills[category_code] = []
+            hierarchy.category_to_skills[category_code].append(skill_code)
+        
+        logger.info(
+            f"スキル-カテゴリマッピング構築完了: "
+            f"{len(hierarchy.skill_to_category)}スキル"
+        )
+    
+    def get_skills_by_category(
+        self,
+        category_code: str,
+        include_descendants: bool = False
+    ) -> List[str]:
+        """
+        カテゴリに属するスキルのリストを取得
+        
+        Args:
+            category_code: カテゴリコード
+            include_descendants: 子孫カテゴリのスキルも含めるか
+            
+        Returns:
+            スキルコードのリスト
+        """
+        if self.hierarchy is None:
+            raise ValueError("extract_hierarchy()を先に実行してください")
+        
+        skills = set()
+        
+        # 直接このカテゴリに属するスキル
+        if category_code in self.hierarchy.category_to_skills:
+            skills.update(self.hierarchy.category_to_skills[category_code])
+        
+        # 子孫カテゴリのスキルも含める場合
+        if include_descendants:
+            descendants = self._get_all_descendants(category_code)
+            for desc_code in descendants:
+                if desc_code in self.hierarchy.category_to_skills:
+                    skills.update(self.hierarchy.category_to_skills[desc_code])
+        
+        return list(skills)
+    
+    def _get_all_descendants(self, category_code: str) -> List[str]:
+        """カテゴリの全子孫を再帰的に取得"""
+        if self.hierarchy is None:
+            return []
+        
+        descendants = []
+        if category_code in self.hierarchy.children_mapping:
+            for child in self.hierarchy.children_mapping[category_code]:
+                descendants.append(child)
+                descendants.extend(self._get_all_descendants(child))
+        
+        return descendants
