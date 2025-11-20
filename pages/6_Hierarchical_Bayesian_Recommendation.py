@@ -281,7 +281,69 @@ if st.session_state.hb_trained:
                         mime="text/csv",
                         use_container_width=True
                     )
-                    
+
+                    # 階層グラフの可視化
+                    st.markdown("---")
+                    st.subheader("🔗 階層グラフ可視化")
+                    st.caption("推薦スキルのカテゴリ階層とあなたの保有スキルとの関係")
+
+                    # 推薦スキルから選択（上位10個まで）
+                    skill_options = [f"{i+1}. {rec['力量名']} (スコア: {rec['スコア']:.4f})"
+                                    for i, rec in enumerate(recommendations[:10])]
+                    selected_skill_idx = st.selectbox(
+                        "グラフを表示する推薦スキルを選択",
+                        range(min(10, len(recommendations))),
+                        format_func=lambda x: skill_options[x],
+                        help="上位10個の推薦スキルから選択できます。"
+                    )
+
+                    if selected_skill_idx is not None:
+                        import streamlit.components.v1 as components
+
+                        try:
+                            selected_rec = recommendations[selected_skill_idx]
+                            skill_code = selected_rec['力量コード']
+
+                            # 階層グラフを生成
+                            html_path = st.session_state.hb_recommender.generate_hierarchy_graph(
+                                skill_code=skill_code,
+                                member_code=selected_member,
+                                output_path=f"hierarchy_graph_{skill_code}.html",
+                                height="600px"
+                            )
+
+                            if html_path:
+                                # HTMLファイルを読み込んで表示
+                                with open(html_path, 'r', encoding='utf-8') as f:
+                                    source_code = f.read()
+                                components.html(source_code, height=620, scrolling=False)
+
+                                # 凡例を表示
+                                st.caption(
+                                    "🔴 **赤**: L1カテゴリ（大カテゴリ） | "
+                                    "🟠 **橙**: L2カテゴリ（中カテゴリ） | "
+                                    "🟡 **黄**: L3カテゴリ（小カテゴリ） | "
+                                    "🔵 **青**: 推薦スキル | "
+                                    "🟢 **緑**: あなたの保有スキル | "
+                                    "⚪ **灰**: 関連スキル"
+                                )
+
+                                st.info("""
+                                **グラフの見方**:
+                                - 上から下へ階層構造（L1→L2→L3→スキル）が表示されます
+                                - 青いノードが選択した推薦スキルです
+                                - 緑のノードはあなたが既に保有しているスキルです
+                                - 同じカテゴリ内の関連スキルも表示されます
+                                - ノードをドラッグして移動できます
+                                """)
+                            else:
+                                st.warning("グラフを生成できませんでした。")
+
+                        except Exception as e:
+                            st.error(f"グラフ描画エラー: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
+
                 else:
                     st.warning("推薦が生成されませんでした。")
                     
