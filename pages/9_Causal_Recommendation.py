@@ -570,20 +570,21 @@ with tab2:
         "- **赤線（負の因果）**: スキルAを習得すると、スキルBの習得が抑制される関係（競合・代替関係など）\n\n"
         "デフォルトでは正の因果関係のみを表示します。"
     )
-    
+
     st.warning(
         "⚠️ **パフォーマンスに関する注意**\n\n"
         "グラフのノード数やエッジ数が多いと、ブラウザが重くなったりクラッシュする可能性があります。\n\n"
         "**推奨設定**: 表示ノード数 10-20個、表示閾値 0.3以上から開始してください。"
     )
-    
+
     col1, col2, col3 = st.columns(3)
 
     with col1:
         display_mode = st.selectbox(
             "表示モード",
             ["全体（主要ノード）", "全体（全ノード）"],
-            help="全ノード表示は非常に重くなります。主要ノードモードを推奨します。"
+            help="全ノード表示は非常に重くなります。主要ノードモードを推奨します。",
+            key="global_display_mode"
         )
 
     with col2:
@@ -602,15 +603,44 @@ with tab2:
             help="次数中心性が高い上位Nノードを表示。少ない数から始めることを推奨します。"
         ) if display_mode == "全体（主要ノード）" else 1000
 
-    
+
     # 負の因果関係の表示オプション
     show_negative = st.checkbox(
         "負の因果関係も表示する（赤線）",
         value=False,
+        key="global_show_negative",
         help="チェックを入れると、負の因果関係（抑制関係）も表示されます。グラフが複雑になる可能性があります。"
     )
 
-    if st.button("🎨 インタラクティブグラフを描画", type="primary"):
+    # 自動更新モードのチェックボックス
+    auto_update = st.checkbox(
+        "設定変更時に自動更新",
+        value=False,
+        help="チェックを入れると、設定を変更するたびに自動的にグラフを再描画します"
+    )
+
+    # 現在の設定
+    current_settings = {
+        'threshold': threshold,
+        'top_n': top_n,
+        'show_negative': show_negative,
+        'display_mode': display_mode
+    }
+
+    # 前回の設定と比較
+    settings_changed = False
+    if 'global_graph_settings' in st.session_state:
+        settings_changed = st.session_state.global_graph_settings != current_settings
+
+    # 描画ボタンまたは自動更新
+    should_draw = st.button("🎨 インタラクティブグラフを描画", type="primary")
+
+    # 自動更新がONで設定が変更された場合
+    if auto_update and settings_changed and 'global_graph_html' in st.session_state:
+        should_draw = True
+        st.info("🔄 設定が変更されたため、自動的に再描画します...")
+
+    if should_draw:
         with st.spinner("グラフを生成中..."):
             try:
                 adj_matrix = recommender.learner.get_adjacency_matrix()
@@ -625,11 +655,13 @@ with tab2:
                     width="100%"
                 )
 
-                # HTMLファイルを読み込んで表示
+                # HTMLファイルを読み込んで保存
                 with open(html_path, 'r', encoding='utf-8') as f:
                     html_content = f.read()
 
-                components.html(html_content, height=820, scrolling=True)
+                # session_stateに保存
+                st.session_state.global_graph_html = html_content
+                st.session_state.global_graph_settings = current_settings.copy()
 
                 st.success(f"✅ {top_n}個のノード（次数中心性上位）を表示しました")
                 st.caption("💡 ノードをドラッグ・ズーム・クリックして操作できます")
@@ -637,6 +669,10 @@ with tab2:
             except Exception as e:
                 st.error(f"グラフ描画エラー: {e}")
                 st.exception(e)
+
+    # 保存されたグラフを表示
+    if 'global_graph_html' in st.session_state:
+        components.html(st.session_state.global_graph_html, height=820, scrolling=True)
 
     # フォールバック: 静的グラフ表示
     with st.expander("📊 静的グラフを表示（軽量版）"):
