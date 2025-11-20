@@ -583,10 +583,14 @@ class HierarchicalBayesianRecommender(BaseRecommender):
         # 同じL3カテゴリ内の他のスキルを追加
         if category_code in self.hierarchy.category_to_skills:
             sibling_skills = self.hierarchy.category_to_skills[category_code]
-            for sibling_code in sibling_skills[:5]:  # 最大5個まで
-                if sibling_code == skill_code:
-                    continue
+            # 保有スキルを優先的に表示
+            owned_siblings = [s for s in sibling_skills if s in user_skills and s != skill_code]
+            other_siblings = [s for s in sibling_skills if s not in user_skills and s != skill_code]
 
+            # 保有スキルは全て表示、その他は最大10個まで
+            siblings_to_show = owned_siblings + other_siblings[:10]
+
+            for sibling_code in siblings_to_show:
                 sibling_info = self._get_skill_info(sibling_code)
                 sibling_name = sibling_info['力量名']
 
@@ -606,6 +610,54 @@ class HierarchicalBayesianRecommender(BaseRecommender):
                     sibling_code,
                     color="#2ecc71" if is_owned else "#95a5a6"
                 )
+
+        # L2カテゴリ配下の他のL3カテゴリとそのスキルも表示
+        if l2_code and l2_code in self.hierarchy.children_mapping:
+            other_l3_categories = [
+                cat for cat in self.hierarchy.children_mapping[l2_code]
+                if cat != category_code and cat in self.hierarchy.level3_categories
+            ]
+
+            # 最大2つの他のL3カテゴリを表示
+            for other_l3_code in other_l3_categories[:2]:
+                other_l3_name = self.hierarchy.category_names.get(other_l3_code, other_l3_code)
+                net.add_node(
+                    other_l3_code,
+                    label=other_l3_name,
+                    color="#f39c12",
+                    size=15,
+                    title=f"関連L3カテゴリ: {other_l3_name}",
+                    level=2
+                )
+                net.add_edge(l2_code, other_l3_code, color="#95a5a6", dashes=True)
+
+                # 各L3カテゴリから保有スキルを優先的に表示
+                if other_l3_code in self.hierarchy.category_to_skills:
+                    other_skills = self.hierarchy.category_to_skills[other_l3_code]
+                    owned_other_skills = [s for s in other_skills if s in user_skills]
+                    other_other_skills = [s for s in other_skills if s not in user_skills]
+
+                    # 保有スキルは全て、その他は最大3個まで
+                    skills_to_show = owned_other_skills + other_other_skills[:3]
+
+                    for other_skill_code in skills_to_show:
+                        other_skill_info = self._get_skill_info(other_skill_code)
+                        other_skill_name = other_skill_info['力量名']
+                        is_owned = other_skill_code in user_skills
+
+                        net.add_node(
+                            other_skill_code,
+                            label=other_skill_name,
+                            color="#2ecc71" if is_owned else "#ecf0f1",
+                            size=18 if is_owned else 12,
+                            title=f"{'保有スキル' if is_owned else '関連スキル'}: {other_skill_name}",
+                            level=3
+                        )
+                        net.add_edge(
+                            other_l3_code,
+                            other_skill_code,
+                            color="#2ecc71" if is_owned else "#bdc3c7"
+                        )
 
         # HTMLファイルとして保存
         net.save_graph(output_path)
