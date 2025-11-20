@@ -344,15 +344,15 @@ class CausalGraphVisualizer:
             if node in highlight_set:
                 # ハイライトノード: 青
                 color = "#97C2FC"
-                size = 20
+                size = 25  # 20→25に拡大
             elif node in member_skills_set:
                 # 保有スキル: 緑
                 color = "#90EE90"
-                size = 17
+                size = 22  # 17→22に拡大
             else:
                 # デフォルト: グレー
                 color = "#DDDDDD"
-                size = 15
+                size = 20  # 15→20に拡大
 
             title = f"<b>{node}</b>"  # ホバー時の情報
 
@@ -362,7 +362,7 @@ class CausalGraphVisualizer:
                 color=color,
                 title=title,
                 size=size,
-                font={"size": 14}
+                font={"size": 20, "face": "arial", "bold": True}  # フォントサイズを20に増加
             )
 
         # エッジを追加
@@ -396,7 +396,8 @@ class CausalGraphVisualizer:
                         color=color,
                         title=title,
                         label=f"{weight:.2f}",
-                        arrows="to"
+                        arrows="to",
+                        font={"size": 16, "align": "middle"}  # エッジラベルのフォントサイズを16に
                     )
 
         # 出力パスの決定
