@@ -418,6 +418,7 @@ class CausalGraphVisualizer:
         center_node: str,
         radius: int = 1,
         threshold: float = 0.1,
+        show_negative: bool = True,
         output_path: str = None,
         physics_enabled: bool = True,
         height: str = "750px",
@@ -488,6 +489,7 @@ class CausalGraphVisualizer:
             threshold=threshold,
             top_n=len(related_nodes_list),  # 全ノード表示
             highlight_nodes=[center_node],
+            show_negative=show_negative,
             physics_enabled=physics_enabled,
             height=height,
             width=width
