@@ -170,60 +170,50 @@ class CategoryHierarchyExtractor:
             category_df: カテゴリマスタのDataFrame
             hierarchy: 構築中のCategoryHierarchy
         """
-        # カテゴリ名のカラムを特定（"力量カテゴリー名"で始まるカラム）
-        name_columns = [col for col in category_df.columns
-                       if '力量カテゴリー名' in col]
+        # カテゴリ名のカラムをインデックス位置で特定（重複カラム名に対応）
+        name_column_indices = [i for i, col in enumerate(category_df.columns)
+                              if '力量カテゴリー名' in str(col)]
 
         # カテゴリコードのカラムを特定（マーカーあり/なし両方に対応）
-        category_code_col = None
-        for col in category_df.columns:
-            if '力量カテゴリーコード' in col:
-                category_code_col = col
+        category_code_col_idx = None
+        for i, col in enumerate(category_df.columns):
+            if '力量カテゴリーコード' in str(col):
+                category_code_col_idx = i
                 break
 
-        if category_code_col is None:
+        if category_code_col_idx is None:
             raise ValueError("力量カテゴリーコードカラムが見つかりません")
 
-        logger.info(f"カテゴリ名カラム数: {len(name_columns)}")
-        logger.info(f"カテゴリ名カラム: {name_columns}")
-        logger.info(f"カテゴリコードカラム: {category_code_col}")
+        logger.info(f"カテゴリ名カラム数: {len(name_column_indices)}")
+        logger.info(f"カテゴリ名カラムインデックス: {name_column_indices}")
+        logger.info(f"カテゴリコードカラムインデックス: {category_code_col_idx}")
 
         # 重複カラム名のチェック
-        if len(name_columns) != len(set(name_columns)):
-            logger.warning(f"警告: 重複したカラム名が検出されました: {name_columns}")
-
-        # DataFrameのカラム全体をチェック
         duplicate_cols = category_df.columns[category_df.columns.duplicated()].tolist()
         if duplicate_cols:
-            logger.warning(f"警告: DataFrameに重複カラムがあります: {duplicate_cols}")
+            logger.warning(f"警告: DataFrameに重複カラムがあります（インデックスでアクセスします）: {len(set(duplicate_cols))}種類")
 
         # 各行を処理
         for _, row in category_df.iterrows():
-            category_code = row[category_code_col]
-            # category_code が Series の場合は最初の値を取得
-            if isinstance(category_code, pd.Series):
-                if not category_code.empty:
-                    category_code = category_code.iloc[0]
-                else:
-                    continue
-            
+            # カテゴリコードを位置インデックスで取得
+            category_code = row.iloc[category_code_col_idx]
+
+            # 欠損値チェック
+            if pd.isna(category_code):
+                continue
+
             # 各レベルのカテゴリ名を取得（空でない最も深いレベルを特定）
             category_names = []
-            for col in name_columns:
-                name = row[col]
-                # name が Series の場合は最初の値を取得
-                if isinstance(name, pd.Series):
-                    if not name.empty:
-                        name = name.iloc[0]
-                    else:
-                        continue
+            for col_idx in name_column_indices:
+                name = row.iloc[col_idx]
+
                 # スカラー値として処理
                 if pd.notna(name) and str(name).strip():
                     category_names.append(str(name).strip())
-            
+
             if not category_names:
                 continue
-            
+
             # カテゴリのレベルを判定（非空のカラム数）
             level = len(category_names)
             
