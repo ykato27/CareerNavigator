@@ -82,7 +82,7 @@ with st.sidebar:
     # データ統計を表示
     n_users = member_competence['メンバーコード'].nunique()
     skill_data = member_competence[
-        member_competence['力量タイプ  ###[competence_type]###'] == 'SKILL'
+        member_competence['力量タイプ'] == 'SKILL'
     ]
     n_skills = skill_data['力量コード'].nunique()
     
