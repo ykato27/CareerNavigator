@@ -131,13 +131,18 @@ with st.expander("設定と学習", expanded=not st.session_state.get("causal_mo
                 key="init_opt_trials"
             )
         with col_opt2:
-            opt_jobs = st.number_input(
+            opt_jobs_option = st.selectbox(
                 "並列ジョブ数",
-                min_value=1,
-                max_value=16,
-                value=-1,
-                key="init_opt_jobs"
+                options=["全コア使用（推奨）", "1", "2", "4", "8", "16"],
+                index=0,
+                key="init_opt_jobs",
+                help="並列実行するジョブの数"
             )
+            # 選択肢を数値に変換
+            if opt_jobs_option == "全コア使用（推奨）":
+                opt_jobs = -1
+            else:
+                opt_jobs = int(opt_jobs_option)
 
     if st.button("🚀 因果モデルを学習開始", type="primary"):
         with st.spinner("因果構造を学習中... (これには数分かかる場合があります)"):
@@ -297,13 +302,17 @@ with tab_auto:
             help="多いほど精度が上がりますが、時間がかかります"
         )
     with col_opt2:
-        n_jobs = st.number_input(
+        n_jobs_option = st.selectbox(
             "並列ジョブ数",
-            min_value=1,
-            max_value=16,
-            value=-1,
-            help="-1で全コア使用（推奨）"
+            options=["全コア使用（推奨）", "1", "2", "4", "8", "16"],
+            index=0,
+            help="並列実行するジョブの数"
         )
+        # 選択肢を数値に変換
+        if n_jobs_option == "全コア使用（推奨）":
+            n_jobs = -1
+        else:
+            n_jobs = int(n_jobs_option)
 
     # 最適化実行ボタン
     if st.button("🎯 最適な重みを自動計算", type="primary"):
