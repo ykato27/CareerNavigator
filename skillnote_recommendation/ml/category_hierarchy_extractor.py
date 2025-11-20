@@ -89,36 +89,54 @@ class CategoryHierarchyExtractor:
     
     def __init__(
         self,
-        category_csv_path: str,
-        skill_csv_path: str
+        category_csv_path: str = None,
+        skill_csv_path: str = None,
+        category_df: pd.DataFrame = None,
+        skill_df: pd.DataFrame = None
     ):
         """
         初期化
-        
+
         Args:
-            category_csv_path: カテゴリマスタCSVのパス
-            skill_csv_path: スキルマスタCSVのパス
+            category_csv_path: カテゴリマスタCSVのパス（オプション）
+            skill_csv_path: スキルマスタCSVのパス（オプション）
+            category_df: カテゴリマスタDataFrame（オプション）
+            skill_df: スキルマスタDataFrame（オプション）
         """
         self.category_csv_path = category_csv_path
         self.skill_csv_path = skill_csv_path
+        self.category_df = category_df
+        self.skill_df = skill_df
         self.hierarchy: Optional[CategoryHierarchy] = None
     
     def extract_hierarchy(self) -> CategoryHierarchy:
         """
         カテゴリ階層を抽出
-        
+
         Returns:
             CategoryHierarchy: 抽出された階層構造
         """
         logger.info("カテゴリ階層の抽出を開始")
-        
-        # カテゴリマスタを読み込み
-        category_df = pd.read_csv(self.category_csv_path)
-        logger.info(f"カテゴリマスタ読み込み: {len(category_df)}行")
-        
-        # スキルマスタを読み込み
-        skill_df = pd.read_csv(self.skill_csv_path)
-        logger.info(f"スキルマスタ読み込み: {len(skill_df)}行")
+
+        # カテゴリマスタを取得（DataFrameまたはCSVから）
+        if self.category_df is not None:
+            category_df = self.category_df
+            logger.info(f"カテゴリマスタ（DataFrame）: {len(category_df)}行")
+        elif self.category_csv_path:
+            category_df = pd.read_csv(self.category_csv_path)
+            logger.info(f"カテゴリマスタ読み込み: {len(category_df)}行")
+        else:
+            raise ValueError("category_df または category_csv_path のいずれかが必要です")
+
+        # スキルマスタを取得（DataFrameまたはCSVから）
+        if self.skill_df is not None:
+            skill_df = self.skill_df
+            logger.info(f"スキルマスタ（DataFrame）: {len(skill_df)}行")
+        elif self.skill_csv_path:
+            skill_df = pd.read_csv(self.skill_csv_path)
+            logger.info(f"スキルマスタ読み込み: {len(skill_df)}行")
+        else:
+            raise ValueError("skill_df または skill_csv_path のいずれかが必要です")
         
         # 階層構造を構築
         hierarchy = CategoryHierarchy()
