@@ -1,7 +1,7 @@
 """
-階層的ベイジアン推薦システム - Streamlit UI
+Hierarchical Bayesian Recommendation System - Streamlit UI
 
-3層アーキテクチャによる統計的に妥当な推薦システム
+Statistically valid recommendation system with 3-layer architecture
 """
 
 import streamlit as st
@@ -9,7 +9,7 @@ import pandas as pd
 import sys
 from pathlib import Path
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -17,14 +17,26 @@ from skillnote_recommendation.core.data_loader import DataLoader
 from skillnote_recommendation.ml.hierarchical_bayesian_recommender import (
     HierarchicalBayesianRecommender
 )
+from skillnote_recommendation.utils.ui_components import (
+    apply_enterprise_styles,
+    render_page_header
+)
 
 st.set_page_config(
-    page_title="階層的ベイジアン推薦",
+    page_title="Hierarchical Bayesian Recommendation",
     page_icon="🎯",
     layout="wide"
 )
 
-st.title("🎯 階層的ベイジアン推薦システム")
+# Apply modern UI styles
+apply_enterprise_styles()
+
+# Page header
+render_page_header(
+    title="Hierarchical Bayesian Recommendation",
+    icon="🎯",
+    description="階層的ベイジアン推薦システム - 3層アーキテクチャによる統計的に妥当な推薦"
+)
 
 st.markdown("""
 ### 3層アーキテクチャによる統計的に妥当な推薦システム
