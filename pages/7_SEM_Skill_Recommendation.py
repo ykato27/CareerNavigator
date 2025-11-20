@@ -165,13 +165,90 @@ if st.button("🚀 SEMモデルを学習", type="primary"):
                 )
             st.success("✅ ステップ1: 取得順序階層の構築完了")
 
+            # データ品質検証
+            st.markdown("### 🔍 データ品質検証")
+            validation_result = acquisition_hierarchy.validate_data_quality()
+
+            # 検証結果のサマリー
+            col_valid1, col_valid2, col_valid3 = st.columns(3)
+
+            with col_valid1:
+                if validation_result["is_valid"]:
+                    st.success("✅ データ品質: 合格")
+                else:
+                    st.error("❌ データ品質: 不合格")
+
+            with col_valid2:
+                st.metric("警告", len(validation_result["warnings"]))
+
+            with col_valid3:
+                st.metric("エラー", len(validation_result["errors"]))
+
+            # エラーと警告の表示
+            if validation_result["errors"]:
+                st.error("**❌ エラー:**")
+                for error in validation_result["errors"]:
+                    st.error(f"  • {error}")
+
+            if validation_result["warnings"]:
+                st.warning("**⚠️ 警告:**")
+                for warning in validation_result["warnings"]:
+                    st.warning(f"  • {warning}")
+
+            # 詳細統計
+            with st.expander("📊 データ品質の詳細統計", expanded=False):
+                stats = validation_result["statistics"]
+
+                st.markdown("#### 1. データ全体")
+                col_s1, col_s2, col_s3 = st.columns(3)
+                with col_s1:
+                    st.metric("総レコード数", stats.get("total_records", 0))
+                with col_s2:
+                    st.metric("取得日欠損", stats.get("missing_dates", 0))
+                with col_s3:
+                    missing_rate = stats.get("missing_date_rate", 0.0)
+                    st.metric("欠損率", f"{missing_rate*100:.1f}%")
+
+                st.markdown("#### 2. スキル取得人数")
+                col_s4, col_s5, col_s6 = st.columns(3)
+                with col_s4:
+                    st.metric("最小", stats.get("min_acquisition_count", 0))
+                with col_s5:
+                    st.metric("平均", f"{stats.get('avg_acquisition_count', 0):.1f}")
+                with col_s6:
+                    st.metric("最大", stats.get("max_acquisition_count", 0))
+
+                st.markdown("#### 3. ステージバランス")
+                stage_sizes = stats.get("stage_sizes", [])
+                if stage_sizes:
+                    st.write(f"**各ステージのスキル数:** {stage_sizes}")
+                    col_s7, col_s8 = st.columns(2)
+                    with col_s7:
+                        st.metric("最小ステージ", stats.get("min_stage_size", 0))
+                    with col_s8:
+                        st.metric("最大ステージ", stats.get("max_stage_size", 0))
+
+                st.markdown("#### 4. 平均取得順序")
+                col_s9, col_s10 = st.columns(2)
+                with col_s9:
+                    st.metric("最小", f"{stats.get('min_avg_order', 0):.1f}")
+                with col_s10:
+                    st.metric("最大", f"{stats.get('max_avg_order', 0):.1f}")
+
+                st.markdown("#### 5. 分析対象")
+                col_s11, col_s12 = st.columns(2)
+                with col_s11:
+                    st.metric("分析対象スキル数", stats.get("analyzed_skills", 0))
+                with col_s12:
+                    st.metric("ステージ数", stats.get("total_stages", 0))
+
             # 統計情報を表示
             st.markdown("### 📊 スキル取得順序の統計")
             stats_df = acquisition_hierarchy.get_statistics()
             st.dataframe(stats_df, use_container_width=True)
 
             # デバッグ: 階層の詳細を表示
-            with st.expander("🔍 デバッグ: 取得順序階層の詳細", expanded=True):
+            with st.expander("🔍 デバッグ: 取得順序階層の詳細", expanded=False):
                 st.write(f"**ステージ数:** {n_stages}")
                 st.write(f"**分析されたスキル数:** {len(acquisition_hierarchy.skill_acquisition_stats)}")
                 st.write("**各ステージのスキル数:**")
