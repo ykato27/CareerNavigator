@@ -254,44 +254,50 @@ class HierarchicalBayesianRecommender(BaseRecommender):
     ) -> tuple[float, str]:
         """
         スキルの推薦スコアを計算
-        
+
         Args:
             member_code: メンバーコード
             skill_code: スキルコード
             user_skills: ユーザーの保有スキル
-            
+
         Returns:
             (スコア, 説明文)のタプル
         """
         # スキルのカテゴリを取得
         if skill_code not in self.hierarchy.skill_to_category:
             return 0.0, ""
-        
+
         category_code = self.hierarchy.skill_to_category[skill_code]
-        
+
         # L1, L2カテゴリを取得
         l1_code = self.hierarchy.get_l1_category(category_code)
         l2_code = self.hierarchy.get_l2_category(category_code)
-        
-        if not l1_code or not l2_code:
-            return 0.0, ""
-        
+
+        # Layer 2/3が使えない場合のフォールバック処理
+        if not l1_code or not l2_code or len(self.prob_learner.conditional_probs) == 0:
+            return self._calculate_fallback_score(
+                member_code,
+                skill_code,
+                category_code,
+                user_skills
+            )
+
         # Layer 1: L1カテゴリの準備度
         l1_readiness = self._get_l1_readiness(l1_code, user_skills)
-        
+
         # Layer 2: P(L2 | L1)
         l2_prob = self.prob_learner.get_conditional_prob(l1_code, l2_code)
-        
+
         # Layer 3: スキルのMFスコア
         l3_score = self._get_l3_score(member_code, l2_code, skill_code)
-        
+
         # スコアを統合（乗算的アプローチ）
         final_score = (
             (l1_readiness ** self.weight_l1) *
             (l2_prob ** self.weight_l2) *
             (l3_score ** self.weight_l3)
         )
-        
+
         # 説明文を生成
         explanation = self._generate_explanation(
             l1_code,
@@ -300,8 +306,83 @@ class HierarchicalBayesianRecommender(BaseRecommender):
             l2_prob,
             l3_score
         )
-        
+
         return final_score, explanation
+
+    def _calculate_fallback_score(
+        self,
+        member_code: str,
+        skill_code: str,
+        category_code: str,
+        user_skills: Dict[str, float]
+    ) -> tuple[float, str]:
+        """
+        Layer 2/3が使えない場合のフォールバック推薦スコア計算
+
+        ユーザーの保有スキルに基づいて推薦スコアを計算します：
+        1. 同じカテゴリに既に高レベルのスキルを持っている → 高スコア
+        2. 関連カテゴリに高レベルのスキルを持っている → 中スコア
+        3. 似たスキルセットを持つ他のユーザーが保有している → 中スコア
+
+        Args:
+            member_code: メンバーコード
+            skill_code: スキルコード
+            category_code: カテゴリコード
+            user_skills: ユーザーの保有スキル
+
+        Returns:
+            (スコア, 説明文)のタプル
+        """
+        score = 0.0
+        reasons = []
+
+        # 1. 同じL3カテゴリ内のスキルレベルを確認
+        if category_code in self.hierarchy.category_to_skills:
+            same_cat_skills = [
+                s for s in self.hierarchy.category_to_skills[category_code]
+                if s in user_skills
+            ]
+            if same_cat_skills:
+                avg_level = np.mean([user_skills[s] for s in same_cat_skills])
+                category_score = min(avg_level / 5.0, 1.0)
+                score += category_score * 0.5
+                cat_name = self.hierarchy.category_names.get(category_code, category_code)
+                reasons.append(f"{cat_name}で平均レベル{avg_level:.1f}")
+
+        # 2. 親カテゴリ（L2）内のスキルレベルを確認
+        parent_code = self.hierarchy.parent_mapping.get(category_code)
+        if parent_code and parent_code in self.hierarchy.children_mapping:
+            parent_cat_skills = []
+            for child_cat in self.hierarchy.children_mapping[parent_code]:
+                if child_cat in self.hierarchy.category_to_skills:
+                    parent_cat_skills.extend([
+                        s for s in self.hierarchy.category_to_skills[child_cat]
+                        if s in user_skills
+                    ])
+            if parent_cat_skills:
+                avg_level = np.mean([user_skills[s] for s in parent_cat_skills])
+                parent_score = min(avg_level / 5.0, 1.0) * 0.8
+                score += parent_score * 0.3
+                parent_name = self.hierarchy.category_names.get(parent_code, parent_code)
+                reasons.append(f"{parent_name}で平均レベル{avg_level:.1f}")
+
+        # 3. 基本スコア（全体の平均レベル）
+        if user_skills:
+            avg_all = np.mean(list(user_skills.values()))
+            base_score = min(avg_all / 5.0, 1.0) * 0.5
+            score += base_score * 0.2
+
+        # スコアを0-1の範囲に正規化
+        score = min(max(score, 0.0), 1.0)
+
+        # 説明文を生成
+        cat_name = self.hierarchy.category_names.get(category_code, category_code)
+        if reasons:
+            explanation = f"{cat_name}に関連 - " + "、".join(reasons)
+        else:
+            explanation = f"{cat_name}のスキル"
+
+        return score, explanation
     
     def _get_l1_readiness(
         self,
