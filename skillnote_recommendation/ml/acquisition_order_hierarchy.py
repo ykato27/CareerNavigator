@@ -271,6 +271,103 @@ class AcquisitionOrderHierarchy:
 
         return pd.DataFrame(stats)
 
+    def validate_data_quality(self) -> Dict[str, any]:
+        """
+        データ品質を検証
+
+        Returns:
+            データ品質の検証結果
+        """
+        validation_result = {
+            "is_valid": True,
+            "warnings": [],
+            "errors": [],
+            "statistics": {}
+        }
+
+        # 1. 取得日の欠損率をチェック
+        total_records = len(self.member_competence)
+        missing_dates = self.member_competence[self.acquired_date_column].isna().sum()
+        missing_rate = missing_dates / total_records if total_records > 0 else 0.0
+
+        validation_result["statistics"]["total_records"] = total_records
+        validation_result["statistics"]["missing_dates"] = missing_dates
+        validation_result["statistics"]["missing_date_rate"] = missing_rate
+
+        if missing_rate > 0.5:
+            validation_result["errors"].append(
+                f"取得日の欠損率が高すぎます: {missing_rate*100:.1f}% "
+                f"（{missing_dates}/{total_records}件）"
+            )
+            validation_result["is_valid"] = False
+        elif missing_rate > 0.2:
+            validation_result["warnings"].append(
+                f"取得日の欠損率がやや高いです: {missing_rate*100:.1f}% "
+                f"（{missing_dates}/{total_records}件）"
+            )
+
+        # 2. スキルごとの取得人数分布をチェック
+        skill_counts = []
+        for code, stats in self.skill_acquisition_stats.items():
+            skill_counts.append(stats["count"])
+
+        if skill_counts:
+            validation_result["statistics"]["min_acquisition_count"] = min(skill_counts)
+            validation_result["statistics"]["max_acquisition_count"] = max(skill_counts)
+            validation_result["statistics"]["avg_acquisition_count"] = np.mean(skill_counts)
+
+            # 取得人数が少なすぎるスキルがないかチェック
+            low_count_skills = sum(1 for c in skill_counts if c < self.min_acquisition_count)
+            if low_count_skills > 0:
+                validation_result["warnings"].append(
+                    f"{low_count_skills}個のスキルが最小取得人数（{self.min_acquisition_count}）未満です"
+                )
+
+        # 3. ステージバランスをチェック
+        stage_sizes = [len(skills) for skills in self.stage_classifications.values()]
+
+        if stage_sizes:
+            validation_result["statistics"]["stage_sizes"] = stage_sizes
+            validation_result["statistics"]["min_stage_size"] = min(stage_sizes)
+            validation_result["statistics"]["max_stage_size"] = max(stage_sizes)
+
+            # ステージ間のバランスが極端に偏っていないかチェック
+            if min(stage_sizes) == 0:
+                validation_result["errors"].append(
+                    "スキルが0個のステージがあります"
+                )
+                validation_result["is_valid"] = False
+            elif max(stage_sizes) > min(stage_sizes) * 5:
+                validation_result["warnings"].append(
+                    f"ステージ間のスキル数が偏っています: "
+                    f"最小={min(stage_sizes)}, 最大={max(stage_sizes)}"
+                )
+
+        # 4. 平均取得順序の妥当性チェック
+        avg_orders = [stats["avg_order"] for stats in self.skill_acquisition_stats.values()]
+
+        if avg_orders:
+            validation_result["statistics"]["min_avg_order"] = min(avg_orders)
+            validation_result["statistics"]["max_avg_order"] = max(avg_orders)
+
+            # 異常値チェック（極端に大きい値）
+            if max(avg_orders) > 100:
+                validation_result["warnings"].append(
+                    f"非常に大きな平均取得順序があります: {max(avg_orders):.1f}"
+                )
+
+        # 5. 分析対象スキル数
+        validation_result["statistics"]["analyzed_skills"] = len(self.skill_acquisition_stats)
+        validation_result["statistics"]["total_stages"] = self.n_stages
+
+        if len(self.skill_acquisition_stats) < self.n_stages * 2:
+            validation_result["warnings"].append(
+                f"分析対象スキル数（{len(self.skill_acquisition_stats)}）が"
+                f"ステージ数（{self.n_stages}）に対して少なすぎます"
+            )
+
+        return validation_result
+
     def estimate_member_stage(
         self, member_code: str
     ) -> Tuple[int, float, List[str]]:

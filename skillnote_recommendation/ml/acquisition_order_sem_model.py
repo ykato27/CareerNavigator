@@ -401,35 +401,202 @@ class AcquisitionOrderSEMModel:
         Returns:
             推薦スキルのリスト
         """
-        if not self.is_fitted:
-            logger.warning("⚠️ モデルが学習されていません")
-            return []
+        try:
+            # モデル学習状態のチェック
+            if not self.is_fitted:
+                logger.warning("⚠️ SEMモデルが学習されていません。ルールベース推薦にフォールバックします")
+                # フォールバック: ルールベース推薦（取得順序のみ）
+                return self._recommend_fallback(member_code, top_n)
 
-        # 基本推薦を取得（取得順序ベース）
-        recommendations = self.acquisition_hierarchy.get_next_stage_skills(
-            member_code, top_n
-        )
+            # メンバーの存在確認
+            member_skills = self.member_competence[
+                self.member_competence["メンバーコード"] == member_code
+            ]
+            if member_skills.empty:
+                logger.warning(f"⚠️ メンバー '{member_code}' のスキルデータが見つかりません")
+                return []
 
-        # 潜在変数スコアで調整
-        latent_scores = self.get_member_latent_scores(member_code)
-
-        if latent_scores:
-            for rec in recommendations:
-                stage_id = rec["stage"]
-                latent_score = latent_scores.get(stage_id, 0.0)
-
-                # 潜在変数スコアを考慮した優先度調整
-                rec["latent_score"] = latent_score
-                rec["adjusted_priority_score"] = rec["priority_score"] * (
-                    1 + latent_score * 0.2
-                )
-
-            # 調整後のスコアでソート
-            recommendations.sort(
-                key=lambda x: x["adjusted_priority_score"], reverse=True
+            # 基本推薦を取得（取得順序ベース）
+            recommendations = self.acquisition_hierarchy.get_next_stage_skills(
+                member_code, top_n
             )
 
-        return recommendations
+            if not recommendations:
+                logger.info(f"ℹ️ メンバー '{member_code}' に推薦できるスキルがありません")
+                return []
+
+            # 潜在変数スコアで調整
+            latent_scores = self.get_member_latent_scores(member_code)
+
+            if latent_scores:
+                for rec in recommendations:
+                    stage_id = rec["stage"]
+                    latent_score = latent_scores.get(stage_id, 0.0)
+
+                    # 潜在変数スコアを考慮した優先度調整
+                    rec["latent_score"] = latent_score
+                    rec["adjusted_priority_score"] = rec["priority_score"] * (
+                        1 + latent_score * 0.2
+                    )
+
+                # 調整後のスコアでソート
+                recommendations.sort(
+                    key=lambda x: x["adjusted_priority_score"], reverse=True
+                )
+            else:
+                logger.warning(f"⚠️ メンバー '{member_code}' の潜在変数スコアが取得できませんでした")
+                # フォールバック: adjusted_priority_scoreがない場合はpriority_scoreを使用
+                for rec in recommendations:
+                    rec["latent_score"] = 0.0
+                    rec["adjusted_priority_score"] = rec["priority_score"]
+
+            return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ 推薦生成エラー（メンバー: {member_code}）: {e}", exc_info=True)
+            # フォールバック: ルールベース推薦
+            return self._recommend_fallback(member_code, top_n)
+
+    def _recommend_fallback(self, member_code: str, top_n: int = 10) -> List[Dict]:
+        """
+        フォールバック推薦（ルールベース）
+
+        SEMモデルが利用できない場合の代替推薦方法
+
+        Args:
+            member_code: メンバーコード
+            top_n: 推薦数
+
+        Returns:
+            推薦スキルのリスト
+        """
+        try:
+            logger.info(f"ℹ️ ルールベース推薦を実行中（メンバー: {member_code}）")
+            recommendations = self.acquisition_hierarchy.get_next_stage_skills(
+                member_code, top_n
+            )
+
+            # adjusted_priority_scoreを設定（SEMなし）
+            for rec in recommendations:
+                rec["latent_score"] = 0.0
+                rec["adjusted_priority_score"] = rec["priority_score"]
+                rec["recommendation_method"] = "fallback_rule_based"
+
+            return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ フォールバック推薦エラー: {e}", exc_info=True)
+            return []
+
+    def explain_recommendation(
+        self, member_code: str, competence_code: str
+    ) -> Dict[str, any]:
+        """
+        推薦理由を詳しく説明
+
+        Args:
+            member_code: メンバーコード
+            competence_code: 力量コード
+
+        Returns:
+            推薦理由の詳細
+        """
+        explanation = {
+            "competence_code": competence_code,
+            "competence_name": None,
+            "recommendation_reason": [],
+            "details": {},
+            "is_recommended": False,
+        }
+
+        try:
+            # スキル情報を取得
+            skill_info = self.acquisition_hierarchy.skill_acquisition_stats.get(competence_code)
+
+            if skill_info:
+                explanation["competence_name"] = skill_info["competence_name"]
+                explanation["details"]["avg_acquisition_order"] = skill_info["avg_order"]
+                explanation["details"]["acquisition_count"] = skill_info["count"]
+
+            # スキルのステージを取得
+            stage = self.acquisition_hierarchy.get_stage(competence_code)
+
+            if stage:
+                stage_name = self.acquisition_hierarchy.get_stage_name(stage)
+                explanation["details"]["stage"] = stage
+                explanation["details"]["stage_name"] = stage_name
+
+                # メンバーの現在のステージを取得
+                current_stage, progress, acquired_skills = self.acquisition_hierarchy.estimate_member_stage(
+                    member_code
+                )
+
+                explanation["details"]["member_current_stage"] = current_stage
+                explanation["details"]["member_progress"] = progress
+
+                # 推薦理由を構築
+                if stage == current_stage:
+                    explanation["recommendation_reason"].append(
+                        f"このスキルは現在のステージ（Stage {current_stage}）のスキルです"
+                    )
+                    explanation["is_recommended"] = True
+                elif stage == current_stage + 1 and progress >= 0.8:
+                    explanation["recommendation_reason"].append(
+                        f"現在のステージ（Stage {current_stage}）の進捗率が{progress*100:.1f}%のため、"
+                        f"次のステージ（Stage {stage}）のスキルを推薦します"
+                    )
+                    explanation["is_recommended"] = True
+                elif stage > current_stage + 1:
+                    explanation["recommendation_reason"].append(
+                        f"このスキルはStage {stage}のため、現在のステージ（Stage {current_stage}）より"
+                        f"進んでいます。まず現在のステージを完了することを推奨します"
+                    )
+                    explanation["is_recommended"] = False
+                else:
+                    explanation["recommendation_reason"].append(
+                        f"このスキルはStage {stage}で、既に習得済みまたは現在のステージより前のスキルです"
+                    )
+                    explanation["is_recommended"] = False
+
+                # 取得順序に基づく説明
+                if skill_info:
+                    avg_order = skill_info["avg_order"]
+                    explanation["recommendation_reason"].append(
+                        f"このスキルは平均的に{avg_order:.1f}番目に取得されるスキルです"
+                    )
+
+                    # 取得人数に基づく説明
+                    count = skill_info["count"]
+                    explanation["recommendation_reason"].append(
+                        f"{count}名のメンバーがこのスキルを取得しています"
+                    )
+
+                # 潜在変数スコアに基づく説明
+                if self.is_fitted:
+                    latent_scores = self.get_member_latent_scores(member_code)
+
+                    if latent_scores and stage in latent_scores:
+                        latent_score = latent_scores[stage]
+                        explanation["details"]["latent_score"] = latent_score
+
+                        if latent_score > 0.5:
+                            explanation["recommendation_reason"].append(
+                                f"SEMモデルによると、あなたのStage {stage}の潜在スコアは{latent_score:.2f}で、"
+                                f"このスキルを習得する準備が整っています"
+                            )
+                        else:
+                            explanation["recommendation_reason"].append(
+                                f"SEMモデルによると、あなたのStage {stage}の潜在スコアは{latent_score:.2f}です"
+                            )
+
+            return explanation
+
+        except Exception as e:
+            logger.error(f"❌ 推薦理由説明エラー: {e}", exc_info=True)
+            explanation["recommendation_reason"].append(
+                f"推薦理由の生成中にエラーが発生しました: {e}"
+            )
+            return explanation
 
     def get_statistics(self) -> pd.DataFrame:
         """
