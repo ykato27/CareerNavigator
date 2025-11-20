@@ -1,6 +1,26 @@
+"""
+⚠️ DEPRECATED: このモジュールは非推奨です
+
+新しい統合設定システムを使用してください:
+    from skillnote_recommendation.settings import get_settings
+    settings = get_settings()
+
+詳細はMIGRATION_CONFIG.mdを参照してください。
+"""
+
 import os
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Deprecation warning
+warnings.warn(
+    "skillnote_recommendation.config is deprecated. "
+    "Use 'from skillnote_recommendation.settings import get_settings' instead. "
+    "See MIGRATION_CONFIG.md for details.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 @dataclass
 class PathConfig:

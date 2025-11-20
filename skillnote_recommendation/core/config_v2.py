@@ -1,14 +1,32 @@
 """
 設定管理（V2）- GAFAレベルの設計
 
+⚠️ DEPRECATED: このモジュールは非推奨です
+
 主な改善点:
 - 不変（Immutable）設定
 - 環境分離（dev/staging/prod）
 - 型安全性
 - テスト容易性
+
+新しい統合設定システム（Pydantic-based）を使用してください:
+    from skillnote_recommendation.settings import get_settings
+    settings = get_settings()
+
+詳細はMIGRATION_CONFIG.mdを参照してください。
 """
 
 import os
+import warnings
+
+# Deprecation warning
+warnings.warn(
+    "skillnote_recommendation.core.config_v2 is deprecated. "
+    "Use 'from skillnote_recommendation.settings import get_settings' instead. "
+    "See MIGRATION_CONFIG.md for details.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
