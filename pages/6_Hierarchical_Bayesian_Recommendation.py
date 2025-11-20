@@ -51,26 +51,53 @@ st.markdown("""
 - スキルレベルの精密な推薦
 """)
 
+# データ読み込みチェック
+if 'transformed_data' not in st.session_state or st.session_state.transformed_data is None:
+    st.error("❌ **データがロードされていません**")
+    st.markdown("""
+    ### 📋 次の手順でデータを読み込んでください:
+    
+    1. **左サイドバーのナビゲーション**から「🧭 CareerNavigator」（ホームページ）を選択
+    2. **6種類のCSVファイル**をアップロード
+    3. **「📥 データを読み込む」ボタン**をクリック
+    4. データ読み込み完了後、このページに戻ってください
+    """)
+    st.stop()
+
+# Streamlit appでインポートしたデータを取得
+td = st.session_state.transformed_data
+member_competence = td["member_competence"]
+competence_master = td["competence_master"]
+
 # セッション状態の初期化
 if 'hb_recommender' not in st.session_state:
     st.session_state.hb_recommender = None
 if 'hb_trained' not in st.session_state:
     st.session_state.hb_trained = False
 
-# サイドバー: データ読み込みとモデル学習
+# サイドバー: モデル設定と学習
 with st.sidebar:
     st.header("⚙️ モデル設定")
     
-    # データ読み込み
-    if st.button("📂 データを読み込む", use_container_width=True):
-        with st.spinner("データを読み込み中..."):
+    # データ統計を表示
+    n_users = member_competence['メンバーコード'].nunique()
+    skill_data = member_competence[
+        member_competence['力量タイプ  ###[competence_type]###'] == 'SKILL'
+    ]
+    n_skills = skill_data['力量コード'].nunique()
+    
+    st.info(f"""
+    **データ統計**:
+    - ユーザー数: {n_users}
+    - スキル数: {n_skills}
+    """)
+    
+    st.divider()
+    
+    # モデル初期化
+    if st.button("🔧 モデルを初期化", use_container_width=True):
+        with st.spinner("モデルを初期化中..."):
             try:
-                loader = DataLoader()
-                
-                # データ読み込み
-                member_competence = loader.load_member_competence()
-                competence_master = loader.load_competence_master()
-                
                 # カテゴリとスキルのCSVパス
                 data_dir = project_root / 'data'
                 category_csv = data_dir / 'categories' / 'competence_category_skillnote.csv'
@@ -86,26 +113,12 @@ with st.sidebar:
                     n_components=10
                 )
                 
-                st.session_state.member_competence = member_competence
-                st.session_state.competence_master = competence_master
-                
-                st.success("✅ データ読み込み完了！")
-                
-                # データ統計を表示
-                n_users = member_competence['メンバーコード'].nunique()
-                skill_data = member_competence[
-                    member_competence['力量タイプ  ###[competence_type]###'] == 'SKILL'
-                ]
-                n_skills = skill_data['力量コード'].nunique()
-                
-                st.info(f"""
-                **データ統計**:
-                - ユーザー数: {n_users}
-                - スキル数: {n_skills}
-                """)
+                st.success("✅ モデル初期化完了！")
                 
             except Exception as e:
-                st.error(f"❌ データ読み込みエラー: {e}")
+                st.error(f"❌ モデル初期化エラー: {e}")
+                import traceback
+                st.code(traceback.format_exc())
     
     st.divider()
     
@@ -153,7 +166,7 @@ if st.session_state.hb_trained:
     
     with col1:
         # メンバー選択
-        member_codes = st.session_state.member_competence['メンバーコード'].unique()
+        member_codes = member_competence['メンバーコード'].unique()
         selected_member = st.selectbox(
             "メンバーを選択",
             options=member_codes,
@@ -236,9 +249,11 @@ else:
     st.info("""
     👈 サイドバーから以下の手順で開始してください：
     
-    1. **データを読み込む** ボタンをクリック
+    1. **モデルを初期化** ボタンをクリック
     2. **モデルを学習** ボタンをクリック
     3. メンバーを選択して推薦を生成
+    
+    ※ データは既にStreamlit appで読み込まれたものを使用します
     """)
 
 # フッター
