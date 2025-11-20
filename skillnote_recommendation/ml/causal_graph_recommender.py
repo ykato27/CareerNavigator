@@ -181,8 +181,6 @@ class CausalGraphRecommender:
                 if effect > 0.001:
                     utility_score += effect
                     utility_reasons.append((future, effect))
-                    utility_score += effect
-                    utility_reasons.append((future, effect))
             
             # 3. Bayesian Score: P(Target=1 | Owned)
             bayesian_score = 0.0
@@ -195,29 +193,51 @@ class CausalGraphRecommender:
                 except Exception as e:
                     logger.warning(f"ベイジアン推論エラー ({target_skill}): {e}")
             
-            # 総合スコア: Readinessを重視（0.9）してユーザー固有の推薦を強化
-            # ベイジアン確率も考慮に入れる（Readinessの一部として解釈可能）
-            # 新スコア = (Readiness * 0.7 + Bayesian * 0.3) * 0.9 + Utility * 0.1 くらい？
-            # シンプルに: total = readiness * 0.6 + bayesian * 0.3 + utility * 0.1
-            
-            total_score = readiness_score * 0.6 + bayesian_score * 0.3 + utility_score * 0.1
-            
             # Readiness Scoreが0のスキルは除外（ユーザー固有性を確保）
             # ただし、保有スキルが少ない場合は例外的に含める
             min_readiness = 0.0 if len(owned_skills) < 3 else 0.001
-            
-            if total_score > 0 and readiness_score >= min_readiness:
+
+            # 仮の総合スコアでフィルタリング（正規化前）
+            temp_total_score = readiness_score * 0.6 + bayesian_score * 0.3 + utility_score * 0.1
+
+            if temp_total_score > 0 and readiness_score >= min_readiness:
                 scores.append({
                     'skill_name': target_skill,
                     'skill_code': self.name_to_code.get(target_skill, target_skill),
-                    'total_score': total_score,
+                    'total_score': 0.0,  # 正規化後に再計算
                     'readiness_score': readiness_score,
                     'utility_score': utility_score,
                     'bayesian_score': bayesian_score,
                     'readiness_reasons': sorted(readiness_reasons, key=lambda x: x[1], reverse=True),
                     'utility_reasons': sorted(utility_reasons, key=lambda x: x[1], reverse=True)
                 })
-        
+
+        # スコアの正規化（全候補スキル間で0〜1に正規化）
+        if scores:
+            # 各スコアの最大値を取得
+            max_readiness = max(s['readiness_score'] for s in scores)
+            max_utility = max(s['utility_score'] for s in scores)
+            # bayesian_scoreは既に0〜1なので正規化不要
+
+            # 正規化を実行し、正規化後の値で総合スコアを再計算
+            for s in scores:
+                # 0除算を防ぐ
+                s['readiness_score_normalized'] = (
+                    s['readiness_score'] / max_readiness if max_readiness > 0 else 0.0
+                )
+                s['utility_score_normalized'] = (
+                    s['utility_score'] / max_utility if max_utility > 0 else 0.0
+                )
+                s['bayesian_score_normalized'] = s['bayesian_score']  # 既に0〜1
+
+                # 総合スコアを正規化後の値で計算
+                # 重み: Readiness 60%, Bayesian 30%, Utility 10%
+                s['total_score'] = (
+                    s['readiness_score_normalized'] * 0.6 +
+                    s['bayesian_score_normalized'] * 0.3 +
+                    s['utility_score_normalized'] * 0.1
+                )
+
         # ソート
         scores.sort(key=lambda x: x['total_score'], reverse=True)
         
