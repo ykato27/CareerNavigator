@@ -451,14 +451,166 @@ class HierarchicalBayesianRecommender(BaseRecommender):
     def explain(self, recommendations: List[Dict[str, Any]]) -> List[str]:
         """
         推薦結果の説明を生成
-        
+
         Args:
             recommendations: 推薦結果のリスト
-            
+
         Returns:
             説明文のリスト
         """
         return [rec.get('説明', '') for rec in recommendations]
+
+    def generate_hierarchy_graph(
+        self,
+        skill_code: str,
+        member_code: str,
+        output_path: str = "hierarchy_graph.html",
+        height: str = "600px"
+    ) -> str:
+        """
+        推薦スキルを中心とした階層グラフを生成
+
+        Args:
+            skill_code: 中心となるスキルコード
+            member_code: メンバーコード
+            output_path: 出力HTMLファイルパス
+            height: グラフの高さ
+
+        Returns:
+            出力ファイルパス
+        """
+        try:
+            from pyvis.network import Network
+        except ImportError:
+            logger.error("pyvisがインストールされていません")
+            raise ImportError("pyvis が必要です。pip install pyvis でインストールしてください。")
+
+        # ユーザーの保有スキルを取得
+        user_skills = self._get_user_skills(member_code)
+
+        # スキル情報を取得
+        skill_info = self._get_skill_info(skill_code)
+        skill_name = skill_info['力量名']
+
+        # カテゴリ情報を取得
+        if skill_code not in self.hierarchy.skill_to_category:
+            logger.warning(f"スキル {skill_code} のカテゴリ情報が見つかりません")
+            return None
+
+        category_code = self.hierarchy.skill_to_category[skill_code]
+        l1_code = self.hierarchy.get_l1_category(category_code)
+        l2_code = self.hierarchy.get_l2_category(category_code)
+
+        # ネットワークを初期化
+        net = Network(height=height, width="100%", bgcolor="#ffffff", font_color="black")
+        net.set_options("""
+        {
+            "physics": {
+                "enabled": true,
+                "hierarchicalRepulsion": {
+                    "centralGravity": 0.3,
+                    "springLength": 150,
+                    "springConstant": 0.05,
+                    "nodeDistance": 200
+                },
+                "solver": "hierarchicalRepulsion"
+            },
+            "layout": {
+                "hierarchical": {
+                    "enabled": true,
+                    "direction": "UD",
+                    "sortMethod": "directed",
+                    "levelSeparation": 150
+                }
+            }
+        }
+        """)
+
+        # L1カテゴリノードを追加
+        if l1_code:
+            l1_name = self.hierarchy.category_names.get(l1_code, l1_code)
+            net.add_node(
+                l1_code,
+                label=l1_name,
+                color="#e74c3c",
+                size=30,
+                title=f"L1カテゴリ: {l1_name}",
+                level=0
+            )
+
+        # L2カテゴリノードを追加
+        if l2_code:
+            l2_name = self.hierarchy.category_names.get(l2_code, l2_code)
+            net.add_node(
+                l2_code,
+                label=l2_name,
+                color="#e67e22",
+                size=25,
+                title=f"L2カテゴリ: {l2_name}",
+                level=1
+            )
+
+            # L1 -> L2 エッジ
+            if l1_code:
+                net.add_edge(l1_code, l2_code, color="#95a5a6")
+
+        # L3カテゴリノードを追加
+        category_name = self.hierarchy.category_names.get(category_code, category_code)
+        net.add_node(
+            category_code,
+            label=category_name,
+            color="#f39c12",
+            size=20,
+            title=f"L3カテゴリ: {category_name}",
+            level=2
+        )
+
+        # L2 -> L3 エッジ
+        if l2_code:
+            net.add_edge(l2_code, category_code, color="#95a5a6")
+
+        # 推薦スキルノードを追加（中心）
+        net.add_node(
+            skill_code,
+            label=skill_name,
+            color="#3498db",
+            size=35,
+            title=f"推薦スキル: {skill_name}",
+            level=3
+        )
+        net.add_edge(category_code, skill_code, color="#3498db", width=3)
+
+        # 同じL3カテゴリ内の他のスキルを追加
+        if category_code in self.hierarchy.category_to_skills:
+            sibling_skills = self.hierarchy.category_to_skills[category_code]
+            for sibling_code in sibling_skills[:5]:  # 最大5個まで
+                if sibling_code == skill_code:
+                    continue
+
+                sibling_info = self._get_skill_info(sibling_code)
+                sibling_name = sibling_info['力量名']
+
+                # ユーザーが保有しているか確認
+                is_owned = sibling_code in user_skills
+
+                net.add_node(
+                    sibling_code,
+                    label=sibling_name,
+                    color="#2ecc71" if is_owned else "#bdc3c7",
+                    size=20 if is_owned else 15,
+                    title=f"{'保有スキル' if is_owned else '関連スキル'}: {sibling_name}",
+                    level=3
+                )
+                net.add_edge(
+                    category_code,
+                    sibling_code,
+                    color="#2ecc71" if is_owned else "#95a5a6"
+                )
+
+        # HTMLファイルとして保存
+        net.save_graph(output_path)
+
+        return output_path
 
     def _get_skill_info(self, skill_code: str) -> Dict[str, str]:
         """
