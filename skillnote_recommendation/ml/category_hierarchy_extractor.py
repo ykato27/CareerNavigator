@@ -171,14 +171,25 @@ class CategoryHierarchyExtractor:
             hierarchy: 構築中のCategoryHierarchy
         """
         # カテゴリ名のカラムを特定（"力量カテゴリー名"で始まるカラム）
-        name_columns = [col for col in category_df.columns 
+        name_columns = [col for col in category_df.columns
                        if '力量カテゴリー名' in col]
-        
+
+        # カテゴリコードのカラムを特定（マーカーあり/なし両方に対応）
+        category_code_col = None
+        for col in category_df.columns:
+            if '力量カテゴリーコード' in col:
+                category_code_col = col
+                break
+
+        if category_code_col is None:
+            raise ValueError("力量カテゴリーコードカラムが見つかりません")
+
         logger.info(f"カテゴリ名カラム数: {len(name_columns)}")
-        
+        logger.info(f"カテゴリコードカラム: {category_code_col}")
+
         # 各行を処理
         for _, row in category_df.iterrows():
-            category_code = row['力量カテゴリーコード  ###[competence_category_code]###']
+            category_code = row[category_code_col]
             
             # 各レベルのカテゴリ名を取得（空でない最も深いレベルを特定）
             category_names = []
@@ -281,14 +292,35 @@ class CategoryHierarchyExtractor:
             skill_df: スキルマスタのDataFrame
             hierarchy: 構築中のCategoryHierarchy
         """
+        # カラム名を柔軟に取得（マーカーあり/なし両方に対応）
+        competence_type_col = None
+        skill_code_col = None
+        category_code_col = None
+
+        for col in skill_df.columns:
+            if '力量タイプ' in col:
+                competence_type_col = col
+            elif '力量コード' in col and 'カテゴリー' not in col:
+                skill_code_col = col
+            elif '力量カテゴリーコード' in col:
+                category_code_col = col
+
+        if competence_type_col is None:
+            raise ValueError("力量タイプカラムが見つかりません")
+        if skill_code_col is None:
+            raise ValueError("力量コードカラムが見つかりません")
+        if category_code_col is None:
+            raise ValueError("力量カテゴリーコードカラムが見つかりません")
+
+        logger.info(f"スキルマスタカラム: 力量タイプ={competence_type_col}, 力量コード={skill_code_col}, カテゴリコード={category_code_col}")
+
         # 力量タイプがSKILLのものだけを対象
-        skill_rows = skill_df[
-            skill_df['力量タイプ  ###[competence_type]###'] == 'SKILL'
-        ]
-        
+        skill_rows = skill_df[skill_df[competence_type_col] == 'SKILL']
+        logger.info(f"SKILL行数: {len(skill_rows)}")
+
         for _, row in skill_rows.iterrows():
-            skill_code = row['力量コード  ###[skill_code]###']
-            category_code = row['力量カテゴリーコード  ###[competence_category_code]###']
+            skill_code = row[skill_code_col]
+            category_code = row[category_code_col]
             
             # スキル -> カテゴリのマッピング
             hierarchy.skill_to_category[skill_code] = category_code
