@@ -185,16 +185,39 @@ class CategoryHierarchyExtractor:
             raise ValueError("力量カテゴリーコードカラムが見つかりません")
 
         logger.info(f"カテゴリ名カラム数: {len(name_columns)}")
+        logger.info(f"カテゴリ名カラム: {name_columns}")
         logger.info(f"カテゴリコードカラム: {category_code_col}")
+
+        # 重複カラム名のチェック
+        if len(name_columns) != len(set(name_columns)):
+            logger.warning(f"警告: 重複したカラム名が検出されました: {name_columns}")
+
+        # DataFrameのカラム全体をチェック
+        duplicate_cols = category_df.columns[category_df.columns.duplicated()].tolist()
+        if duplicate_cols:
+            logger.warning(f"警告: DataFrameに重複カラムがあります: {duplicate_cols}")
 
         # 各行を処理
         for _, row in category_df.iterrows():
             category_code = row[category_code_col]
+            # category_code が Series の場合は最初の値を取得
+            if isinstance(category_code, pd.Series):
+                if not category_code.empty:
+                    category_code = category_code.iloc[0]
+                else:
+                    continue
             
             # 各レベルのカテゴリ名を取得（空でない最も深いレベルを特定）
             category_names = []
             for col in name_columns:
                 name = row[col]
+                # name が Series の場合は最初の値を取得
+                if isinstance(name, pd.Series):
+                    if not name.empty:
+                        name = name.iloc[0]
+                    else:
+                        continue
+                # スカラー値として処理
                 if pd.notna(name) and str(name).strip():
                     category_names.append(str(name).strip())
             
@@ -314,6 +337,11 @@ class CategoryHierarchyExtractor:
 
         logger.info(f"スキルマスタカラム: 力量タイプ={competence_type_col}, 力量コード={skill_code_col}, カテゴリコード={category_code_col}")
 
+        # 重複カラム名のチェック
+        duplicate_skill_cols = skill_df.columns[skill_df.columns.duplicated()].tolist()
+        if duplicate_skill_cols:
+            logger.warning(f"警告: スキルマスタDataFrameに重複カラムがあります: {duplicate_skill_cols}")
+
         # 力量タイプがSKILLのものだけを対象
         skill_rows = skill_df[skill_df[competence_type_col] == 'SKILL']
         logger.info(f"SKILL行数: {len(skill_rows)}")
@@ -321,7 +349,20 @@ class CategoryHierarchyExtractor:
         for _, row in skill_rows.iterrows():
             skill_code = row[skill_code_col]
             category_code = row[category_code_col]
-            
+
+            # Series の場合は最初の値を取得
+            if isinstance(skill_code, pd.Series):
+                if not skill_code.empty:
+                    skill_code = skill_code.iloc[0]
+                else:
+                    continue
+
+            if isinstance(category_code, pd.Series):
+                if not category_code.empty:
+                    category_code = category_code.iloc[0]
+                else:
+                    continue
+
             # スキル -> カテゴリのマッピング
             hierarchy.skill_to_category[skill_code] = category_code
             
