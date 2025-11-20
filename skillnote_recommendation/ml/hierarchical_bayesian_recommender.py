@@ -36,26 +36,32 @@ class HierarchicalBayesianRecommender(BaseRecommender):
         self,
         member_competence: pd.DataFrame,
         competence_master: pd.DataFrame,
-        category_csv_path: str,
-        skill_csv_path: str,
+        category_csv_path: str = None,
+        skill_csv_path: str = None,
+        category_df: pd.DataFrame = None,
+        skill_df: pd.DataFrame = None,
         max_indegree: int = 3,
         n_components: int = 10
     ):
         """
         初期化
-        
+
         Args:
             member_competence: メンバー力量データ
             competence_master: 力量マスタ
-            category_csv_path: カテゴリマスタCSVのパス
-            skill_csv_path: スキルマスタCSVのパス
+            category_csv_path: カテゴリマスタCSVのパス（オプション）
+            skill_csv_path: スキルマスタCSVのパス（オプション）
+            category_df: カテゴリマスタDataFrame（オプション）
+            skill_df: スキルマスタDataFrame（オプション）
             max_indegree: ベイジアンネットワークの最大入次数
             n_components: 行列分解の潜在因子数
         """
         super().__init__(member_competence, competence_master)
-        
+
         self.category_csv_path = category_csv_path
         self.skill_csv_path = skill_csv_path
+        self.category_df = category_df
+        self.skill_df = skill_df
         self.max_indegree = max_indegree
         self.n_components = n_components
         
@@ -86,8 +92,10 @@ class HierarchicalBayesianRecommender(BaseRecommender):
         # 1. カテゴリ階層を抽出
         logger.info("Phase 1: カテゴリ階層を抽出中")
         self.hierarchy_extractor = CategoryHierarchyExtractor(
-            self.category_csv_path,
-            self.skill_csv_path
+            category_csv_path=self.category_csv_path,
+            skill_csv_path=self.skill_csv_path,
+            category_df=self.category_df,
+            skill_df=self.skill_df
         )
         self.hierarchy = self.hierarchy_extractor.extract_hierarchy()
         

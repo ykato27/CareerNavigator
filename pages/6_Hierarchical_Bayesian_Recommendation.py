@@ -69,92 +69,125 @@ td = st.session_state.transformed_data
 member_competence = td["member_competence"]
 competence_master = td["competence_master"]
 
+# categoriesとskillsのデータを取得
+categories_df = td.get("categories")
+# competence_masterからSKILLのみを抽出してskills_dfとして使用
+skills_df = competence_master[competence_master['力量タイプ'] == 'SKILL'].copy()
+
 # セッション状態の初期化
 if 'hb_recommender' not in st.session_state:
     st.session_state.hb_recommender = None
 if 'hb_trained' not in st.session_state:
     st.session_state.hb_trained = False
 
-# サイドバー: モデル設定と学習
+# データ統計を表示
+n_users = member_competence['メンバーコード'].nunique()
+skill_data = member_competence[
+    member_competence['力量タイプ'] == 'SKILL'
+]
+n_skills = skill_data['力量コード'].nunique()
+
+# サイドバー: データ統計のみ
 with st.sidebar:
-    st.header("⚙️ モデル設定")
-    
-    # データ統計を表示
-    n_users = member_competence['メンバーコード'].nunique()
-    skill_data = member_competence[
-        member_competence['力量タイプ'] == 'SKILL'
-    ]
-    n_skills = skill_data['力量コード'].nunique()
-    
+    st.header("⚙️ データ統計")
+
     st.info(f"""
     **データ統計**:
     - ユーザー数: {n_users}
     - スキル数: {n_skills}
     """)
-    
-    st.divider()
-    
-    st.divider()
-    
-    # モデル学習（初期化も含む）
-    st.subheader("🧠 モデル学習")
-    
-    if st.button("🚀 モデルを学習", use_container_width=True, type="primary"):
+
+    if categories_df is not None:
+        st.info(f"""
+        **カテゴリ情報**:
+        - カテゴリ数: {len(categories_df)}個
+        """)
+
+# メインエリア: モデル学習
+st.markdown("---")
+st.subheader("🧠 モデル学習")
+
+if st.session_state.hb_trained:
+    st.success("✅ モデルは既に学習済みです。")
+
+    # モデル情報を表示
+    if st.session_state.hb_recommender.hierarchy:
+        hierarchy = st.session_state.hb_recommender.hierarchy
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("L1カテゴリ", f"{len(hierarchy.level1_categories)}個")
+        with col2:
+            st.metric("L2カテゴリ", f"{len(hierarchy.level2_categories)}個")
+        with col3:
+            st.metric("L3カテゴリ", f"{len(hierarchy.level3_categories)}個")
+        with col4:
+            st.metric("総スキル数", f"{len(hierarchy.skill_to_category)}個")
+
+    if st.button("🔄 モデルを再学習する"):
+        st.session_state.hb_trained = False
+        st.session_state.hb_recommender = None
+        st.rerun()
+else:
+    st.info("📚 階層的ベイジアン推薦システムを学習します。3層アーキテクチャで統計的に妥当な推薦を実現します。")
+
+    with st.expander("⚙️ モデル設定", expanded=True):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            max_indegree = st.number_input(
+                "ベイジアンネットワークの最大入次数",
+                min_value=1,
+                max_value=5,
+                value=3,
+                help="ベイジアンネットワークで各ノードが持つ親ノードの最大数"
+            )
+
+        with col2:
+            n_components = st.number_input(
+                "行列分解の潜在因子数",
+                min_value=5,
+                max_value=30,
+                value=10,
+                help="Layer 3の行列分解で使用する潜在因子の数"
+            )
+
+    if st.button("🚀 モデルを学習", type="primary", use_container_width=True):
         with st.spinner("モデルを初期化・学習中... (数分かかる場合があります)"):
             try:
-                # 1. モデル初期化
-                # カテゴリとスキルのCSVパス
-                data_dir = project_root / 'data'
-                category_csv = data_dir / 'categories' / 'competence_category_skillnote.csv'
-                skill_csv = data_dir / 'skills' / 'skill_skillnote.csv'
-                
-                # 推薦システムを初期化
+                # カテゴリ情報の確認
+                if categories_df is None:
+                    st.error("❌ カテゴリ情報が見つかりません。データを正しく読み込んでください。")
+                    st.stop()
+
+                # 推薦システムを初期化（DataFrameを直接渡す）
                 st.session_state.hb_recommender = HierarchicalBayesianRecommender(
                     member_competence=member_competence,
                     competence_master=competence_master,
-                    category_csv_path=str(category_csv),
-                    skill_csv_path=str(skill_csv),
-                    max_indegree=3,
-                    n_components=10
+                    category_df=categories_df,
+                    skill_df=skills_df,
+                    max_indegree=int(max_indegree),
+                    n_components=int(n_components)
                 )
-                
-                # 2. モデル学習
+
+                # モデル学習
                 st.session_state.hb_recommender.fit()
                 st.session_state.hb_trained = True
                 st.success("✅ 学習完了！")
-                
-                # モデル情報を表示
-                if st.session_state.hb_recommender.hierarchy:
-                    hierarchy = st.session_state.hb_recommender.hierarchy
-                    st.info(f"""
-                    **カテゴリ階層**:
-                    - L1カテゴリ: {len(hierarchy.level1_categories)}個
-                    - L2カテゴリ: {len(hierarchy.level2_categories)}個
-                    - L3カテゴリ: {len(hierarchy.level3_categories)}個
-                    - 総スキル数: {len(hierarchy.skill_to_category)}個
-                    """)
-                
-                if st.session_state.hb_recommender.network_learner:
-                    network_info = st.session_state.hb_recommender.network_learner.get_network_info()
-                    if network_info:
-                        st.info(f"""
-                        **ベイジアンネットワーク (Layer 1)**:
-                        - ノード数: {network_info.get('n_nodes', 'N/A')}
-                        - エッジ数: {network_info.get('n_edges', 'N/A')}
-                        """)
-                
+
                 # UIを更新するためにリラン
                 st.rerun()
-                    
+
             except Exception as e:
                 st.error(f"❌ 学習エラー: {e}")
                 import traceback
                 st.code(traceback.format_exc())
 
-# メインエリア: 推薦生成
+# 推薦生成エリア
+st.markdown("---")
+st.subheader("💡 推薦生成")
+
 if st.session_state.hb_trained:
-    st.header("💡 推薦生成")
-    
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -240,13 +273,10 @@ if st.session_state.hb_trained:
 
 else:
     st.info("""
-    👈 サイドバーから以下の手順で開始してください：
-    
-    1. **モデルを学習** ボタンをクリック
-       （初期化と学習が一括で実行されます）
-    2. メンバーを選択して推薦を生成
-    
-    ※ データは既にStreamlit appで読み込まれたものを使用します
+    💡 まずモデルを学習してください。
+
+    1. 上記の **「🚀 モデルを学習」** ボタンをクリック
+    2. 学習完了後、メンバーを選択して推薦を生成できます
     """)
 
 # フッター
