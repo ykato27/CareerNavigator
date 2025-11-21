@@ -331,34 +331,15 @@ class CausalGraphRecommender:
         # スキルコードからスキル名に変換
         skill_name = self.code_to_name.get(skill_code, skill_code)
         
-        logger.debug(f"get_score_for_skill: member={member_code}, code={skill_code}, name={skill_name}")
-        
-        # 全推薦結果を取得（大きめのtop_nで）
-        all_recommendations = self.recommend(member_code, top_n=1000)
-        
-        logger.debug(f"推薦結果数: {len(all_recommendations)}")
-        
-        # 該当スキルを検索
-        for rec in all_recommendations:
-            if rec['competence_name'] == skill_name or rec['competence_code'] == skill_code:
-                details = rec['details']
-                logger.debug(f"スキル {skill_name} のスコアを発見: total={details['total_score']:.3f}")
-                return {
-                    'readiness': details['readiness_score_normalized'],
-                    'bayesian': details['bayesian_score_normalized'],
-                    'utility': details['utility_score_normalized'],
-                    'total_score': details['total_score'],
-                    'readiness_reasons': details['readiness_reasons'],
-                    'utility_reasons': details['utility_reasons']
-                }
-        
-        # 見つからない場合（保有済みの可能性）
+        # 保有スキルと未習得スキルを取得
         member_skills = self.skill_matrix_.loc[member_code]
-        if skill_name in member_skills.index and member_skills[skill_name] > 0:
-            # 既に保有しているスキル
+        owned_skills = member_skills[member_skills > 0].index.tolist()
+        
+        # 既に保有しているスキルの場合
+        if skill_name in owned_skills:
             logger.debug(f"スキル {skill_name} は既に保有済み")
             return {
-                'readiness': 1.0,  # 既に習得済み
+                'readiness': 1.0,
                 'bayesian': 1.0,
                 'utility': 1.0,
                 'total_score': 1.0,
@@ -366,16 +347,85 @@ class CausalGraphRecommender:
                 'utility_reasons': []
             }
         
-        # デフォルト値（推薦対象外）
-        logger.warning(f"スキル {skill_name} (code={skill_code}) が推薦結果に見つかりません")
-        logger.warning(f"推薦結果の最初の5件: {[r['competence_name'] for r in all_recommendations[:5]]}")
+        # スキル名がskill_matrixに存在しない場合
+        if skill_name not in self.skill_matrix_.columns:
+            logger.warning(f"スキル {skill_name} がスキルマトリクスに存在しません")
+            return {
+                'readiness': 0.0,
+                'bayesian': 0.0,
+                'utility': 0.0,
+                'total_score': 0.0,
+                'readiness_reasons': [],
+                'utility_reasons': []
+            }
+        
+        # --- Causalスコア計算（recommendメソッドのロジックを直接実装） ---
+        
+        # 1. Readiness Score: 保有スキルからのreadiness効果の合計
+        readiness_score = 0.0
+        readiness_reasons = []
+        for prereq in owned_skills:
+            effect = self._get_effect(prereq, skill_name)
+            if effect > 0.001:
+                readiness_score += effect
+                readiness_reasons.append((prereq, effect))
+        
+        # 2. Utility Score: このスキルが未習得スキルに与える影響の合計
+        unowned_skills = member_skills[member_skills == 0].index.tolist()
+        utility_score = 0.0
+        utility_reasons = []
+        for future in unowned_skills:
+            if future == skill_name:
+                continue
+            effect = self._get_effect(skill_name, future)
+            if effect > 0.001:
+                utility_score += effect
+                utility_reasons.append((future, effect))
+        
+        # 3. Bayesian Score: P(Target=1 | Owned)
+        bayesian_score = 0.0
+        if self.bn_recommender:
+            try:
+                bayesian_score = self.bn_recommender.predict_probability(owned_skills, skill_name)
+            except Exception as e:
+                logger.debug(f"ベイジアン推論エラー ({skill_name}): {e}")
+        
+        # スコアの正規化は、全スキルと比較する必要があるため、ここでは生のスコアを返す
+        # 正規化は呼び出し側で実施する必要がある場合がある
+        # ただし、簡易的に0-1の範囲に収めるため、適当な最大値で割る
+        
+        # 簡易的な正規化（最大値を仮定）
+        # Readiness: 保有スキル数 × 平均効果(0.3) を最大と仮定
+        max_readiness = len(owned_skills) * 0.3 if owned_skills else 1.0
+        readiness_normalized = min(readiness_score / max_readiness, 1.0) if max_readiness > 0 else 0.0
+        
+        # Utility: 未習得スキル数 × 平均効果(0.3) を最大と仮定
+        max_utility = len(unowned_skills) * 0.3 if unowned_skills else 1.0
+        utility_normalized = min(utility_score / max_utility, 1.0) if max_utility > 0 else 0.0
+        
+        # Bayesian: 既に0-1の範囲
+        bayesian_normalized = bayesian_score
+        
+        # 総合スコア
+        total_score = (
+            readiness_normalized * self.weights['readiness'] +
+            bayesian_normalized * self.weights['bayesian'] +
+            utility_normalized * self.weights['utility']
+        )
+        
+        # 推薦理由をソート
+        readiness_reasons.sort(key=lambda x: x[1], reverse=True)
+        utility_reasons.sort(key=lambda x: x[1], reverse=True)
+        
+        logger.debug(f"スキル {skill_name}: total={total_score:.3f}, readiness={readiness_normalized:.3f}, bayesian={bayesian_normalized:.3f}, utility={utility_normalized:.3f}")
+        
         return {
-            'readiness': 0.0,
-            'bayesian': 0.0,
-            'utility': 0.0,
-            'total_score': 0.0,
-            'readiness_reasons': [],
-            'utility_reasons': []
+            'readiness': readiness_normalized,
+            'bayesian': bayesian_normalized,
+            'utility': utility_normalized,
+            'total_score': total_score,
+            'readiness_reasons': readiness_reasons[:5],  # 上位5件
+            'utility_reasons': utility_reasons[:5]  # 上位5件
         }
     
     def _generate_explanation(self, item: Dict[str, Any]) -> str:
