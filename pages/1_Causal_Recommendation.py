@@ -50,7 +50,9 @@ with st.expander("💡 この機能で実際に行っていること", expanded=
     """)
     
     # 説明画像を表示
-    st.image("assets/causal_logic_whiteboard.png", use_container_width=True)
+    col_img1, col_img2, col_img3 = st.columns([1, 3, 1])
+    with col_img2:
+        st.image("assets/causal_logic_whiteboard.png", use_container_width=True)
     
     st.markdown("""
     ### 📊 3つの主要技術
