@@ -331,13 +331,18 @@ class CausalGraphRecommender:
         # スキルコードからスキル名に変換
         skill_name = self.code_to_name.get(skill_code, skill_code)
         
+        logger.debug(f"get_score_for_skill: member={member_code}, code={skill_code}, name={skill_name}")
+        
         # 全推薦結果を取得（大きめのtop_nで）
         all_recommendations = self.recommend(member_code, top_n=1000)
+        
+        logger.debug(f"推薦結果数: {len(all_recommendations)}")
         
         # 該当スキルを検索
         for rec in all_recommendations:
             if rec['competence_name'] == skill_name or rec['competence_code'] == skill_code:
                 details = rec['details']
+                logger.debug(f"スキル {skill_name} のスコアを発見: total={details['total_score']:.3f}")
                 return {
                     'readiness': details['readiness_score_normalized'],
                     'bayesian': details['bayesian_score_normalized'],
@@ -351,6 +356,7 @@ class CausalGraphRecommender:
         member_skills = self.skill_matrix_.loc[member_code]
         if skill_name in member_skills.index and member_skills[skill_name] > 0:
             # 既に保有しているスキル
+            logger.debug(f"スキル {skill_name} は既に保有済み")
             return {
                 'readiness': 1.0,  # 既に習得済み
                 'bayesian': 1.0,
@@ -361,6 +367,8 @@ class CausalGraphRecommender:
             }
         
         # デフォルト値（推薦対象外）
+        logger.warning(f"スキル {skill_name} (code={skill_code}) が推薦結果に見つかりません")
+        logger.warning(f"推薦結果の最初の5件: {[r['competence_name'] for r in all_recommendations[:5]]}")
         return {
             'readiness': 0.0,
             'bayesian': 0.0,

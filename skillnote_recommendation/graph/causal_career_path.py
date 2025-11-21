@@ -299,6 +299,13 @@ class SmartRoadmapVisualizer:
             else:
                 colors.append('#95a5a6')  # 低優先度: グレー
         
+        # 開始時刻の逆順でソート（Plotlyは下から上に描画されるため）
+        # 開始時刻が遅いものを先に追加 → 下に表示
+        # 開始時刻が早いものを後に追加 → 上に表示
+        sorted_indices = sorted(range(len(tasks)), key=lambda i: tasks[i]['Start'], reverse=True)
+        tasks = [tasks[i] for i in sorted_indices]
+        colors = [colors[i] for i in sorted_indices]
+        
         # Plotlyでガントチャートを生成
         fig = go.Figure()
         

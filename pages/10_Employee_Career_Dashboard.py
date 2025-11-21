@@ -402,6 +402,22 @@ if target_configs and selected_member:
                         - 準備完了度と有用性を両面から評価
                         """)
                         
+                        # デバッグ情報：依存関係統計
+                        total_deps = sum(len(d["prerequisites"]) for d in dependencies.values())
+                        total_enables = sum(len(d["enables"]) for d in dependencies.values())
+                        
+                        col_debug1, col_debug2, col_debug3 = st.columns(3)
+                        with col_debug1:
+                            st.metric("検出された依存関係", f"{total_deps}件", help="前提スキルの総数")
+                        with col_debug2:
+                            st.metric("有効化関係", f"{total_enables}件", help="このスキルが役立つ関係の総数")
+                        with col_debug3:
+                            avg_deps = total_deps / len(dependencies) if dependencies else 0
+                            st.metric("平均前提数", f"{avg_deps:.1f}", help="1スキルあたりの前提スキル数")
+                        
+                        if total_deps == 0:
+                            st.warning("⚠️ 依存関係が検出されませんでした。依存関係の閾値を下げてみてください。")
+                        
                         target_name = config["label"]
                         roadmap_fig = smart_visualizer.create_dependency_based_roadmap(
                             competences=recommended_skills,
