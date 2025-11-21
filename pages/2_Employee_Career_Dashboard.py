@@ -27,17 +27,20 @@ from skillnote_recommendation.graph.career_path_visualizer import (
 )
 from skillnote_recommendation.graph.causal_graph_visualizer import CausalGraphVisualizer
 from skillnote_recommendation.ml.causal_graph_recommender import CausalGraphRecommender
+from skillnote_recommendation.settings import get_settings
 from skillnote_recommendation.utils.ui_components import (
     apply_enterprise_styles,
     render_page_header
 )
 
+# 設定の取得
+settings = get_settings()
 
 # =========================================================
 # ページ設定
 # =========================================================
 st.set_page_config(
-    page_title="CareerNavigator - キャリアダッシュボード",
+    page_title=f"{settings.app.title} - キャリアダッシュボード",
     page_icon="🧭",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -259,7 +262,7 @@ if "causal_recommender" not in st.session_state:
             import pickle
             from pathlib import Path
             
-            model_path = Path("models/causal_recommender.pkl")
+            model_path = Path(settings.causal_recommendation.model_path)
             
             if model_path.exists():
                 with open(model_path, "rb") as f:
@@ -293,23 +296,6 @@ causal_recommender = st.session_state.causal_recommender
 # =========================================================
 with st.sidebar:
     st.markdown("---")
-    st.subheader("⚙️ Causal推薦設定")
-    
-    st.markdown("#### 📊 スコアフィルタリング")
-    
-    min_total_score = st.slider(
-        "総合スコア閾値",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.0,
-        step=0.01,  # 0.05 → 0.01に変更
-        help="この値以上のCausalスコアを持つスキルのみ推薦",
-        key="min_total_score"
-    )
-    
-    min_readiness = st.slider(
-        "準備完了度閾値",
-        min_value=0.0,
         max_value=1.0,
         value=0.0,
         step=0.01,  # 0.05 → 0.01に変更

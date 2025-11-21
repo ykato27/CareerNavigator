@@ -64,3 +64,6 @@ htmlcov/
 *.db-journal
 models/
 !tests/fixtures/models/
+
+# Temporary files
+*.html

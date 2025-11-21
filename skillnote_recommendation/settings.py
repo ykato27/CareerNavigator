@@ -252,6 +252,33 @@ class RecommendationSettings(BaseSettings):
         return v
 
 
+
+class CausalRecommendationSettings(BaseSettings):
+    """因果推論推薦設定"""
+
+    model_config = SettingsConfigDict(
+        env_prefix="CAUSAL_RECOMMENDATION_",
+        frozen=True,
+    )
+
+    # フィルタリング閾値
+    min_total_score: float = Field(default=0.0, ge=0.0, le=1.0, description="最小総合スコア")
+    min_readiness: float = Field(default=0.0, ge=0.0, le=1.0, description="最小準備完了度")
+    min_effect: float = Field(default=0.03, ge=0.0, le=1.0, description="最小効果スコア")
+    
+    # UI設定
+    score_slider_step: float = Field(default=0.01, gt=0.0, description="スコアスライダーのステップ")
+    effect_slider_max: float = Field(default=0.5, gt=0.0, description="効果スライダーの最大値")
+    
+    # グラフ設定
+    graph_height_small: str = Field(default="400px", description="グラフ高さ（小）")
+    graph_height_medium: str = Field(default="600px", description="グラフ高さ（中）")
+    graph_height_large: str = Field(default="800px", description="グラフ高さ（大）")
+    
+    # モデルパス
+    model_path: str = Field(default="models/causal_recommender.pkl", description="モデルファイルパス")
+
+
 class CareerPatternSettings(BaseSettings):
     """キャリアパターン別推薦設定"""
 
@@ -502,6 +529,7 @@ class Settings(BaseSettings):
 
     # 推薦
     recommendation: RecommendationSettings = Field(default_factory=RecommendationSettings)
+    causal_recommendation: CausalRecommendationSettings = Field(default_factory=CausalRecommendationSettings)
     career_pattern: CareerPatternSettings = Field(default_factory=CareerPatternSettings)
 
     # データ処理
