@@ -15,10 +15,16 @@ from skillnote_recommendation.graph.career_path import (
     CareerGapAnalyzer,
     LearningPathGenerator,
 )
+from skillnote_recommendation.graph.causal_career_path import (
+    CausalFilteredLearningPath,
+    DependencyAnalyzer,
+    SmartRoadmapVisualizer,
+)
 from skillnote_recommendation.graph.career_path_visualizer import (
     CareerPathVisualizer,
     format_career_path_summary,
 )
+from skillnote_recommendation.ml.causal_graph_recommender import CausalGraphRecommender
 from skillnote_recommendation.utils.ui_components import (
     apply_enterprise_styles,
     render_page_header
@@ -205,11 +211,99 @@ else:  # 職種・役職から選ぶ
 
 
 # =========================================================
-# キャリアパス分析と可視化
+# Causal Recommenderの初期化
+# =========================================================
+if "causal_recommender" not in st.session_state:
+    with st.spinner("🧠 因果グラフモデルを読み込み中..."):
+        try:
+            # Causal Recommenderを事前に学習しておく想定
+            import pickle
+            from pathlib import Path
+            
+            model_path = Path("models/causal_recommender.pkl")
+            
+            if model_path.exists():
+                with open(model_path, "rb") as f:
+                    causal_recommender = pickle.load(f)
+                st.session_state.causal_recommender = causal_recommender
+                st.success("✅ 学習済みCausal Recommenderを読み込みました")
+            else:
+                # モデルがない場合は新規学習
+                st.warning("⚠️ 学習済みモデルが見つかりません。新規学習します...")
+                causal_recommender = CausalGraphRecommender(
+                    member_competence=member_competence,
+                    competence_master=competence_master
+                )
+                causal_recommender.fit()
+                st.session_state.causal_recommender = causal_recommender
+                
+                # モデルを保存
+                model_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(model_path, "wb") as f:
+                    pickle.dump(causal_recommender, f)
+                st.success("✅ Causal Recommenderを学習し、保存しました")
+        except Exception as e:
+            st.error(f"❌ Causal Recommenderの初期化エラー: {e}")
+            st.stop()
+
+causal_recommender = st.session_state.causal_recommender
+
+
+# =========================================================
+# 推薦閾値の調整UI
+# =========================================================
+with st.sidebar:
+    st.markdown("---")
+    st.subheader("⚙️ Causal推薦設定")
+    
+    use_causal_filter = st.checkbox(
+        "Causalフィルタリングを使用",
+        value=False,  # デフォルトOFF
+        help="OFFの場合、全てのギャップスキルを表示します"
+    )
+    
+    if use_causal_filter:
+        min_total_score = st.slider(
+            "総合スコア閾値",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.05,
+            step=0.05,
+            help="この値以上のCausalスコアを持つスキルのみ推薦",
+            key="min_total_score"
+        )
+        
+        min_readiness = st.slider(
+            "準備完了度閾値",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.0,
+            step=0.05,
+            help="準備ができているスキルを優先",
+            key="min_readiness"
+        )
+    else:
+        min_total_score = 0.0
+        min_readiness = 0.0
+        st.info("💡 全てのギャップスキルを表示します")
+    
+    min_effect_threshold = st.slider(
+        "依存関係の閾値",
+        min_value=0.0,
+        max_value=0.5,
+        value=0.03,
+        step=0.01,
+        help="スキル間の依存関係と見なす最小因果効果",
+        key="min_effect_threshold"
+    )
+
+
+# =========================================================
+# キャリアパス分析と可視化（Causal統合版）
 # =========================================================
 if target_configs and selected_member:
     st.markdown("---")
-    st.subheader("🗺️ キャリアロードマップ")
+    st.subheader("🗺️ Causal統合キャリアロードマップ")
     
     # 分析器を初期化
     gap_analyzer = CareerGapAnalyzer(
@@ -218,11 +312,19 @@ if target_configs and selected_member:
         competence_master_df=competence_master
     )
     
-    path_generator = LearningPathGenerator(
-        knowledge_graph=knowledge_graph
+    # Causal統合の分析器を初期化
+    causal_path_generator = CausalFilteredLearningPath(
+        causal_recommender=causal_recommender,
+        min_total_score=min_total_score,
+        min_readiness_score=min_readiness
     )
     
-    visualizer = CareerPathVisualizer()
+    dependency_analyzer = DependencyAnalyzer(
+        causal_recommender=causal_recommender,
+        min_effect_threshold=min_effect_threshold
+    )
+    
+    smart_visualizer = SmartRoadmapVisualizer()
     
     # タブで複数パスを表示
     if len(target_configs) > 1:
@@ -242,112 +344,134 @@ if target_configs and selected_member:
                         target_member_code=target_member
                     )
                     
-                    # 学習パス生成
-                    career_path = path_generator.generate_learning_path(
+                    # Causalフィルタリング
+                    recommended_skills = causal_path_generator.generate_filtered_path(
                         gap_analysis=gap_result,
-                        max_per_phase=5
+                        member_code=selected_member
+                    )
+                    
+                    # 依存関係の抽出
+                    dependencies = dependency_analyzer.extract_dependencies(
+                        competences=recommended_skills,
+                        competence_master=competence_master
                     )
                     
                     # サマリー表示
-                    col_sum1, col_sum2, col_sum3 = st.columns(3)
+                    col_sum1, col_sum2, col_sum3, col_sum4 = st.columns(4)
                     
                     with col_sum1:
                         st.metric(
-                            "ギャップスキル数",
-                            len(career_path.missing_competences),
-                            help="目標達成に必要なスキル数"
+                            "ギャップスキル（全体）",
+                            len(gap_result["missing_competences"]),
+                            help="ギャップ分析で抽出されたスキル総数"
                         )
                     
                     with col_sum2:
                         st.metric(
-                            "到達度",
-                            f"{career_path.estimated_completion_rate * 100:.0f}%",
-                            help="現在の進捗率"
+                            "推薦スキル数",
+                            len(recommended_skills),
+                            help="Causalフィルタリング後の推薦スキル数"
                         )
                     
                     with col_sum3:
-                        # 推定学習期間（簡易計算: 1スキル = 2週間）
-                        estimated_weeks = len(career_path.missing_competences) * 2
+                        avg_score = sum(s.total_score for s in recommended_skills) / len(recommended_skills) if recommended_skills else 0
+                        st.metric(
+                            "平均スコア",
+                            f"{avg_score:.2f}",
+                            help="推薦スキルの平均Causalスコア"
+                        )
+                    
+                    with col_sum4:
+                        # 推定学習期間（依存関係考慮）
+                        total_deps = sum(len(d["prerequisites"]) for d in dependencies.values())
+                        estimated_weeks = len(recommended_skills) * 2 + total_deps
                         estimated_months = estimated_weeks / 4
                         st.metric(
                             "推定期間",
                             f"約{estimated_months:.1f}ヶ月",
-                            help="全スキル習得にかかる推定期間"
+                            help="依存関係を考慮した推定期間"
                         )
                     
-                    # プログレスバー
-                    st.progress(career_path.estimated_completion_rate)
-                    
-                    # ロードマップ可視化
-                    st.markdown("#### 📊 学習ロードマップ")
-                    
-                    target_name = config["label"]
-                    roadmap_fig = visualizer.create_roadmap(career_path, target_name)
-                    st.plotly_chart(roadmap_fig, use_container_width=True, key=f"roadmap_{idx}")
-                    
-                    # 到達度ゲージ
-                    col_gauge1, col_gauge2 = st.columns(2)
-                    
-                    with col_gauge1:
-                        st.markdown("#### 🎯 到達度")
-                        gauge_fig = visualizer.create_progress_gauge(
-                            career_path.estimated_completion_rate
+                    # Causal統合ロードマップ可視化
+                    if recommended_skills:
+                        st.markdown("#### 📊 Causal統合学習ロードマップ")
+                        st.info("""
+                        🧠 **Causal統合の特徴**:
+                        - 因果グラフに基づくスキル推薦
+                        - 依存関係を考慮した直列・並列配置
+                        - 準備完了度と有用性を両面から評価
+                        """)
+                        
+                        target_name = config["label"]
+                        roadmap_fig = smart_visualizer.create_dependency_based_roadmap(
+                            competences=recommended_skills,
+                            dependencies=dependencies,
+                            target_member_name=target_name
                         )
-                        st.plotly_chart(gauge_fig, use_container_width=True, key=f"gauge_{idx}")
+                        st.plotly_chart(roadmap_fig, use_container_width=True, key=f"causal_roadmap_{idx}")
+                    else:
+                        st.warning("⚠️ 推薦スキルが見つかりませんでした。閾値を下げてみてください。")
                     
-                    with col_gauge2:
-                        st.markdown("#### 📂 カテゴリー内訳")
-                        category_fig = visualizer.create_category_breakdown(career_path)
-                        st.plotly_chart(category_fig, use_container_width=True, key=f"category_{idx}")
-                    
-                    # 詳細な学習パス
-                    st.markdown("---")
-                    st.markdown("#### 📝 段階別学習パス")
-                    
-                    phase_tabs = st.tabs([
-                        f"🌱 Phase 1: 基礎固め ({len(career_path.phase_1_competences)})",
-                        f"🌿 Phase 2: 専門性構築 ({len(career_path.phase_2_competences)})",
-                        f"🌳 Phase 3: エキスパート ({len(career_path.phase_3_competences)})"
-                    ])
-                    
-                    phases = [
-                        career_path.phase_1_competences,
-                        career_path.phase_2_competences,
-                        career_path.phase_3_competences
-                    ]
-                    
-                    for phase_tab, phase_comps in zip(phase_tabs, phases):
-                        with phase_tab:
-                            if len(phase_comps) > 0:
-                                df_data = []
-                                for comp in phase_comps:
-                                    df_data.append({
-                                        "力量名": comp.competence_name,
-                                        "カテゴリー": comp.category,
-                                        "重要度": f"{comp.importance_score:.2f}",
-                                        "習得容易性": f"{comp.ease_score:.2f}",
-                                        "優先度スコア": f"{comp.priority_score:.2f}"
-                                    })
+                    # 推薦スキルの詳細リスト
+                    if recommended_skills:
+                        st.markdown("---")
+                        st.markdown("#### 📝 推薦スキル詳細（Causalスコア順）")
+                        
+                        df_data = []
+                        for comp in recommended_skills:
+                            # 依存関係情報を取得
+                            deps = dependencies.get(comp.competence_code, {})
+                            prereq_count = len(deps.get("prerequisites", []))
+                            enables_count = len(deps.get("enables", []))
+                            
+                            df_data.append({
+                                "力量名": comp.competence_name,
+                                "カテゴリー": comp.category,
+                                "🎯 総合スコア": f"{comp.total_score:.3f}",
+                                "✅ 準備完了度": f"{comp.readiness_score:.3f}",
+                                "📊 確率": f"{comp.bayesian_score:.3f}",
+                                "🚀 有用性": f"{comp.utility_score:.3f}",
+                                "📌 前提": prereq_count,
+                                "➡️ 次へ": enables_count,
+                            })
+                        
+                        df_skills = pd.DataFrame(df_data)
+                        st.dataframe(df_skills, use_container_width=True)
+                        
+                        # CSVダウンロード
+                        csv_data = df_skills.to_csv(index=False).encode('utf-8-sig')
+                        st.download_button(
+                            label="📥 推薦スキルをダウンロード",
+                            data=csv_data,
+                            file_name=f"causal_recommended_skills_{selected_member}.csv",
+                            mime="text/csv",
+                            key=f"download_causal_skills_{idx}"
+                        )
+                        
+                        # 推薦理由の詳細表示
+                        with st.expander("🔍 推薦理由の詳細"):
+                            for i, comp in enumerate(recommended_skills[:5]):  # 上位5件
+                                st.markdown(f"### {i+1}. {comp.competence_name}")
                                 
-                                df_phase = pd.DataFrame(df_data)
-                                st.dataframe(df_phase, use_container_width=True)
+                                col_reason1, col_reason2 = st.columns(2)
                                 
-                                # CSVダウンロード
-                                csv_data = df_phase.to_csv(index=False).encode('utf-8-sig')
-                                st.download_button(
-                                    label=f"📥 Phase {phase_tabs.index(phase_tab) + 1} をダウンロード",
-                                    data=csv_data,
-                                    file_name=f"learning_path_phase{phase_tabs.index(phase_tab) + 1}_{selected_member}.csv",
-                                    mime="text/csv",
-                                    key=f"download_phase_{idx}_{phase_tabs.index(phase_tab)}"
-                                )
-                            else:
-                                st.info("このフェーズで習得すべきスキルはありません")
-                    
-                    # サマリーテキスト
-                    with st.expander("📄 キャリアパスサマリー（テキスト形式）"):
-                        summary_text = format_career_path_summary(career_path, target_name)
-                        st.markdown(summary_text)
+                                with col_reason1:
+                                    st.markdown("**✅ 準備ができています:**")
+                                    if comp.readiness_reasons:
+                                        for skill_name, effect in comp.readiness_reasons[:3]:
+                                            st.markdown(f"- {skill_name} (因果効果: {effect:.3f})")
+                                    else:
+                                        st.markdown("- 基礎スキルとして推奨")
+                                
+                                with col_reason2:
+                                    st.markdown("**🚀 役立つ場面:**")
+                                    if comp.utility_reasons:
+                                        for skill_name, effect in comp.utility_reasons[:3]:
+                                            st.markdown(f"- {skill_name}の習得に役立つ (効果: {effect:.3f})")
+                                    else:
+                                        st.markdown("- 汎用スキル")
+                                
+                                st.markdown("---")
                 
                 except Exception as e:
                     st.error(f"❌ キャリアパス分析エラー: {e}")
