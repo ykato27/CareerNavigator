@@ -42,11 +42,9 @@
 
 | ファイル | 実行方法 | 役割 |
 |---------|---------|------|
-| **streamlit_app.py** | `uv run streamlit run streamlit_app.py` | **メインページ**: CSVファイルをアップロードしてデータを読み込む |
-| **pages/1_Model_Training.py** | サイドバーから選択 | **モデル訓練ページ**: 機械学習モデルを訓練する |
-| **pages/4_Inference.py** | サイドバーから選択 | **推論ページ**: メンバーへの力量推薦を実行する |
-| **pages/5_Data_Quality.py** | サイドバーから選択 | **データ品質ページ**: データ品質をモニタリングする |
-| **pages/6_Model_Comparison.py** | サイドバーから選択 | **モデル比較ページ**: 複数のモデルを比較する |
+| **streamlit_app.py** | `uv run streamlit run streamlit_app.py` | **データ読み込み**: 6種類のCSVファイルをアップロードしてデータを準備 |
+| **pages/1_Causal_Recommendation.py** | サイドバーから選択 | **因果推論推薦**: 因果関係に基づくスキル推薦（3軸スコアリング） |
+| **pages/2_Employee_Career_Dashboard.py** | サイドバーから選択 | **キャリアダッシュボード**: スマートロードマップとキャリアパス比較 |
 
 **使い方:**
 ```bash
@@ -184,8 +182,9 @@ uv run streamlit run streamlit_app.py
    - Webアプリのメインページ
    - データ読み込みの流れ
 
-7. **pages/4_Inference.py** を読む
-   - 推薦実行のUI
+7. **pages/1_Causal_Recommendation.py** または **pages/2_Employee_Career_Dashboard.py** を読む
+   - 因果推論推薦のUI
+   - キャリアダッシュボードのUI
    - ライブラリコードの使い方
 
 ### 📖 コードを読むときのヒント
@@ -261,11 +260,10 @@ from skillnote_recommendation.core.data_transformer import DataTransformer
 **A:** Streamlitは以下のような構造です：
 
 ```
-streamlit_app.py        ← メインページ（ホーム）
+streamlit_app.py        ← メインページ（データ読み込み）
 └── pages/              ← サブページ（自動的にサイドバーに表示される）
-    ├── 1_Model_Training.py
-    ├── 2_Inference.py
-    └── ...
+    ├── 1_Causal_Recommendation.py       ← 因果推論推薦
+    └── 2_Employee_Career_Dashboard.py   ← キャリアダッシュボード
 ```
 
 `streamlit_app.py` を起動すると、`pages/` フォルダ内のファイルが自動的にサイドバーに表示されます。
