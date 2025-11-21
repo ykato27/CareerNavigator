@@ -296,9 +296,25 @@ causal_recommender = st.session_state.causal_recommender
 # =========================================================
 with st.sidebar:
     st.markdown("---")
+    st.subheader("⚙️ Causal推薦設定")
+    
+    st.markdown("#### 📊 スコアフィルタリング")
+    
+    min_total_score = st.slider(
+        "総合スコアの最小値 (Total Score)",
+        min_value=0.0,
+        max_value=1.0,
+        value=settings.causal_recommendation.min_total_score,
+        step=settings.causal_recommendation.score_slider_step,
+        help="Causalスコア（準備完了度×効果×将来性）の閾値。値を上げると、より確度の高いスキルのみが表示されます。"
+    )
+    
+    min_readiness = st.slider(
+        "準備完了度閾値",
+        min_value=0.0,
         max_value=1.0,
         value=0.0,
-        step=0.01,  # 0.05 → 0.01に変更
+        step=0.01,
         help="準備ができているスキルを優先",
         key="min_readiness"
     )
