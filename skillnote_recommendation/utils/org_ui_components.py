@@ -155,13 +155,6 @@ def render_skill_matrix_table(
         """カラム名から ###[...]### を削除"""
         return re.sub(r'\s*###\[.*?\]###', '', str(name)).strip()
     
-    # デバッグ: 元のカラム名を表示
-    st.write("**デバッグ情報**")
-    with st.expander("データ構造を確認", expanded=False):
-        st.write("メンバー習得力量データのカラム:", list(member_competence_df.columns))
-        st.write("力量マスタのカラム:", list(competence_master_df.columns))
-        st.write("メンバーマスタのカラム:", list(members_df.columns))
-    
     # メンバーマスタのカラム名をクリーニング
     members_df_clean = members_df.copy()
     members_df_clean.columns = [clean_col_name(col) for col in members_df_clean.columns]
@@ -174,10 +167,24 @@ def render_skill_matrix_table(
     member_competence_clean = member_competence_df.copy()
     member_competence_clean.columns = [clean_col_name(col) for col in member_competence_clean.columns]
     
-    # メンバーマスタとマージ
+    # マージ前に、member_competence_cleanから力量名と力量タイプを削除（力量マスタから取得するため）
+    cols_to_remove = []
+    if "力量名" in member_competence_clean.columns:
+        cols_to_remove.append("力量名")
+    if "力量タイプ" in member_competence_clean.columns:
+        cols_to_remove.append("力量タイプ")
+    if cols_to_remove:
+        member_competence_clean = member_competence_clean.drop(columns=cols_to_remove, errors='ignore')
+    
+    # メンバーマスタとマージ（必要なカラムのみ選択）
+    member_columns = ["メンバーコード"]
+    for col in ["メンバー名", "職種", "役職", "職能・等級"]:
+        if col in members_df_clean.columns:
+            member_columns.append(col)
+    
     if "メンバーコード" in member_competence_clean.columns and "メンバーコード" in members_df_clean.columns:
         merged_df = member_competence_clean.merge(
-            members_df_clean,
+            members_df_clean[member_columns],
             on="メンバーコード",
             how="left"
         )
@@ -185,34 +192,26 @@ def render_skill_matrix_table(
         st.error("⚠️ メンバーコードカラムが見つかりません")
         return pd.DataFrame()
     
-    # 力量マスタとマージ（存在するカラムのみ）
+    # 力量マスタとマージ（必要なカラムのみ選択）
     if "力量コード" not in competence_master_clean.columns:
         st.error("⚠️ 力量マスタに力量コードカラムが見つかりません")
-        st.info(f"力量マスタのカラム: {list(competence_master_clean.columns)}")
         return pd.DataFrame()
     
-    comp_cols = ["力量コード"]
+    comp_columns = ["力量コード"]
     if "力量名" in competence_master_clean.columns:
-        comp_cols.append("力量名")
-    else:
-        st.warning("⚠️ 力量マスタに力量名カラムがありません")
-        
+        comp_columns.append("力量名")
     if "力量タイプ" in competence_master_clean.columns:
-        comp_cols.append("力量タイプ")
+        comp_columns.append("力量タイプ")
     
     if "力量コード" in merged_df.columns:
         merged_df = merged_df.merge(
-            competence_master_clean[comp_cols],
+            competence_master_clean[comp_columns],
             on="力量コード",
             how="left"
         )
     else:
         st.error("⚠️ マージ後のデータに力量コードカラムが見つかりません")
         return pd.DataFrame()
-    
-    # デバッグ: マージ後のカラムを表示
-    with st.expander("マージ後のカラム確認", expanded=False):
-        st.write("マージ後のカラム:", list(merged_df.columns))
     
     # フィルタリング
     filtered_df = merged_df.copy()
@@ -259,13 +258,13 @@ def render_skill_matrix_table(
     
     # columnsに使用するカラムを確認
     if "力量名" not in filtered_df.columns:
-        st.error("⚠️ 力量名カラムが見つかりません。力量マスタデータを確認してください。")
-        st.info(f"フィルタ後の利用可能なカラム: {list(filtered_df.columns)}")
+        st.error("⚠️ 力量名カラムが見つかりません。")
         # 力量名がない場合は力量コードを使用
         if "力量コード" in filtered_df.columns:
             st.warning("力量名の代わりに力量コードを使用します")
             column_name = "力量コード"
         else:
+            st.error("力量コードも見つかりません")
             return pd.DataFrame()
     else:
         column_name = "力量名"
