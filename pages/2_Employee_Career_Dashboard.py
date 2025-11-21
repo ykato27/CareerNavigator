@@ -5,6 +5,7 @@ CareerNavigator - 従業員向けキャリアダッシュボード (MVP)
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -24,6 +25,7 @@ from skillnote_recommendation.graph.career_path_visualizer import (
     CareerPathVisualizer,
     format_career_path_summary,
 )
+from skillnote_recommendation.graph.causal_graph_visualizer import CausalGraphVisualizer
 from skillnote_recommendation.ml.causal_graph_recommender import CausalGraphRecommender
 from skillnote_recommendation.utils.ui_components import (
     apply_enterprise_styles,
@@ -310,13 +312,6 @@ if target_configs and selected_member:
     st.markdown("---")
     st.subheader("🗺️ Causal統合キャリアロードマップ")
     
-    # デバッグ情報（後で削除可能）
-    with st.expander("🔍 デバッグ情報", expanded=False):
-        st.write(f"選択メンバー: {selected_member}")
-        st.write(f"目標数: {len(target_configs)}")
-        st.write(f"総合スコア閾値: {min_total_score}")
-        st.write(f"準備完了度閾値: {min_readiness}")
-    
     # 分析器を初期化
     gap_analyzer = CareerGapAnalyzer(
         knowledge_graph=knowledge_graph,
@@ -356,25 +351,11 @@ if target_configs and selected_member:
                         target_member_code=target_member
                     )
                     
-                    gap_skills_count = len(gap_result["missing_competences"])
-                    
                     # Causalフィルタリング
                     recommended_skills = causal_path_generator.generate_filtered_path(
                         gap_analysis=gap_result,
                         member_code=selected_member
                     )
-                    
-                    recommended_count = len(recommended_skills)
-                    
-                    # デバッグ出力
-                    st.info(f"""
-                    🔍 **フィルタリング結果**:
-                    - ギャップスキル（全体）: {gap_skills_count}件
-                    - フィルタリング後: {recommended_count}件
-                    - 除外されたスキル: {gap_skills_count - recommended_count}件
-                    - 総合スコア閾値: {min_total_score:.2f}
-                    - 準備完了度閾値: {min_readiness:.2f}
-                    """)
                     
                     # 依存関係の抽出
                     dependencies = dependency_analyzer.extract_dependencies(
@@ -514,6 +495,100 @@ if target_configs and selected_member:
                                         st.markdown("- 汎用スキル")
                                 
                                 st.markdown("---")
+                        
+                        # 関連因果グラフ
+                        st.markdown("---")
+                        st.markdown("#### 🔗 関連因果グラフ")
+                        st.caption("推薦スキルを中心とした因果関係を可視化")
+                        
+                        if recommended_skills:
+                            # スキル選択
+                            skill_options = [
+                                f"{i+1}. {comp.competence_name} (スコア: {comp.total_score:.2f})" 
+                                for i, comp in enumerate(recommended_skills)
+                            ]
+                            
+                            selected_skill_idx = st.selectbox(
+                                "グラフを表示するスキルを選択",
+                                range(len(recommended_skills)),
+                                format_func=lambda x: skill_options[x],
+                                key=f"skill_graph_select_{idx}"
+                            )
+                            
+                            # グラフ表示設定
+                            col_g1, col_g2, col_g3 = st.columns(3)
+                            
+                            with col_g1:
+                                graph_threshold = st.slider(
+                                    "表示閾値",
+                                    0.01, 1.0, 0.05, 0.01,
+                                    key=f"graph_threshold_{idx}",
+                                    help="この値以上の因果係数を持つエッジのみ表示"
+                                )
+                            
+                            with col_g2:
+                                show_negative_graph = st.checkbox(
+                                    "負の因果も表示",
+                                    value=False,
+                                    key=f"show_negative_{idx}",
+                                    help="赤線（負の因果関係）も表示する"
+                                )
+                            
+                            with col_g3:
+                                graph_height = st.select_slider(
+                                    "グラフの高さ",
+                                    options=["小", "中", "大"],
+                                    value="中",
+                                    key=f"graph_height_{idx}"
+                                )
+                            
+                            height_map = {"小": "400px", "中": "600px", "大": "800px"}
+                            
+                            try:
+                                # 選択されたスキル
+                                selected_skill = recommended_skills[selected_skill_idx]
+                                center_node = selected_skill.competence_name
+                                
+                                # Visualizer作成
+                                adj_matrix = causal_recommender.learner.get_adjacency_matrix()
+                                visualizer = CausalGraphVisualizer(adj_matrix)
+                                
+                                # 保有スキル情報を取得
+                                member_skills_codes = member_competence[
+                                    member_competence["メンバーコード"] == selected_member
+                                ]["力量コード"].tolist()
+                                
+                                # コード → 名前変換
+                                code_to_name = causal_recommender.code_to_name
+                                member_skill_names = [code_to_name.get(c, c) for c in member_skills_codes]
+                                
+                                # エゴネットワークを生成
+                                html_path = visualizer.visualize_ego_network_pyvis(
+                                    center_node=center_node,
+                                    radius=1,
+                                    threshold=graph_threshold,
+                                    show_negative=show_negative_graph,
+                                    member_skills=member_skill_names,
+                                    output_path=f"ego_network_dashboard_{idx}.html",
+                                    height=height_map[graph_height]
+                                )
+                                
+                                # HTMLファイルを読み込んで表示
+                                with open(html_path, 'r', encoding='utf-8') as f:
+                                    source_code = f.read()
+                                
+                                components.html(source_code, height=int(height_map[graph_height].replace("px", "")), scrolling=False)
+                                
+                                # 凡例を表示
+                                st.caption(f"💡 **{center_node}** を中心とした因果関係（拡大・移動可能）")
+                                st.caption(
+                                    "🟦 **青**: 推奨スキル（中心） | "
+                                    "🟩 **緑**: あなたの保有スキル | "
+                                    "⬜ **白**: 将来取得可能なスキル"
+                                )
+                                
+                            except Exception as graph_error:
+                                st.warning(f"⚠️ 因果グラフの表示に失敗しました: {graph_error}")
                 
                 except Exception as e:
                     st.error(f"❌ キャリアパス分析エラー: {e}")
