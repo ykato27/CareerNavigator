@@ -29,6 +29,7 @@ dependencies = [
     "python-louvain>=0.16",
     "pgmpy>=0.1.23",
     "pyvis>=0.3.2",
+    "openpyxl>=3.0.0",
 ]
 
 [project.optional-dependencies]
