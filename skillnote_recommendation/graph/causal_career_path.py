@@ -128,32 +128,6 @@ class CausalFilteredLearningPath:
             logger.info(f"平均スコア: {sum(all_scores)/len(all_scores):.3f}")
         logger.info(f"Causalフィルタリング後: {len(scored_competences)}スキル")
         
-        # スコアが全て0または極端に低い場合の対応
-        if len(scored_competences) == 0 and len(missing_competences) > 0:
-            logger.warning("フィルタリング後のスキルが0件です。閾値を無視して全スキルを返します。")
-            # 全スキルにCausalスコアを付与して返す（閾値無視）
-            for comp_info in missing_competences:
-                causal_score = self.causal_recommender.get_score_for_skill(
-                    member_code=member_code,
-                    skill_code=comp_info["competence_code"]
-                )
-                
-                scored_competences.append(
-                    CompetenceGapWithCausal(
-                        competence_code=comp_info["competence_code"],
-                        competence_name=comp_info["competence_name"],
-                        category=comp_info.get("category", "その他"),
-                        competence_type=comp_info.get("competence_type", ""),
-                        readiness_score=causal_score["readiness"],
-                        bayesian_score=causal_score["bayesian"],
-                        utility_score=causal_score["utility"],
-                        total_score=causal_score["total_score"],
-                        readiness_reasons=causal_score["readiness_reasons"],
-                        utility_reasons=causal_score["utility_reasons"],
-                    )
-                )
-            scored_competences.sort(key=lambda x: x.total_score, reverse=True)
-        
         return scored_competences
 
 

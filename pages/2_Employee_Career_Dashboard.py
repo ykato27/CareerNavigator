@@ -256,36 +256,29 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("⚙️ Causal推薦設定")
     
-    use_causal_filter = st.checkbox(
-        "Causalフィルタリングを使用",
-        value=False,  # デフォルトOFF
-        help="OFFの場合、全てのギャップスキルを表示します"
+    st.markdown("#### 📊 スコアフィルタリング")
+    
+    min_total_score = st.slider(
+        "総合スコア閾値",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.0,
+        step=0.01,  # 0.05 → 0.01に変更
+        help="この値以上のCausalスコアを持つスキルのみ推薦",
+        key="min_total_score"
     )
     
-    if use_causal_filter:
-        min_total_score = st.slider(
-            "総合スコア閾値",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.05,
-            step=0.05,
-            help="この値以上のCausalスコアを持つスキルのみ推薦",
-            key="min_total_score"
-        )
-        
-        min_readiness = st.slider(
-            "準備完了度閾値",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.0,
-            step=0.05,
-            help="準備ができているスキルを優先",
-            key="min_readiness"
-        )
-    else:
-        min_total_score = 0.0
-        min_readiness = 0.0
-        st.info("💡 全てのギャップスキルを表示します")
+    min_readiness = st.slider(
+        "準備完了度閾値",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.0,
+        step=0.01,  # 0.05 → 0.01に変更
+        help="準備ができているスキルを優先",
+        key="min_readiness"
+    )
+    
+    st.markdown("#### 🔗 依存関係設定")
     
     min_effect_threshold = st.slider(
         "依存関係の閾値",
@@ -296,6 +289,18 @@ with st.sidebar:
         help="スキル間の依存関係と見なす最小因果効果",
         key="min_effect_threshold"
     )
+    
+    st.markdown("---")
+    
+    # フィルタリング条件を表示
+    st.info(f"""
+    **現在の設定**:
+    - 総合スコア ≥ {min_total_score:.2f}
+    - 準備完了度 ≥ {min_readiness:.2f}
+    - 依存関係 ≥ {min_effect_threshold:.2f}
+    
+    💡 スライダーを動かすと自動的に再描画されます
+    """)
 
 
 # =========================================================
@@ -305,23 +310,18 @@ if target_configs and selected_member:
     st.markdown("---")
     st.subheader("🗺️ Causal統合キャリアロードマップ")
     
+    # デバッグ情報（後で削除可能）
+    with st.expander("🔍 デバッグ情報", expanded=False):
+        st.write(f"選択メンバー: {selected_member}")
+        st.write(f"目標数: {len(target_configs)}")
+        st.write(f"総合スコア閾値: {min_total_score}")
+        st.write(f"準備完了度閾値: {min_readiness}")
+    
     # 分析器を初期化
     gap_analyzer = CareerGapAnalyzer(
         knowledge_graph=knowledge_graph,
         member_competence_df=member_competence,
         competence_master_df=competence_master
-    )
-    
-    # Causal統合の分析器を初期化
-    causal_path_generator = CausalFilteredLearningPath(
-        causal_recommender=causal_recommender,
-        min_total_score=min_total_score,
-        min_readiness_score=min_readiness
-    )
-    
-    dependency_analyzer = DependencyAnalyzer(
-        causal_recommender=causal_recommender,
-        min_effect_threshold=min_effect_threshold
     )
     
     smart_visualizer = SmartRoadmapVisualizer()
@@ -336,6 +336,18 @@ if target_configs and selected_member:
         with tab:
             target_member = config["target_member"]
             
+            # Causal統合の分析器を初期化（ループ内で毎回作成して最新の値を使用）
+            causal_path_generator = CausalFilteredLearningPath(
+                causal_recommender=causal_recommender,
+                min_total_score=min_total_score,  # 最新のスライダー値を使用
+                min_readiness_score=min_readiness
+            )
+            
+            dependency_analyzer = DependencyAnalyzer(
+                causal_recommender=causal_recommender,
+                min_effect_threshold=min_effect_threshold  # 最新のスライダー値を使用
+            )
+            
             with st.spinner(f"キャリアパス分析中... ({config['label']})"):
                 try:
                     # ギャップ分析
@@ -344,11 +356,25 @@ if target_configs and selected_member:
                         target_member_code=target_member
                     )
                     
+                    gap_skills_count = len(gap_result["missing_competences"])
+                    
                     # Causalフィルタリング
                     recommended_skills = causal_path_generator.generate_filtered_path(
                         gap_analysis=gap_result,
                         member_code=selected_member
                     )
+                    
+                    recommended_count = len(recommended_skills)
+                    
+                    # デバッグ出力
+                    st.info(f"""
+                    🔍 **フィルタリング結果**:
+                    - ギャップスキル（全体）: {gap_skills_count}件
+                    - フィルタリング後: {recommended_count}件
+                    - 除外されたスキル: {gap_skills_count - recommended_count}件
+                    - 総合スコア閾値: {min_total_score:.2f}
+                    - 準備完了度閾値: {min_readiness:.2f}
+                    """)
                     
                     # 依存関係の抽出
                     dependencies = dependency_analyzer.extract_dependencies(
