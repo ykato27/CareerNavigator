@@ -23,7 +23,7 @@ st.set_page_config(
 apply_enterprise_styles()
 
 render_page_header(
-    title="因果推論推薦 (LiNGAM)",
+    title="因果推論推薦",
     icon="🔗",
     description="データからスキル間の因果関係を発見し、説得力のある推薦を行います"
 )
@@ -47,9 +47,13 @@ with st.expander("💡 この機能で実際に行っていること", expanded=
     st.markdown("""
     このページでは、**因果推論**と**ベイジアンネットワーク**を組み合わせて、
     **説明可能で精度の高いスキル推薦**を実現しています。
+    """)
     
+    # 説明画像を表示
+    st.image("assets/causal_logic_whiteboard.png", use_container_width=True)
+    
+    st.markdown("""
     ### 📊 3つの主要技術
-    
     """)
     
     col1, col2, col3 = st.columns(3)
