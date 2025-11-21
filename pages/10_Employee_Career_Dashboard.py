@@ -283,7 +283,7 @@ if target_configs and selected_member:
                     
                     target_name = config["label"]
                     roadmap_fig = visualizer.create_roadmap(career_path, target_name)
-                    st.plotly_chart(roadmap_fig, use_container_width=True)
+                    st.plotly_chart(roadmap_fig, use_container_width=True, key=f"roadmap_{idx}")
                     
                     # 到達度ゲージ
                     col_gauge1, col_gauge2 = st.columns(2)
@@ -293,12 +293,12 @@ if target_configs and selected_member:
                         gauge_fig = visualizer.create_progress_gauge(
                             career_path.estimated_completion_rate
                         )
-                        st.plotly_chart(gauge_fig, use_container_width=True)
+                        st.plotly_chart(gauge_fig, use_container_width=True, key=f"gauge_{idx}")
                     
                     with col_gauge2:
                         st.markdown("#### 📂 カテゴリー内訳")
                         category_fig = visualizer.create_category_breakdown(career_path)
-                        st.plotly_chart(category_fig, use_container_width=True)
+                        st.plotly_chart(category_fig, use_container_width=True, key=f"category_{idx}")
                     
                     # 詳細な学習パス
                     st.markdown("---")
