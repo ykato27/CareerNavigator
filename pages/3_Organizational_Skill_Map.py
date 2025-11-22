@@ -20,6 +20,13 @@ from skillnote_recommendation.utils.org_ui_components import (
     render_metric_cards_row,
     render_cross_tab_heatmap
 )
+from skillnote_recommendation.utils.advanced_org_dashboards import (
+    render_hierarchical_category_heatmap,
+    render_job_role_skill_heatmap,
+    render_skill_portfolio_analysis,
+    render_talent_risk_dashboard,
+    render_benchmark_dashboard
+)
 from skillnote_recommendation.utils.strategic_ui_components import (
     render_succession_candidate_table,
     render_readiness_gauge,
@@ -147,46 +154,65 @@ with tab1:
         st.info("スキルカテゴリ情報がありません")
     
     st.markdown("---")
-    
-    # 職種×役職別クロス集計
-    st.markdown("### 🔲 職種×役職別スキル集計")
-    
-    if "職種" in members_df.columns and "役職" in members_df.columns:
-        try:
-            cross_tab = org_metrics.calculate_cross_group_summary(
-                member_competence_df,
-                members_df,
-                group_by_1="職種",
-                group_by_2="役職"
-            )
-            
-            st.write("**1人あたり平均スキル数**")
-            render_cross_tab_heatmap(cross_tab, title="職種×役職別平均スキル数")
-            
-        except Exception as e:
-            st.error(f"クロス集計の計算中にエラーが発生しました: {e}")
-    else:
-        st.warning("職種または役職情報がメンバーマスタに含まれていません")
-    
+
+    # ①カテゴリ×職種の階層的ヒートマップ
+    try:
+        render_hierarchical_category_heatmap(
+            member_competence_df,
+            competence_master_df,
+            members_df,
+            group_by="職種"
+        )
+    except Exception as e:
+        st.error(f"カテゴリ別分析の表示中にエラーが発生しました: {e}")
+
     st.markdown("---")
-    
-    # 等級別集計
-    st.markdown("### 📊 等級別スキル集計")
-    
-    if "職能・等級" in members_df.columns:
-        try:
-            grade_summary = org_metrics.calculate_group_skill_summary(
-                member_competence_df,
-                members_df,
-                group_by="職能・等級"
-            )
-            
-            st.dataframe(grade_summary, use_container_width=True, height=300)
-            
-        except Exception as e:
-            st.error(f"等級別集計の計算中にエラーが発生しました: {e}")
-    else:
-        st.warning("等級情報がメンバーマスタに含まれていません")
+
+    # ②職種×役職別スキル集計
+    try:
+        render_job_role_skill_heatmap(
+            member_competence_df,
+            competence_master_df,
+            members_df
+        )
+    except Exception as e:
+        st.error(f"職種×役職別分析の表示中にエラーが発生しました: {e}")
+
+    st.markdown("---")
+
+    # ③スキルポートフォリオ分析
+    try:
+        render_skill_portfolio_analysis(
+            member_competence_df,
+            competence_master_df,
+            members_df
+        )
+    except Exception as e:
+        st.error(f"スキルポートフォリオ分析の表示中にエラーが発生しました: {e}")
+
+    st.markdown("---")
+
+    # ④人材リスク分析
+    try:
+        render_talent_risk_dashboard(
+            member_competence_df,
+            competence_master_df,
+            members_df
+        )
+    except Exception as e:
+        st.error(f"人材リスク分析の表示中にエラーが発生しました: {e}")
+
+    st.markdown("---")
+
+    # ⑤組織ベンチマーキング
+    try:
+        render_benchmark_dashboard(
+            member_competence_df,
+            competence_master_df,
+            members_df
+        )
+    except Exception as e:
+        st.error(f"ベンチマーク分析の表示中にエラーが発生しました: {e}")
 
 # =========================================================
 # タブ2: スキルギャップ分析
