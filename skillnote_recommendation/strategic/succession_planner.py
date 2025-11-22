@@ -489,13 +489,18 @@ class SuccessionPlanner:
         ]
         
         # 力量タイプ別にスキル数を集計
-        skill_by_type = member_skills.merge(
-            competence_master_df[["力量コード", "力量タイプ"]],
-            on="力量コード",
-            how="left"
-        )
+        type_counts = {}
         
-        type_counts = skill_by_type["力量タイプ"].value_counts().to_dict()
+        if "力量タイプ" in competence_master_df.columns:
+            skill_by_type = member_skills.merge(
+                competence_master_df[["力量コード", "力量タイプ"]],
+                on="力量コード",
+                how="left"
+            )
+            type_counts = skill_by_type["力量タイプ"].value_counts().to_dict()
+        else:
+            # 力量タイプカラムが存在しない場合は全てを「全スキル」としてカウント
+            type_counts = {"全スキル": len(member_skills)}
         
         # 最も多いタイプを特定
         if type_counts:
@@ -590,13 +595,18 @@ class SuccessionPlanner:
         ]
         
         # スキルタイプ別集計
-        skill_by_type = member_skills.merge(
-            competence_master_df[["力量コード", "力量タイプ"]],
-            on="力量コード",
-            how="left"
-        )
+        skill_type_counts = {}
         
-        skill_type_counts = skill_by_type["力量タイプ"].value_counts().to_dict()
+        if "力量タイプ" in competence_master_df.columns:
+            skill_by_type = member_skills.merge(
+                competence_master_df[["力量コード", "力量タイプ"]],
+                on="力量コード",
+                how="left"
+            )
+            skill_type_counts = skill_by_type["力量タイプ"].value_counts().to_dict()
+        else:
+            # 力量タイプカラムが存在しない場合はスキル数のみ
+            skill_type_counts = {"全スキル": len(member_skills)}
         
         # 影響サマリー
         impact_summary = {

@@ -350,8 +350,9 @@ def render_skill_coverage_matrix(
     matrix_data = []
     candidate_names = []
     
-    for _, candidate in top_candidates.iterrows():
-        candidate_names.append(candidate["メンバー名"])
+    for idx, (_, candidate) in enumerate(top_candidates.iterrows(), 1):
+        # 候補者名にランク番号を追加してユニークに
+        candidate_names.append(f"{idx}. {candidate['メンバー名']}")
         member_code = candidate["メンバーコード"]
         
         # このメンバーのスキルを取得
@@ -380,11 +381,11 @@ def render_skill_coverage_matrix(
         
         matrix_data.append(row_data)
     
-    # DataFrameに変換
+    # DataFrameに変換（スキル名を短く）
     matrix_df = pd.DataFrame(
         matrix_data,
         index=candidate_names,
-        columns=[skill_names.get(sc, sc[:8]) for sc in top_skills]
+        columns=[skill_names.get(sc, sc[:8])[:15] + "..." if len(skill_names.get(sc, sc[:8])) > 15 else skill_names.get(sc, sc[:8]) for sc in top_skills]
     )
     
     # ヒートマップ作成
@@ -409,7 +410,15 @@ def render_skill_coverage_matrix(
         xaxis_title="必須スキル",
         yaxis_title="候補者",
         height=max(400, len(top_candidates) * 40),
-        xaxis={'side': 'top'}
+        xaxis={
+            'side': 'top',
+            'tickangle': -45,  # ラベルを斜めに
+            'tickfont': {'size': 9}  # フォントサイズを小さく
+        },
+        yaxis={
+            'tickfont': {'size': 10}
+        },
+        margin=dict(l=100, r=20, t=150, b=20)  # 上部マージンを広げる
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -446,6 +455,11 @@ def render_candidate_comparison_dashboard(
         max_selections=4,
         key="compare_candidates"
     )
+    
+    # デバッグ情報を表示
+    if len(candidate_options) < 2:
+        st.warning(f"⚠️ 比較可能な候補者が{len(candidate_options)}人しかいません。フィルタ条件を緩和してください。")
+        return
     
     if len(selected_labels) < 2:
         st.info("👆 比較するには2人以上の候補者を選択してください")
@@ -507,53 +521,57 @@ def render_candidate_comparison_dashboard(
     # レーダーチャート（スキルカテゴリ別）
     st.markdown("#### 🎯 スキルカテゴリ別強み分析")
     
-    # 力量タイプ別のスキル数を集計
-    radar_data = []
+    # 力量タイプカラムの存在チェック
+    if "力量タイプ" not in competence_master_df.columns:
+        st.info("💡 力量マスタに「力量タイプ」カラムがないため、カテゴリ別分析をスキップします")
+    else:
+        # 力量タイプ別のスキル数を集計
+        radar_data = []
+        
+        for _, candidate in selected_candidates.iterrows():
+            member_code = candidate["メンバーコード"]
+            member_skills = member_competence_df[
+                member_competence_df["メンバーコード"] == member_code
+            ]
+            
+            # 力量タイプ別にカウント
+            skill_by_type = member_skills.merge(
+                competence_master_df[["力量コード", "力量タイプ"]],
+                on="力量コード",
+                how="left"
+            )
+            
+            type_counts = skill_by_type["力量タイプ"].value_counts().to_dict()
+            
+            radar_data.append({
+                "候補者": candidate["メンバー名"],
+                **type_counts
+            })
     
-    for _, candidate in selected_candidates.iterrows():
-        member_code = candidate["メンバーコード"]
-        member_skills = member_competence_df[
-            member_competence_df["メンバーコード"] == member_code
-        ]
-        
-        # 力量タイプ別にカウント
-        skill_by_type = member_skills.merge(
-            competence_master_df[["力量コード", "力量タイプ"]],
-            on="力量コード",
-            how="left"
-        )
-        
-        type_counts = skill_by_type["力量タイプ"].value_counts().to_dict()
-        
-        radar_data.append({
-            "候補者": candidate["メンバー名"],
-            **type_counts
-        })
-    
-    if radar_data:
-        radar_df = pd.DataFrame(radar_data).fillna(0)
-        
-        # レーダーチャート作成
-        categories = [col for col in radar_df.columns if col != "候補者"]
-        
-        fig = go.Figure()
-        
-        for _, row in radar_df.iterrows():
-            fig.add_trace(go.Scatterpolar(
-                r=[row[cat] for cat in categories],
-                theta=categories,
-                fill='toself',
-                name=row["候補者"]
-            ))
-        
-        fig.update_layout(
-            polar=dict(radialaxis=dict(visible=True)),
-            showlegend=True,
-            title="スキルカテゴリ別保有数",
-            height=500
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+        if radar_data:
+            radar_df = pd.DataFrame(radar_data).fillna(0)
+            
+            # レーダーチャート作成
+            categories = [col for col in radar_df.columns if col != "候補者"]
+            
+            fig = go.Figure()
+            
+            for _, row in radar_df.iterrows():
+                fig.add_trace(go.Scatterpolar(
+                    r=[row[cat] for cat in categories],
+                    theta=categories,
+                    fill='toself',
+                    name=row["候補者"]
+                ))
+            
+            fig.update_layout(
+                polar=dict(radialaxis=dict(visible=True)),
+                showlegend=True,
+                title="スキルカテゴリ別保有数",
+                height=500
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
     
     # 差分ハイライト
     st.markdown("---")
@@ -845,7 +863,7 @@ def render_whatif_simulation(
     candidate_options = {}
     for idx, row in candidates_df.head(5).iterrows():
         label = f"{row['メンバー名']} (準備度: {row['準備度スコア']*100:.1f}%)"
-        candidate_options[label] = idx
+        candidate_options[label] = row["メンバーコード"]
     
     selected_label = st.selectbox(
         "シミュレーションする候補者",
@@ -854,8 +872,10 @@ def render_whatif_simulation(
     )
     
     if st.button("🚀 影響をシミュレーション", type="primary", key="run_whatif"):
-        selected_idx = candidate_options[selected_label]
-        selected_candidate = candidates_df.iloc[selected_idx]
+        selected_member_code = candidate_options[selected_label]
+        selected_candidate = candidates_df[
+            candidates_df["メンバーコード"] == selected_member_code
+        ].iloc[0]
         
         with st.spinner("組織への影響を分析中..."):
             try:
