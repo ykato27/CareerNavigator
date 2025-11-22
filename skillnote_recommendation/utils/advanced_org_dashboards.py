@@ -554,7 +554,8 @@ def render_talent_risk_dashboard(
             detail_cols = ["メンバー名"]
             if "職種" in unique_skill_holders.columns:
                 detail_cols.append("職種")
-            detail_cols.append("力量名")
+            if "力量名" in unique_skill_holders.columns:
+                detail_cols.append("力量名")
 
             st.dataframe(
                 unique_skill_holders[detail_cols],
@@ -612,14 +613,27 @@ def render_benchmark_dashboard(
     avg_skills_per_member = total_skill_acquisitions / total_members if total_members > 0 else 0
     coverage_rate = (member_competence_df["力量コード"].nunique() / total_skills_available) * 100
 
+    # 各指標を安全に計算
+    try:
+        diversity_index = calculate_diversity_index(member_competence_df)
+    except Exception as e:
+        diversity_index = 0.0
+        st.warning(f"スキル多様性指数の計算中にエラーが発生しました: {e}")
+
+    try:
+        t_shaped_ratio = calculate_t_shaped_ratio(member_competence_df, competence_master_df)
+    except Exception as e:
+        t_shaped_ratio = 0.0
+        st.warning(f"T字型人材比率の計算中にエラーが発生しました: {e}")
+
     # ベンチマークデータ（業界標準値 - 仮想データ）
     # 実際のプロダクションでは外部APIや設定ファイルから取得
     benchmark_data = {
         "現在の組織": {
             "平均スキル数/人": avg_skills_per_member,
             "スキルカバレッジ率": coverage_rate,
-            "スキル多様性指数": calculate_diversity_index(member_competence_df),
-            "T字型人材比率": calculate_t_shaped_ratio(member_competence_df, competence_master_df)
+            "スキル多様性指数": diversity_index,
+            "T字型人材比率": t_shaped_ratio
         },
         "業界平均": {
             "平均スキル数/人": 8.5,
