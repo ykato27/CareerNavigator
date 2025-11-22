@@ -152,7 +152,7 @@ def render_hierarchical_category_heatmap(
         pivot_df,
         labels=dict(x=group_by, y="カテゴリ", color="保有量" if aggregation_method == "mean" else "保有量"),
         aspect="auto",
-        color_continuous_scale="RdYlBu_r",  # 青→黄→赤のグラデーション（高い値ほど赤）
+        color_continuous_scale="Greens",  # 薄い緑→濃い緑のグラデーション
         text_auto=".2f"
     )
 
@@ -282,7 +282,7 @@ def render_job_role_skill_heatmap(
         pivot_df,
         labels=dict(x="役職", y="職種", color="保有量"),
         aspect="auto",
-        color_continuous_scale="RdYlBu_r",  # 青→黄→赤のグラデーション（統一感）
+        color_continuous_scale="Greens",  # 薄い緑→濃い緑のグラデーション
         text_auto=".2f"
     )
 
