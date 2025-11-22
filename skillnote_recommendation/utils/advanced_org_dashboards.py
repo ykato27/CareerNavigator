@@ -15,23 +15,44 @@ from scipy import stats
 
 def extract_category_hierarchy(category_name: str, level: int = 1) -> str:
     """
-    カテゴリ名から指定階層を抽出
+    カテゴリ名から指定階層までを抽出（フルパス保持）
 
     Args:
         category_name: カテゴリ名（例: "技術 > プログラミング > Python"）
         level: 抽出する階層レベル（1=第一階層、2=第二階層、3=第三階層）
 
     Returns:
-        指定階層のカテゴリ名
+        指定階層までのカテゴリ名（例: "技術 > プログラミング"）
     """
     if pd.isna(category_name):
         return "未分類"
 
     parts = str(category_name).split(" > ")
     if level > len(parts):
-        return " > ".join(parts)  # 全階層を返す
+        return " > ".join(parts)
 
     return " > ".join(parts[:level])
+
+
+def format_category_for_display(category_path: str) -> str:
+    """
+    カテゴリパスを階層的に表示するためにフォーマット
+
+    Args:
+        category_path: カテゴリパス（例: "技術 > プログラミング > Python"）
+
+    Returns:
+        階層に応じてインデント付きの最終階層名
+    """
+    if pd.isna(category_path) or category_path == "未分類":
+        return "未分類"
+
+    parts = str(category_path).split(" > ")
+    level = len(parts)
+
+    # 階層に応じてインデントを追加
+    indent = "  " * (level - 1)
+    return indent + parts[-1]  # 最後の階層のみ表示
 
 
 def render_hierarchical_category_heatmap(
@@ -60,7 +81,7 @@ def render_hierarchical_category_heatmap(
         hierarchy_level = st.selectbox(
             "カテゴリ階層",
             options=[1, 2, 3],
-            format_func=lambda x: f"第{x}階層" if x <= 2 else "第三階層（詳細）",
+            format_func=lambda x: ["第一階層", "第二階層", "第三階層"][x-1],
             help="カテゴリの詳細度を選択します"
         )
 
@@ -147,9 +168,17 @@ def render_hierarchical_category_heatmap(
     else:
         pivot_df = filtered_df.groupby(["カテゴリ階層", group_by])[level_col].median().unstack(fill_value=0)
 
+    # カテゴリ階層でソート（階層的な順序を保持）
+    pivot_df = pivot_df.sort_index()
+
+    # インデックスを階層的な表示にフォーマット
+    formatted_index = [format_category_for_display(cat) for cat in pivot_df.index]
+    pivot_df_display = pivot_df.copy()
+    pivot_df_display.index = formatted_index
+
     # ヒートマップ描画（職種を横軸、カテゴリを縦軸に配置）
     fig = px.imshow(
-        pivot_df,
+        pivot_df_display,
         labels=dict(x=group_by, y="カテゴリ", color="保有量" if aggregation_method == "mean" else "保有量"),
         aspect="auto",
         color_continuous_scale="Greens",  # 薄い緑→濃い緑のグラデーション
@@ -163,6 +192,9 @@ def render_hierarchical_category_heatmap(
         xaxis=dict(
             side='top',  # x軸ラベルを上に配置
             tickangle=-45  # ラベルを斜めに表示
+        ),
+        yaxis=dict(
+            tickfont=dict(family="Courier New, monospace")  # 等幅フォントでインデントを正しく表示
         )
     )
 
