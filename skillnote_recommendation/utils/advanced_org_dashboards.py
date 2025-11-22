@@ -152,7 +152,7 @@ def render_hierarchical_category_heatmap(
         pivot_df,
         labels=dict(x=group_by, y="カテゴリ", color="保有量" if aggregation_method == "mean" else "保有量"),
         aspect="auto",
-        color_continuous_scale="RdYlBu_r",  # 青→黄→赤のグラデーション（高い値ほど赤）
+        color_continuous_scale="Greens",  # 薄い緑→濃い緑のグラデーション
         text_auto=".2f"
     )
 
@@ -282,7 +282,7 @@ def render_job_role_skill_heatmap(
         pivot_df,
         labels=dict(x="役職", y="職種", color="保有量"),
         aspect="auto",
-        color_continuous_scale="RdYlBu_r",  # 青→黄→赤のグラデーション（統一感）
+        color_continuous_scale="Greens",  # 薄い緑→濃い緑のグラデーション
         text_auto=".2f"
     )
 
@@ -335,8 +335,14 @@ def render_skill_portfolio_analysis(
 
     # スキル保有者数の分布分析
     skill_holders = member_competence_df.groupby("力量コード").size().reset_index(name="保有者数")
+
+    # 力量マスタから必要なカラムを取得（存在チェック）
+    master_cols = ["力量コード", "力量名"]
+    if "力量カテゴリー名" in competence_master_df.columns:
+        master_cols.append("力量カテゴリー名")
+
     skill_holders = skill_holders.merge(
-        competence_master_df[["力量コード", "力量名", "力量カテゴリー名"]],
+        competence_master_df[master_cols],
         on="力量コード",
         how="left"
     )
@@ -370,7 +376,7 @@ def render_skill_portfolio_analysis(
             values="スキル数",
             names="リスクレベル",
             title="スキル保有リスク分布",
-            color_discrete_sequence=px.colors.sequential.RdYlGn_r
+            color_discrete_sequence=["#d62728", "#ff7f0e", "#ffbb78", "#2ca02c"]  # 赤→オレンジ→黄→緑
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -390,8 +396,14 @@ def render_skill_portfolio_analysis(
     high_risk_skills = skill_holders[skill_holders["保有者数"] <= 3].sort_values("保有者数")
 
     if len(high_risk_skills) > 0:
+        # 表示するカラムを動的に決定
+        display_cols = ["力量名"]
+        if "力量カテゴリー名" in high_risk_skills.columns:
+            display_cols.append("力量カテゴリー名")
+        display_cols.extend(["保有者数", "保有率", "リスクレベル"])
+
         st.dataframe(
-            high_risk_skills[["力量名", "力量カテゴリー名", "保有者数", "保有率", "リスクレベル"]],
+            high_risk_skills[display_cols],
             use_container_width=True,
             height=300
         )
@@ -432,11 +444,30 @@ def render_talent_risk_dashboard(
 
     # メンバー別スキル保有数
     member_skill_counts = member_competence_df.groupby("メンバーコード").size().reset_index(name="保有スキル数")
+
+    # メンバー情報の結合（カラム存在チェック）
+    member_cols = ["メンバーコード"]
+    optional_cols = {"メンバー名": "メンバーコード", "職種": None, "役職": None}  # フォールバック値
+
+    for col, fallback in optional_cols.items():
+        if col in members_df.columns:
+            member_cols.append(col)
+        elif fallback:
+            # メンバー名がない場合はメンバーコードで代用
+            if col == "メンバー名":
+                members_df = members_df.copy()
+                members_df["メンバー名"] = members_df["メンバーコード"]
+                member_cols.append("メンバー名")
+
     member_skill_counts = member_skill_counts.merge(
-        members_df[["メンバーコード", "メンバー名", "職種", "役職"]],
+        members_df[member_cols],
         on="メンバーコード",
         how="left"
     )
+
+    # メンバー名カラムが存在しない場合の対応
+    if "メンバー名" not in member_skill_counts.columns:
+        member_skill_counts["メンバー名"] = member_skill_counts["メンバーコード"]
 
     # 上位スキル保有者
     st.markdown("#### 🌟 トップスキル保有者（組織のキーパーソン）")
@@ -484,7 +515,7 @@ def render_talent_risk_dashboard(
         unique_skill_holders = member_competence_df[
             member_competence_df["力量コード"].isin(unique_skills)
         ].merge(
-            members_df[["メンバーコード", "メンバー名", "職種", "役職"]],
+            members_df[member_cols],  # 既に構築したmember_colsを使用
             on="メンバーコード",
             how="left"
         ).merge(
@@ -493,12 +524,24 @@ def render_talent_risk_dashboard(
             how="left"
         )
 
-        unique_summary = unique_skill_holders.groupby(
-            ["メンバー名", "職種", "役職"]
-        ).agg({
+        # メンバー名カラムが存在しない場合の対応
+        if "メンバー名" not in unique_skill_holders.columns:
+            unique_skill_holders["メンバー名"] = unique_skill_holders["メンバーコード"]
+
+        # groupbyのカラムを動的に構築
+        groupby_cols = ["メンバー名"]
+        if "職種" in unique_skill_holders.columns:
+            groupby_cols.append("職種")
+        if "役職" in unique_skill_holders.columns:
+            groupby_cols.append("役職")
+
+        unique_summary = unique_skill_holders.groupby(groupby_cols).agg({
             "力量コード": "count"
         }).reset_index()
-        unique_summary.columns = ["メンバー名", "職種", "役職", "ユニークスキル数"]
+
+        # カラム名を設定
+        new_cols = groupby_cols + ["ユニークスキル数"]
+        unique_summary.columns = new_cols
         unique_summary = unique_summary.sort_values("ユニークスキル数", ascending=False)
 
         st.dataframe(unique_summary, use_container_width=True, height=300)
@@ -507,8 +550,14 @@ def render_talent_risk_dashboard(
 
         # 詳細表示
         with st.expander("ユニークスキル詳細を表示"):
+            # 表示カラムを動的に構築
+            detail_cols = ["メンバー名"]
+            if "職種" in unique_skill_holders.columns:
+                detail_cols.append("職種")
+            detail_cols.append("力量名")
+
             st.dataframe(
-                unique_skill_holders[["メンバー名", "職種", "力量名"]],
+                unique_skill_holders[detail_cols],
                 use_container_width=True
             )
     else:
@@ -674,12 +723,19 @@ def calculate_t_shaped_ratio(member_competence_df: pd.DataFrame, competence_mast
     if level_col is None:
         return 0.0
 
+    # 力量カテゴリー名カラムが存在しない場合は計算不可
+    if "力量カテゴリー名" not in competence_master_df.columns:
+        return 0.0
+
     # カテゴリ情報を結合
     merged = member_competence_df.merge(
         competence_master_df[["力量コード", "力量カテゴリー名"]],
         on="力量コード",
         how="left"
     )
+
+    # 保有量を数値型に変換
+    merged[level_col] = pd.to_numeric(merged[level_col], errors='coerce')
 
     t_shaped_count = 0
     total_members = merged["メンバーコード"].nunique()
@@ -690,7 +746,8 @@ def calculate_t_shaped_ratio(member_competence_df: pd.DataFrame, competence_mast
         # 深い専門性チェック（レベル4以上のスキルがあるか）
         has_deep_skill = False
         try:
-            if (member_data[level_col] >= 4).any():
+            valid_levels = member_data[level_col].dropna()
+            if len(valid_levels) > 0 and (valid_levels >= 4).any():
                 has_deep_skill = True
         except:
             pass
