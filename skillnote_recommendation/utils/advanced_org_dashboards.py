@@ -124,10 +124,12 @@ def format_hierarchical_index(category_paths: List[str], hierarchy_level: int) -
         return formatted
 
     else:  # hierarchy_level == 3
-        # 第三階層: 親・子を表示し、孫は同様にインデント
+        # 第三階層: 第一階層 > 第二階層 > 第三階層 を表示
+        # 第二階層ごとにグループ化して視覚的に分かりやすく表示
         formatted = []
-        prev_parent_child = None
-        parent_child_group = []
+
+        # まず、カテゴリを解析してグループ化
+        category_groups = {}  # key: (parent, child), value: list of grandchildren
 
         for cat_path in category_paths:
             parts = cat_path.split(" > ")
@@ -135,46 +137,39 @@ def format_hierarchical_index(category_paths: List[str], hierarchy_level: int) -
                 parent = parts[0]
                 child = parts[1]
                 grandchild = parts[2]
-                parent_child = f"{parent}　{child}"
-
-                if parent_child != prev_parent_child:
-                    parent_child_group.append((cat_path, parent_child, grandchild, True))
-                    prev_parent_child = parent_child
-                else:
-                    parent_child_group.append((cat_path, parent_child, grandchild, False))
+                key = (parent, child)
+                if key not in category_groups:
+                    category_groups[key] = []
+                category_groups[key].append(grandchild)
             elif len(parts) == 2:
                 parent = parts[0]
                 child = parts[1]
-                parent_child_group.append((cat_path, f"{parent}　{child}", "", True))
+                key = (parent, child)
+                if key not in category_groups:
+                    category_groups[key] = []
             else:
-                parent_child_group.append((cat_path, cat_path, "", True))
+                # 第一階層のみの場合
+                key = (cat_path, "")
+                if key not in category_groups:
+                    category_groups[key] = []
 
-        # 各グループ内で最初・続きを判定
-        i = 0
-        while i < len(parent_child_group):
-            cat_path, parent_child, grandchild, is_first = parent_child_group[i]
+        # ソートされた順序でフォーマット
+        for parent, child in sorted(category_groups.keys()):
+            grandchildren = category_groups[(parent, child)]
+            parent_child_label = f"{parent}　{child}" if child else parent
 
-            # 同じ親-子を持つ要素の数をカウント
-            group_size = 1
-            j = i + 1
-            while j < len(parent_child_group) and parent_child_group[j][1] == parent_child:
-                group_size += 1
-                j += 1
-
-            # グループ内の位置に応じてフォーマット
-            for k in range(group_size):
-                _, parent_child, grandchild, _ = parent_child_group[i + k]
-                if k == 0 and grandchild:
-                    # グループの最初: 親-子を表示
-                    formatted.append(f"{parent_child}　{grandchild}")
-                elif k == 0:
-                    # 孫がない場合
-                    formatted.append(parent_child)
-                else:
-                    # グループの2行目以降: 親-子と同じ長さの全角スペースでインデント
-                    formatted.append(f"{'　' * len(parent_child)}　{grandchild}")
-
-            i += group_size
+            if grandchildren:
+                # 第三階層がある場合
+                for idx, grandchild in enumerate(grandchildren):
+                    if idx == 0:
+                        # 最初の行: 親-子-孫を全て表示
+                        formatted.append(f"{parent_child_label}　{grandchild}")
+                    else:
+                        # 2行目以降: 親-子と同じ長さの全角スペースでインデント
+                        formatted.append(f"{'　' * len(parent_child_label)}　{grandchild}")
+            else:
+                # 第三階層がない（第二階層まで）場合
+                formatted.append(parent_child_label)
 
         return formatted
 
