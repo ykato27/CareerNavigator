@@ -621,8 +621,14 @@ def render_talent_risk_dashboard(
     キーパーソンリスク、スキル依存度を分析
     """
     st.markdown("### 🚨 人材リスク分析")
-    st.markdown("""
-    **分析目的**: 特定メンバーへのスキル集中リスクを特定し、組織の脆弱性を可視化
+
+    # 説明を改善
+    st.info("""
+    **📌 この分析の目的**
+    特定メンバーへのスキル集中リスクを特定し、組織の脆弱性を可視化します。
+    - キーパーソンの識別（スキル保有数が多いメンバー）
+    - ユニークスキル保有者の特定（そのメンバーしか持っていないスキル）
+    - スキル分布の偏り分析
     """)
 
     # メンバー別スキル保有数
@@ -652,41 +658,88 @@ def render_talent_risk_dashboard(
     if "メンバー名" not in member_skill_counts.columns:
         member_skill_counts["メンバー名"] = member_skill_counts["メンバーコード"]
 
+    # パレート分析を先に計算
+    top_20_pct_count = max(1, int(len(member_skill_counts) * 0.2))
+    top_20_pct_skills = member_skill_counts.nlargest(top_20_pct_count, "保有スキル数")["保有スキル数"].sum()
+    total_skills = member_skill_counts["保有スキル数"].sum()
+    pareto_ratio = (top_20_pct_skills / total_skills) * 100 if total_skills > 0 else 0
+
+    # サマリーメトリクスを上部に表示
+    st.markdown("---")
+    st.markdown("#### 📊 組織全体のスキル保有状況")
+
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+
+    with metric_col1:
+        st.metric(
+            label="平均スキル数/人",
+            value=f"{member_skill_counts['保有スキル数'].mean():.1f}",
+            help="1人あたりの平均スキル保有数"
+        )
+
+    with metric_col2:
+        st.metric(
+            label="中央値",
+            value=f"{member_skill_counts['保有スキル数'].median():.0f}",
+            help="スキル保有数の中央値"
+        )
+
+    with metric_col3:
+        st.metric(
+            label="最大スキル数",
+            value=f"{member_skill_counts['保有スキル数'].max()}",
+            help="最もスキルを多く保有しているメンバーのスキル数"
+        )
+
+    with metric_col4:
+        alert_icon = "🔴" if pareto_ratio > 50 else "🟡" if pareto_ratio > 40 else "🟢"
+        st.metric(
+            label="パレート比率",
+            value=f"{alert_icon} {pareto_ratio:.1f}%",
+            help="上位20%のメンバーが保有するスキルの割合（高いほど集中リスクあり）"
+        )
+
     # 上位スキル保有者
-    st.markdown("#### 🌟 トップスキル保有者（組織のキーパーソン）")
+    st.markdown("---")
+    st.markdown("#### 🌟 トップスキル保有者（キーパーソン）")
+
     top_members = member_skill_counts.nlargest(10, "保有スキル数")
 
-    col1, col2 = st.columns([2, 1])
+    # グラフを改善
+    fig = px.bar(
+        top_members,
+        y="メンバー名",  # 横棒グラフに変更
+        x="保有スキル数",
+        color="保有スキル数",
+        color_continuous_scale="Blues",
+        text="保有スキル数",
+        orientation='h'  # 横向き
+    )
 
-    with col1:
-        fig = px.bar(
-            top_members,
-            x="メンバー名",
-            y="保有スキル数",
-            color="職種",
-            title="トップ10スキル保有者",
-            text="保有スキル数"
-        )
-        fig.update_traces(texttemplate='%{text}', textposition='outside')
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+    fig.update_traces(
+        texttemplate='%{text}件',
+        textposition='outside',
+        textfont_size=12
+    )
 
-    with col2:
-        st.metric("平均スキル数", f"{member_skill_counts['保有スキル数'].mean():.1f}")
-        st.metric("中央値", f"{member_skill_counts['保有スキル数'].median():.0f}")
-        st.metric("最大値", f"{member_skill_counts['保有スキル数'].max()}")
+    fig.update_layout(
+        height=450,
+        showlegend=False,
+        xaxis_title="保有スキル数",
+        yaxis_title="",
+        yaxis={'categoryorder':'total ascending'},  # 値の昇順でソート
+        font=dict(size=11),
+        margin=dict(l=20, r=20, t=20, b=20)
+    )
 
-        # パレート分析（上位20%が何%のスキルを保有しているか）
-        top_20_pct_count = int(len(member_skill_counts) * 0.2)
-        top_20_pct_skills = member_skill_counts.nlargest(top_20_pct_count, "保有スキル数")["保有スキル数"].sum()
-        total_skills = member_skill_counts["保有スキル数"].sum()
-        pareto_ratio = (top_20_pct_skills / total_skills) * 100
+    st.plotly_chart(fig, use_container_width=True)
 
-        st.metric(
-            "パレート比率",
-            f"{pareto_ratio:.1f}%",
-            help="上位20%のメンバーが保有するスキルの割合"
-        )
+    if pareto_ratio > 50:
+        st.warning(f"⚠️ 上位20%のメンバーが全体の{pareto_ratio:.1f}%のスキルを保有しています。特定メンバーへの依存度が高い状態です。")
+    elif pareto_ratio > 40:
+        st.info(f"💡 上位20%のメンバーが全体の{pareto_ratio:.1f}%のスキルを保有しています。やや集中傾向があります。")
+    else:
+        st.success(f"✅ スキルが比較的分散されています（上位20%で{pareto_ratio:.1f}%）。")
 
     # ユニークスキル分析（そのメンバーしか持っていないスキル）
     st.markdown("#### 🎯 ユニークスキル保有者（離職リスク高）")
