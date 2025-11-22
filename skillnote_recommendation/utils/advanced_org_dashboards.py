@@ -1511,7 +1511,7 @@ def render_enhanced_skill_gap_analysis(
     """)
 
     # 最優先スキルTOP5の詳細アクションプラン
-    top_priority_skills = gap_analysis_df.nlargest(5, "優先度スコア")
+    top_priority_skills = roi_df.nlargest(5, "優先度スコア")
 
     for idx, (_, skill) in enumerate(top_priority_skills.iterrows(), 1):
         with st.expander(f"🎯 アクションプラン {idx}: {skill['力量名']}", expanded=(idx == 1)):
@@ -1665,7 +1665,7 @@ def render_enhanced_skill_gap_analysis(
     st.markdown("---")
     st.markdown("### 💾 分析結果のエクスポート")
 
-    export_df = gap_analysis_df[[
+    export_df = roi_df[[
         "力量名", "現在保有率", "目標保有率", "保有率ギャップ率",
         "ビジネスインパクト", "緊急性", "習得難易度", "優先度スコア", "優先度カテゴリ",
         "育成必要人数", "総投資コスト", "ROI率", "推定習得期間", "クラスターラベル"
