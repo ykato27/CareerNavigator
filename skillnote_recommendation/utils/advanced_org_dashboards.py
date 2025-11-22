@@ -984,6 +984,10 @@ def calculate_t_shaped_ratio(member_competence_df: pd.DataFrame, competence_mast
         how="left"
     )
 
+    # マージ後に力量カテゴリー名が存在しない場合は計算不可
+    if "力量カテゴリー名" not in merged.columns:
+        return 0.0
+
     # 保有量を数値型に変換
     merged[level_col] = pd.to_numeric(merged[level_col], errors='coerce')
 
@@ -1003,8 +1007,11 @@ def calculate_t_shaped_ratio(member_competence_df: pd.DataFrame, competence_mast
             pass
 
         # 幅広い知識チェック（3カテゴリ以上）
-        category_count = member_data["力量カテゴリー名"].nunique()
-        has_broad_knowledge = category_count >= 3
+        try:
+            category_count = member_data["力量カテゴリー名"].dropna().nunique()
+            has_broad_knowledge = category_count >= 3
+        except:
+            has_broad_knowledge = False
 
         if has_deep_skill and has_broad_knowledge:
             t_shaped_count += 1
