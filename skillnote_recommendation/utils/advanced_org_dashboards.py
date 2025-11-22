@@ -514,6 +514,21 @@ def render_skill_portfolio_analysis(
 
     skill_holders["リスクレベル"] = skill_holders["保有者数"].apply(classify_risk)
 
+    # リスクレベルの順序を定義（高リスク→低リスクの順）
+    risk_order = [
+        "🔴 高リスク（1名のみ）",
+        "🟠 中高リスク（2-3名）",
+        "🟡 中リスク（4-5名）",
+        "🟢 低リスク（6名以上）"
+    ]
+
+    # リスクレベルをカテゴリカル型に変換（順序付き）
+    skill_holders["リスクレベル"] = pd.Categorical(
+        skill_holders["リスクレベル"],
+        categories=risk_order,
+        ordered=True
+    )
+
     # リスク分布
     col1, col2 = st.columns(2)
 
@@ -522,12 +537,29 @@ def render_skill_portfolio_analysis(
         risk_dist = skill_holders["リスクレベル"].value_counts().reset_index()
         risk_dist.columns = ["リスクレベル", "スキル数"]
 
+        # リスクレベルの順序に従ってソート
+        risk_dist["リスクレベル"] = pd.Categorical(
+            risk_dist["リスクレベル"],
+            categories=risk_order,
+            ordered=True
+        )
+        risk_dist = risk_dist.sort_values("リスクレベル")
+
+        # 色のマッピング（順序に対応）
+        color_map = {
+            "🔴 高リスク（1名のみ）": "#d62728",      # 赤
+            "🟠 中高リスク（2-3名）": "#ff7f0e",      # オレンジ
+            "🟡 中リスク（4-5名）": "#ffbb78",        # 黄
+            "🟢 低リスク（6名以上）": "#2ca02c"       # 緑
+        }
+
         fig = px.pie(
             risk_dist,
             values="スキル数",
             names="リスクレベル",
             title="スキル保有リスク分布",
-            color_discrete_sequence=["#d62728", "#ff7f0e", "#ffbb78", "#2ca02c"]  # 赤→オレンジ→黄→緑
+            color="リスクレベル",
+            color_discrete_map=color_map
         )
         st.plotly_chart(fig, use_container_width=True)
 
