@@ -131,6 +131,16 @@ def render_hierarchical_category_heatmap(
         st.warning("保有量またはレベル情報が見つかりません")
         return
 
+    # 保有量を数値型に変換（エラー回避）
+    filtered_df[level_col] = pd.to_numeric(filtered_df[level_col], errors='coerce')
+
+    # NaNを除外
+    filtered_df = filtered_df.dropna(subset=[level_col])
+
+    if len(filtered_df) == 0:
+        st.warning("有効な保有量データがありません")
+        return
+
     # 集計
     if aggregation_method == "mean":
         pivot_df = filtered_df.groupby(["カテゴリ階層", group_by])[level_col].mean().unstack(fill_value=0)
@@ -245,6 +255,16 @@ def render_job_role_skill_heatmap(
 
     if level_col is None:
         st.warning("保有量またはレベル情報が見つかりません")
+        return
+
+    # 保有量を数値型に変換（エラー回避）
+    merged_df[level_col] = pd.to_numeric(merged_df[level_col], errors='coerce')
+
+    # NaNを除外
+    merged_df = merged_df.dropna(subset=[level_col])
+
+    if len(merged_df) == 0:
+        st.warning("有効な保有量データがありません")
         return
 
     # 職種×役職でクロス集計
