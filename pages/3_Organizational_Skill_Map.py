@@ -134,25 +134,7 @@ with tab1:
         {"label": "スキル多様性指標", "value": f"{diversity_index:.2f}"}
     ]
     render_metric_cards_row(metrics)
-    
-    st.markdown("---")
-    
-    # スキルカテゴリ別分布
-    st.markdown("### 📈 スキルカテゴリ別分布")
-    
-    if "力量タイプ" in member_competence_df.columns:
-        category_dist = member_competence_df["力量タイプ"].value_counts().reset_index()
-        category_dist.columns = ["カテゴリ", "保有件数"]
-        
-        render_skill_distribution_chart(
-            category_dist,
-            x_col="カテゴリ",
-            y_col="保有件数",
-            title="スキルカテゴリ別保有件数"
-        )
-    else:
-        st.info("スキルカテゴリ情報がありません")
-    
+
     st.markdown("---")
 
     # ①カテゴリ×職種の階層的ヒートマップ
