@@ -62,6 +62,78 @@ def format_category_for_display(category_path: str) -> str:
         return indent + "└" + parts[-1]
 
 
+def format_hierarchical_index(category_paths: List[str], hierarchy_level: int) -> List[str]:
+    """
+    カテゴリパスのリストを階層的に表示するためにフォーマット（セル結合風）
+
+    Args:
+        category_paths: カテゴリパスのリスト
+        hierarchy_level: 選択されている階層レベル (1, 2, 3)
+
+    Returns:
+        フォーマット済みのラベルリスト
+    """
+    if hierarchy_level == 1:
+        # 第一階層: シンプルに表示
+        return [cat.split(" > ")[0] if " > " in cat else cat for cat in category_paths]
+
+    elif hierarchy_level == 2:
+        # 第二階層: セル結合風に表示
+        formatted = []
+        prev_parent = None
+        parent_group = []
+
+        for cat_path in category_paths:
+            parts = cat_path.split(" > ")
+            if len(parts) >= 2:
+                parent = parts[0]
+                child = parts[1]
+
+                if parent != prev_parent:
+                    parent_group.append((cat_path, parent, child, True))  # グループの最初
+                    prev_parent = parent
+                else:
+                    parent_group.append((cat_path, parent, child, False))  # グループの続き
+            else:
+                parent_group.append((cat_path, cat_path, "", True))
+
+        # 各グループ内で最初・中間・最後を判定
+        i = 0
+        while i < len(parent_group):
+            cat_path, parent, child, is_first = parent_group[i]
+
+            # 同じ親を持つ要素の数をカウント
+            group_size = 1
+            j = i + 1
+            while j < len(parent_group) and parent_group[j][1] == parent:
+                group_size += 1
+                j += 1
+
+            # グループ内の位置に応じてフォーマット
+            for k in range(group_size):
+                _, _, child, _ = parent_group[i + k]
+                if group_size == 1:
+                    # グループに1つだけ
+                    formatted.append(f"{parent} ─ {child}")
+                elif k == 0:
+                    # グループの最初
+                    formatted.append(f"{parent} ┬ {child}")
+                elif k == group_size - 1:
+                    # グループの最後
+                    formatted.append(f"{'　' * len(parent)} └ {child}")
+                else:
+                    # グループの中間
+                    formatted.append(f"{'　' * len(parent)} ├ {child}")
+
+            i += group_size
+
+        return formatted
+
+    else:  # hierarchy_level == 3
+        # 第三階層: インデント付き
+        return ["    └" + cat_path.split(" > ")[-1] if " > " in cat_path else cat_path for cat_path in category_paths]
+
+
 def render_hierarchical_category_heatmap(
     member_competence_df: pd.DataFrame,
     competence_master_df: pd.DataFrame,
@@ -178,8 +250,8 @@ def render_hierarchical_category_heatmap(
     # カテゴリ階層でソート（階層的な順序を保持）
     pivot_df = pivot_df.sort_index()
 
-    # インデックスを階層的な表示にフォーマット
-    formatted_index = [format_category_for_display(cat) for cat in pivot_df.index]
+    # インデックスを階層的な表示にフォーマット（セル結合風）
+    formatted_index = format_hierarchical_index(list(pivot_df.index), hierarchy_level)
     pivot_df_display = pivot_df.copy()
     pivot_df_display.index = formatted_index
 
