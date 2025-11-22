@@ -533,16 +533,20 @@ def render_candidate_comparison_dashboard(
             member_skills = member_competence_df[
                 member_competence_df["メンバーコード"] == member_code
             ]
-            
+
             # 力量タイプ別にカウント
             skill_by_type = member_skills.merge(
                 competence_master_df[["力量コード", "力量タイプ"]],
                 on="力量コード",
                 how="left"
             )
-            
-            type_counts = skill_by_type["力量タイプ"].value_counts().to_dict()
-            
+
+            # マージ後に力量タイプカラムが存在するか確認
+            if "力量タイプ" in skill_by_type.columns and not skill_by_type.empty:
+                type_counts = skill_by_type["力量タイプ"].value_counts().to_dict()
+            else:
+                type_counts = {}
+
             radar_data.append({
                 "候補者": candidate["メンバー名"],
                 **type_counts
