@@ -78,7 +78,7 @@ def format_hierarchical_index(category_paths: List[str], hierarchy_level: int) -
         return [cat.split(" > ")[0] if " > " in cat else cat for cat in category_paths]
 
     elif hierarchy_level == 2:
-        # 第二階層: セル結合風に表示
+        # 第二階層: セル結合風に表示（罫線なし、スペースのみ）
         formatted = []
         prev_parent = None
         parent_group = []
@@ -109,29 +109,74 @@ def format_hierarchical_index(category_paths: List[str], hierarchy_level: int) -
                 group_size += 1
                 j += 1
 
-            # グループ内の位置に応じてフォーマット
+            # グループ内の位置に応じてフォーマット（罫線なし）
             for k in range(group_size):
                 _, _, child, _ = parent_group[i + k]
-                if group_size == 1:
-                    # グループに1つだけ
-                    formatted.append(f"{parent} ─ {child}")
-                elif k == 0:
-                    # グループの最初
-                    formatted.append(f"{parent} ┬ {child}")
-                elif k == group_size - 1:
-                    # グループの最後
-                    formatted.append(f"{parent} └ {child}")
+                if k == 0:
+                    # グループの最初: 親名を表示
+                    formatted.append(f"{parent}　{child}")
                 else:
-                    # グループの中間
-                    formatted.append(f"{parent} ├ {child}")
+                    # グループの2行目以降: 親名と同じ長さの全角スペースでインデント
+                    formatted.append(f"{'　' * len(parent)}　{child}")
 
             i += group_size
 
         return formatted
 
     else:  # hierarchy_level == 3
-        # 第三階層: インデント付き
-        return ["    └" + cat_path.split(" > ")[-1] if " > " in cat_path else cat_path for cat_path in category_paths]
+        # 第三階層: 親・子を表示し、孫は同様にインデント
+        formatted = []
+        prev_parent_child = None
+        parent_child_group = []
+
+        for cat_path in category_paths:
+            parts = cat_path.split(" > ")
+            if len(parts) >= 3:
+                parent = parts[0]
+                child = parts[1]
+                grandchild = parts[2]
+                parent_child = f"{parent}　{child}"
+
+                if parent_child != prev_parent_child:
+                    parent_child_group.append((cat_path, parent_child, grandchild, True))
+                    prev_parent_child = parent_child
+                else:
+                    parent_child_group.append((cat_path, parent_child, grandchild, False))
+            elif len(parts) == 2:
+                parent = parts[0]
+                child = parts[1]
+                parent_child_group.append((cat_path, f"{parent}　{child}", "", True))
+            else:
+                parent_child_group.append((cat_path, cat_path, "", True))
+
+        # 各グループ内で最初・続きを判定
+        i = 0
+        while i < len(parent_child_group):
+            cat_path, parent_child, grandchild, is_first = parent_child_group[i]
+
+            # 同じ親-子を持つ要素の数をカウント
+            group_size = 1
+            j = i + 1
+            while j < len(parent_child_group) and parent_child_group[j][1] == parent_child:
+                group_size += 1
+                j += 1
+
+            # グループ内の位置に応じてフォーマット
+            for k in range(group_size):
+                _, parent_child, grandchild, _ = parent_child_group[i + k]
+                if k == 0 and grandchild:
+                    # グループの最初: 親-子を表示
+                    formatted.append(f"{parent_child}　{grandchild}")
+                elif k == 0:
+                    # 孫がない場合
+                    formatted.append(parent_child)
+                else:
+                    # グループの2行目以降: 親-子と同じ長さの全角スペースでインデント
+                    formatted.append(f"{'　' * len(parent_child)}　{grandchild}")
+
+            i += group_size
+
+        return formatted
 
 
 def render_hierarchical_category_heatmap(
