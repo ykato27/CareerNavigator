@@ -42,7 +42,7 @@ def format_category_for_display(category_path: str) -> str:
         category_path: カテゴリパス（例: "技術 > プログラミング > Python"）
 
     Returns:
-        階層に応じてインデント付きの最終階層名
+        階層に応じた表示形式
     """
     if pd.isna(category_path) or category_path == "未分類":
         return "未分類"
@@ -50,9 +50,16 @@ def format_category_for_display(category_path: str) -> str:
     parts = str(category_path).split(" > ")
     level = len(parts)
 
-    # 階層に応じてインデントを追加
-    indent = "  " * (level - 1)
-    return indent + parts[-1]  # 最後の階層のみ表示
+    if level == 1:
+        # 第一階層: そのまま表示
+        return parts[0]
+    elif level == 2:
+        # 第二階層: "第一階層─第二階層" の形式
+        return f"{parts[0]}─{parts[1]}"
+    else:
+        # 第三階層: "第一階層─第二階層─第三階層" の形式、インデント追加
+        indent = "    "
+        return indent + "└" + parts[-1]
 
 
 def render_hierarchical_category_heatmap(
