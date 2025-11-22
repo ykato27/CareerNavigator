@@ -334,3 +334,340 @@ class SuccessionPlanner:
             return "1-2年"
         else:
             return "2年以上"
+    
+    def generate_development_roadmap(
+        self,
+        candidate: pd.Series,
+        target_profile: pd.DataFrame,
+        competence_master_df: pd.DataFrame,
+        member_competence_df: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        候補者向けの育成ロードマップを生成
+        
+        Args:
+            candidate: 候補者のSeries
+            target_profile: 目標スキルプロファイル
+            competence_master_df: 力量マスタ
+            member_competence_df: メンバー習得力量データ
+            
+        Returns:
+            育成ロードマップDataFrame
+            - スキル名
+            - 現在レベル
+            - 目標レベル
+            - 優先度（High/Medium/Low）
+            - 推定習得期間（月）
+            - マイルストーン（3ヶ月/6ヶ月/1年後）
+        """
+        if "総合スコア詳細" not in candidate:
+            return pd.DataFrame()
+        
+        detail = candidate["総合スコア詳細"]
+        missing_skill_codes = detail.get("missing_skill_codes", [])
+        
+        if not missing_skill_codes:
+            return pd.DataFrame()
+        
+        # 不足スキルの情報を取得
+        missing_skills_info = target_profile[
+            target_profile["力量コード"].isin(missing_skill_codes)
+        ].copy()
+        
+        # 力量名を追加
+        missing_skills_info = missing_skills_info.merge(
+            competence_master_df[["力量コード", "力量名", "力量タイプ"]],
+            on="力量コード",
+            how="left",
+            suffixes=("", "_master")
+        )
+        
+        # 力量名の重複を解決
+        if "力量名_master" in missing_skills_info.columns:
+            missing_skills_info["力量名"] = missing_skills_info["力量名_master"].fillna(
+                missing_skills_info["力量名"]
+            )
+            missing_skills_info = missing_skills_info.drop(columns=["力量名_master"])
+        
+        # メンバーの現在のスキルレベルを取得
+        member_code = candidate["メンバーコード"]
+        member_skills = member_competence_df[
+            member_competence_df["メンバーコード"] == member_code
+        ].set_index("力量コード")["レベル"].to_dict()
+        
+        # ロードマップを作成
+        roadmap_data = []
+        
+        for _, skill_row in missing_skills_info.iterrows():
+            skill_code = skill_row["力量コード"]
+            skill_name = skill_row["力量名"]
+            target_level = skill_row.get("平均レベル", 3)  # デフォルト3
+            coverage = skill_row.get("保有率", 0.5)  # 保有率
+            
+            # 現在のレベル（保有していない場合は0）
+            current_level = member_skills.get(skill_code, 0)
+            if pd.notna(current_level):
+                current_level = pd.to_numeric(current_level, errors='coerce')
+                if pd.isna(current_level):
+                    current_level = 0
+            else:
+                current_level = 0
+            
+            # 優先度を計算（保有率が高いほど優先度が高い）
+            if coverage >= 0.7:
+                priority = "High"
+                priority_score = 3
+            elif coverage >= 0.4:
+                priority = "Medium"
+                priority_score = 2
+            else:
+                priority = "Low"
+                priority_score = 1
+            
+            # 推定習得期間（月） - レベル差と優先度に基づく
+            level_gap = max(target_level - current_level, 1)
+            estimated_months = int(level_gap * 2)  # 1レベルあたり2ヶ月
+            
+            # マイルストーンを決定
+            if estimated_months <= 3:
+                milestone = "3ヶ月後"
+            elif estimated_months <= 6:
+                milestone = "6ヶ月後"
+            elif estimated_months <= 12:
+                milestone = "1年後"
+            else:
+                milestone = "1年以降"
+            
+            roadmap_data.append({
+                "力量コード": skill_code,
+                "力量名": skill_name,
+                "力量タイプ": skill_row.get("力量タイプ", ""),
+                "現在レベル": current_level,
+                "目標レベル": round(target_level, 1),
+                "レベルギャップ": round(target_level - current_level, 1),
+                "優先度": priority,
+                "優先度スコア": priority_score,
+                "推定習得期間（月）": estimated_months,
+                "マイルストーン": milestone,
+                "保有率": round(coverage * 100, 1)
+            })
+        
+        roadmap_df = pd.DataFrame(roadmap_data)
+        
+        # 優先度スコア順、次に保有率順にソート
+        roadmap_df = roadmap_df.sort_values(
+            ["優先度スコア", "保有率"],
+            ascending=[False, False]
+        ).reset_index(drop=True)
+        
+        return roadmap_df
+    
+    def analyze_candidate_strengths(
+        self,
+        candidate: pd.Series,
+        member_competence_df: pd.DataFrame,
+        competence_master_df: pd.DataFrame,
+        members_df: pd.DataFrame
+    ) -> Dict:
+        """
+        候補者の強みを分析
+        
+        Args:
+            candidate: 候補者のSeries
+            member_competence_df: メンバー習得力量データ
+            competence_master_df: 力量マスタ
+            members_df: メンバーマスタ
+            
+        Returns:
+            強み分析の辞書
+        """
+        member_code = candidate["メンバーコード"]
+        
+        # メンバーのスキルを取得
+        member_skills = member_competence_df[
+            member_competence_df["メンバーコード"] == member_code
+        ]
+        
+        # 力量タイプ別にスキル数を集計
+        skill_by_type = member_skills.merge(
+            competence_master_df[["力量コード", "力量タイプ"]],
+            on="力量コード",
+            how="left"
+        )
+        
+        type_counts = skill_by_type["力量タイプ"].value_counts().to_dict()
+        
+        # 最も多いタイプを特定
+        if type_counts:
+            top_type = max(type_counts, key=type_counts.get)
+            top_type_count = type_counts[top_type]
+        else:
+            top_type = "不明"
+            top_type_count = 0
+        
+        # 全体の中での位置（スキル数の百分位数）
+        all_member_skill_counts = member_competence_df.groupby("メンバーコード").size()
+        member_skill_count = len(member_skills)
+        percentile = (all_member_skill_counts < member_skill_count).sum() / len(all_member_skill_counts) * 100
+        
+        return {
+            "総スキル数": member_skill_count,
+            "スキル数百分位": round(percentile, 1),
+            "最強カテゴリ": top_type,
+            "最強カテゴリスキル数": top_type_count,
+            "カテゴリ別内訳": type_counts
+        }
+    
+    def simulate_succession_impact(
+        self,
+        candidate: pd.Series,
+        members_df: pd.DataFrame,
+        member_competence_df: pd.DataFrame,
+        competence_master_df: pd.DataFrame,
+        position_column: str = "役職"
+    ) -> Dict:
+        """
+        後継者選択の組織への影響をシミュレーション（What-If分析）
+        
+        Args:
+            candidate: 選択された候補者のSeries
+            members_df: メンバーマスタ
+            member_competence_df: メンバー習得力量データ
+            competence_master_df: 力量マスタ
+            position_column: 役職カラム名
+            
+        Returns:
+            影響分析の辞書
+        """
+        member_code = candidate["メンバーコード"]
+        member_name = candidate["メンバー名"]
+        current_position = candidate.get("現在の役職", "")
+        
+        # 現在のポジションが空くことによる影響
+        current_position_holders = members_df[
+            members_df[position_column] == current_position
+        ]
+        
+        # 連鎖分析: 現在のポジションの後継者候補も検索
+        cascade_candidates = None
+        cascade_profile = None
+        
+        if current_position and len(current_position_holders) > 0:
+            try:
+                # 現在のポジションのスキルプロファイル計算
+                cascade_profile = self.calculate_position_skill_profile(
+                    current_position,
+                    members_df,
+                    member_competence_df,
+                    competence_master_df,
+                    position_column
+                )
+                
+                # 候補者自身を除外して後継者検索
+                cascade_candidates = self.find_succession_candidates(
+                    current_position,
+                    members_df,
+                    member_competence_df,
+                    competence_master_df,
+                    position_column=position_column,
+                    exclude_current_holders=True,
+                    max_candidates=5
+                )
+                
+                # 選択した候補者自身も結果から除外
+                if cascade_candidates is not None and not cascade_candidates.empty:
+                    cascade_candidates = cascade_candidates[
+                        cascade_candidates["メンバーコード"] != member_code
+                    ]
+                
+            except Exception as e:
+                logger.warning(f"連鎖分析でエラー: {e}")
+                cascade_candidates = pd.DataFrame()
+        
+        # 候補者のスキル分析
+        member_skills = member_competence_df[
+            member_competence_df["メンバーコード"] == member_code
+        ]
+        
+        # スキルタイプ別集計
+        skill_by_type = member_skills.merge(
+            competence_master_df[["力量コード", "力量タイプ"]],
+            on="力量コード",
+            how="left"
+        )
+        
+        skill_type_counts = skill_by_type["力量タイプ"].value_counts().to_dict()
+        
+        # 影響サマリー
+        impact_summary = {
+            "候補者名": member_name,
+            "現在のポジション": current_position,
+            "現在のポジション保有者数": len(current_position_holders),
+            "連鎖的な影響": {
+                "空くポジション": current_position,
+                "後継者候補数": len(cascade_candidates) if cascade_candidates is not None else 0,
+                "後継者候補": cascade_candidates.head(3)["メンバー名"].tolist() if cascade_candidates is not None and not cascade_candidates.empty else [],
+                "連鎖候補詳細": cascade_candidates
+            },
+            "移動するスキル": {
+                "総スキル数": len(member_skills),
+                "スキルタイプ別": skill_type_counts
+            }
+        }
+        
+        return impact_summary
+    
+    def calculate_organization_balance_score(
+        self,
+        members_df: pd.DataFrame,
+        member_competence_df: pd.DataFrame,
+        group_column: str = "職種"
+    ) -> Dict:
+        """
+        組織全体のスキルバランススコアを計算
+        
+        Args:
+            members_df: メンバーマスタ
+            member_competence_df: メンバー習得力量データ
+            group_column: グループカラム（職種など）
+            
+        Returns:
+            バランススコアの辞書
+        """
+        # グループ別のメンバー数とスキル数を集計
+        group_stats = []
+        
+        for group in members_df[group_column].dropna().unique():
+            group_members = members_df[members_df[group_column] == group]["メンバーコード"].tolist()
+            
+            group_skills = member_competence_df[
+                member_competence_df["メンバーコード"].isin(group_members)
+            ]
+            
+            total_skills = len(group_skills)
+            unique_skills = group_skills["力量コード"].nunique()
+            avg_skills_per_member = total_skills / len(group_members) if len(group_members) > 0 else 0
+            
+            group_stats.append({
+                "グループ": group,
+                "メンバー数": len(group_members),
+                "総スキル数": total_skills,
+                "ユニークスキル数": unique_skills,
+                "平均スキル数/人": round(avg_skills_per_member, 2)
+            })
+        
+        group_stats_df = pd.DataFrame(group_stats)
+        
+        # バランススコアを計算（標準偏差が小さいほど良い）
+        if len(group_stats_df) > 0:
+            skill_variance = group_stats_df["平均スキル数/人"].std()
+            # スコアは0-100で、標準偏差が小さいほど高い
+            balance_score = max(0, 100 - skill_variance * 10)
+        else:
+            balance_score = 0
+        
+        return {
+            "バランススコア": round(balance_score, 1),
+            "グループ別統計": group_stats_df,
+            "スキル分散": round(skill_variance, 2) if len(group_stats_df) > 0 else 0
+        }

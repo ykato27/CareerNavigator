@@ -26,7 +26,13 @@ from skillnote_recommendation.utils.strategic_ui_components import (
     render_skill_gap_comparison,
     render_transfer_simulator_ui,
     render_before_after_comparison,
-    render_skill_distribution_comparison
+    render_skill_distribution_comparison,
+    render_skill_coverage_matrix,
+    render_candidate_comparison_dashboard,
+    render_development_roadmap,
+    render_candidate_detail_expanded,
+    render_whatif_simulation,
+    render_scenario_management
 )
 
 # =========================================================
@@ -440,8 +446,103 @@ with tab4:
         st.markdown(f"### 🎯 **{target_position}** の後継者候補ランキング")
         
         if len(candidates_df) > 0:
-            # ランキングテーブル
-            render_succession_candidate_table(candidates_df, top_n=10)
+            # インタラクティブフィルタUI
+            with st.expander("🔍 フィルタ & ソート設定", expanded=False):
+                col_filter1, col_filter2, col_filter3 = st.columns(3)
+                
+                with col_filter1:
+                    # 準備度スコアの最小値スライダー
+                    min_readiness = st.slider(
+                        "最小準備度スコア (%)",
+                        min_value=0,
+                        max_value=100,
+                        value=0,
+                        step=5,
+                        key="min_readiness_score"
+                    )
+                
+                with col_filter2:
+                    # ソート基準選択
+                    sort_option = st.selectbox(
+                        "並び順",
+                        options=[
+                            "準備度スコア（高→低）",
+                            "スキルマッチ度（高→低）",
+                            "不足スキル数（少→多）",
+                            "保有スキル数（多→少）"
+                        ],
+                        key="sort_option"
+                    )
+                
+                with col_filter3:
+                    # 表示件数
+                    display_count = st.number_input(
+                        "表示件数",
+                        min_value=3,
+                        max_value=50,
+                        value=10,
+                        step=1,
+                        key="display_count"
+                    )
+                
+                # 隠れた逸材検索
+                st.markdown("#### 🌟 特殊検索")
+                col_special1, col_special2 = st.columns(2)
+                
+                with col_special1:
+                    if st.button("💎 隠れた逸材を探す", help="準備度は中程度だが、特定分野で突出したスキルを持つ候補者"):
+                        # 準備度50-70%かつスキルマッチ度75%以上
+                        st.session_state.show_hidden_gems = True
+                
+                with col_special2:
+                    if st.button("⚡ 即戦力候補を探す", help="準備度80%以上の候補者"):
+                        st.session_state.show_ready_candidates = True
+            
+            # フィルタリング適用
+            filtered_candidates = candidates_df.copy()
+            
+            # 準備度スコアでフィルタ
+            filtered_candidates = filtered_candidates[
+                filtered_candidates["準備度スコア"] >= (min_readiness / 100)
+            ]
+            
+            # 特殊検索の適用
+            if st.session_state.get("show_hidden_gems", False):
+                filtered_candidates = filtered_candidates[
+                    (filtered_candidates["準備度スコア"] >= 0.5) &
+                    (filtered_candidates["準備度スコア"] <= 0.7) &
+                    (filtered_candidates["スキルマッチ度"] >= 0.75)
+                ]
+                st.info("💎 隠れた逸材モード: 準備度50-70%、スキルマッチ度75%以上")
+                st.session_state.show_hidden_gems = False
+            
+            if st.session_state.get("show_ready_candidates", False):
+                filtered_candidates = filtered_candidates[
+                    filtered_candidates["準備度スコア"] >= 0.8
+                ]
+                st.info("⚡ 即戦力候補モード: 準備度80%以上")
+                st.session_state.show_ready_candidates = False
+            
+            # ソート適用
+            if "準備度スコア" in sort_option:
+                filtered_candidates = filtered_candidates.sort_values("準備度スコア", ascending=False)
+            elif "スキルマッチ度" in sort_option:
+                filtered_candidates = filtered_candidates.sort_values("スキルマッチ度", ascending=False)
+            elif "不足スキル数" in sort_option:
+                filtered_candidates = filtered_candidates.sort_values("不足スキル数", ascending=True)
+            elif "保有スキル数" in sort_option:
+                filtered_candidates = filtered_candidates.sort_values("保有スキル数", ascending=False)
+            
+            # 件数制限
+            filtered_candidates = filtered_candidates.head(display_count)
+            
+            if len(filtered_candidates) == 0:
+                st.warning("⚠️ フィルタ条件に一致する候補者がいません")
+            else:
+                st.success(f"✅ {len(filtered_candidates)}人の候補者を表示中")
+                
+                # ランキングテーブル
+                render_succession_candidate_table(filtered_candidates, top_n=display_count)
             
             # エクスポート
             st.markdown("### 💾 データエクスポート")
@@ -477,10 +578,91 @@ with tab4:
                                 competence_master_df["力量コード"].isin(missing_codes)
                             ]["力量名"].tolist()[:10]
                             st.markdown(f"**不足スキル（上位10件）**: {', '.join(missing_names)}")
+            
+            st.markdown("---")
+            
+            # スキルカバレッジマトリクス
+            st.markdown("### 📊 スキルカバレッジマトリクス")
+            st.markdown("候補者ごとに必須スキルの保有状況を可視化します")
+            
+            try:
+                if "target_profile" in st.session_state and st.session_state.target_profile is not None:
+                    render_skill_coverage_matrix(
+                        filtered_candidates,
+                        st.session_state.target_profile,
+                        member_competence_df,
+                        competence_master_df,
+                        max_candidates=min(10, len(filtered_candidates)),
+                        max_skills=15
+                    )
+                else:
+                    st.info("目標プロファイルが見つかりません")
+            except Exception as e:
+                st.error(f"スキルカバレッジマトリクスの表示中にエラーが発生しました: {e}")
+            
+            st.markdown("---")
+            
+            # 候補者比較ダッシュボード
+            render_candidate_comparison_dashboard(
+                filtered_candidates,
+                member_competence_df,
+                competence_master_df
+            )
+            
+            st.markdown("---")
+            
+            # 候補者詳細ドリルダウン
+            st.markdown("### 🔬 候補者詳細分析")
+            st.markdown("候補者を選択すると、詳細な強み分析と育成ロードマップが表示されます")
+            
+            # 候補者選択
+            candidate_names = filtered_candidates.head(10)["メンバー名"].tolist()
+            selected_candidate_name = st.selectbox(
+                "詳細分析する候補者を選択",
+                options=candidate_names,
+                key="detail_candidate_select"
+            )
+            
+            if selected_candidate_name:
+                # 選択された候補者のデータを取得
+                selected_candidate_row = filtered_candidates[
+                    filtered_candidates["メンバー名"] == selected_candidate_name
+                ].iloc[0]
+                
+                # 詳細分析を表示
+                try:
+                    with st.container():
+                        render_candidate_detail_expanded(
+                            selected_candidate_row,
+                            st.session_state.target_profile,
+                            member_competence_df,
+                            competence_master_df,
+                            members_df,
+                            st.session_state.succession_planner
+                        )
+                except Exception as e:
+                    st.error(f"詳細分析の表示中にエラーが発生しました: {e}")
+                    st.exception(e)
+            
+            st.markdown("---")
+            
+            # What-Ifシミュレーション
+            render_whatif_simulation(
+                filtered_candidates,
+                members_df,
+                member_competence_df,
+                competence_master_df,
+                st.session_state.succession_planner
+            )
+            
+            st.markdown("---")
+            
+            # シナリオ管理
+            render_scenario_management()
         else:
             st.info("候補者が見つかりませんでした")
     else:
-        st.info("👆 上記の「後継者候補を検索」ボタンをクリックして分析を開始してください")
+        st.info("👆 上記の「後継者候補を検索」ボタンをクリックして分析を开始してください")
 
 # =========================================================
 # タブ5: 組織シミュレーション
@@ -605,4 +787,3 @@ with tab5:
                 st.exception(e)
     else:
         st.info("👆 「現在の組織状態をキャプチャ」ボタンをクリックしてシミュレーションを開始してください")
-        st.exception(e)
