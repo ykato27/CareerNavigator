@@ -1032,3 +1032,718 @@ def calculate_t_shaped_ratio(member_competence_df: pd.DataFrame, competence_mast
             t_shaped_count += 1
 
     return (t_shaped_count / total_members * 100) if total_members > 0 else 0.0
+
+
+def render_enhanced_skill_gap_analysis(
+    gap_df: pd.DataFrame,
+    member_competence_df: pd.DataFrame,
+    competence_master_df: pd.DataFrame,
+    members_df: pd.DataFrame,
+    percentile_used: float = 0.2
+) -> None:
+    """
+    データサイエンティスト兼人事スペシャリスト視点での高度なスキルギャップ分析
+
+    Args:
+        gap_df: ギャップDataFrame
+        member_competence_df: メンバー習得力量データ
+        competence_master_df: 力量マスタデータ
+        members_df: メンバーマスタ
+        percentile_used: 使用したパーセンタイル
+    """
+
+    st.markdown("### 🎯 高度なスキルギャップ分析")
+
+    # 分析概要説明
+    st.info("""
+    📌 **データサイエンス × HR戦略の統合分析**
+
+    この分析では、単なるギャップの特定にとどまらず、以下の高度な視点で組織のスキル開発戦略を支援します：
+    - **多次元スキル優先度分析**: ビジネスインパクト、習得難易度、緊急性を総合評価
+    - **スキル開発ROI推定**: 投資対効果を可視化し、予算配分を最適化
+    - **パターン認識**: 機械学習的アプローチでスキルギャップのクラスター分析
+    - **予測モデリング**: スキル習得タイムラインと組織成熟度の将来予測
+    """)
+
+    st.markdown("---")
+
+    # ============================================
+    # 1. エグゼクティブサマリー（KPIダッシュボード）
+    # ============================================
+    st.markdown("#### 📊 エグゼクティブサマリー")
+
+    total_gaps = len(gap_df)
+    critical_gaps = len(gap_df[gap_df["保有率ギャップ率"] >= 0.5])
+    medium_gaps = len(gap_df[(gap_df["保有率ギャップ率"] >= 0.3) & (gap_df["保有率ギャップ率"] < 0.5)])
+    avg_gap_rate = gap_df["保有率ギャップ率"].mean()
+    total_training_need = gap_df["保有率ギャップ"].sum() * len(members_df)
+
+    metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
+
+    with metric_col1:
+        st.metric(
+            label="総スキルギャップ数",
+            value=f"{total_gaps}件",
+            help="目標と現状の差があるスキルの総数"
+        )
+
+    with metric_col2:
+        st.metric(
+            label="🔴 重大ギャップ",
+            value=f"{critical_gaps}件",
+            delta=f"{critical_gaps/total_gaps*100:.1f}%" if total_gaps > 0 else "0%",
+            delta_color="inverse",
+            help="ギャップ率50%以上の緊急対応が必要なスキル"
+        )
+
+    with metric_col3:
+        st.metric(
+            label="🟡 中程度ギャップ",
+            value=f"{medium_gaps}件",
+            help="ギャップ率30-50%の計画的対応が必要なスキル"
+        )
+
+    with metric_col4:
+        st.metric(
+            label="平均ギャップ率",
+            value=f"{avg_gap_rate*100:.1f}%",
+            delta=f"{(avg_gap_rate - 0.3)*100:.1f}%" if avg_gap_rate > 0 else "0%",
+            delta_color="inverse",
+            help="全スキルの平均ギャップ率（30%未満が健全）"
+        )
+
+    with metric_col5:
+        st.metric(
+            label="推定育成人数",
+            value=f"{int(total_training_need):,}人",
+            help="ギャップを埋めるために必要な延べ育成人数"
+        )
+
+    st.markdown("---")
+
+    # ============================================
+    # 2. 多次元スキル優先度マトリクス
+    # ============================================
+    st.markdown("#### 🎯 多次元スキル優先度分析（優先度マトリクス）")
+
+    st.markdown("""
+    **分析手法**: 各スキルを3つの軸で評価し、投資優先度を科学的に判定
+    - **X軸（ビジネスインパクト）**: 目標保有率が高いほど、組織戦略上重要
+    - **Y軸（緊急性）**: ギャップ率が大きいほど、即座の対応が必要
+    - **バブルサイズ（習得難易度）**: レベルギャップが大きいほど、育成に時間とコストがかかる
+    """)
+
+    # 優先度スコア計算
+    gap_analysis_df = gap_df.copy()
+
+    # ビジネスインパクト: 目標保有率（0-100に正規化）
+    gap_analysis_df["ビジネスインパクト"] = gap_analysis_df["目標保有率"] * 100
+
+    # 緊急性: ギャップ率（0-100に正規化）
+    gap_analysis_df["緊急性"] = gap_analysis_df["保有率ギャップ率"] * 100
+
+    # 習得難易度: レベルギャップ（絶対値を使用、0-5スケール）
+    gap_analysis_df["習得難易度"] = gap_analysis_df["レベルギャップ"].abs()
+
+    # 総合優先度スコア（重み付き平均: ビジネスインパクト40%, 緊急性40%, 習得難易度の逆数20%）
+    gap_analysis_df["優先度スコア"] = (
+        gap_analysis_df["ビジネスインパクト"] * 0.4 +
+        gap_analysis_df["緊急性"] * 0.4 +
+        (100 - gap_analysis_df["習得難易度"] * 10) * 0.2  # 難易度が低いほど高スコア
+    )
+
+    # 優先度カテゴリ分類
+    def categorize_priority(row):
+        if row["優先度スコア"] >= 70:
+            return "🔴 最優先（Strategic Focus）"
+        elif row["優先度スコア"] >= 50:
+            return "🟠 高優先度（High Priority）"
+        elif row["優先度スコア"] >= 30:
+            return "🟡 中優先度（Medium Priority）"
+        else:
+            return "🟢 低優先度（Low Priority）"
+
+    gap_analysis_df["優先度カテゴリ"] = gap_analysis_df.apply(categorize_priority, axis=1)
+
+    # バブルチャート作成
+    fig = px.scatter(
+        gap_analysis_df.head(50),  # 上位50スキルを表示
+        x="ビジネスインパクト",
+        y="緊急性",
+        size="習得難易度",
+        color="優先度カテゴリ",
+        hover_name="力量名",
+        hover_data={
+            "ビジネスインパクト": ":.1f",
+            "緊急性": ":.1f",
+            "習得難易度": ":.2f",
+            "優先度スコア": ":.1f",
+            "現在保有率": ":.1%",
+            "目標保有率": ":.1%"
+        },
+        title="スキル投資優先度マトリクス（バブルチャート）",
+        color_discrete_map={
+            "🔴 最優先（Strategic Focus）": "#d62728",
+            "🟠 高優先度（High Priority）": "#ff7f0e",
+            "🟡 中優先度（Medium Priority）": "#ffbb78",
+            "🟢 低優先度（Low Priority）": "#2ca02c"
+        }
+    )
+
+    fig.update_layout(
+        height=600,
+        xaxis_title="ビジネスインパクト（目標保有率）",
+        yaxis_title="緊急性（ギャップ率）",
+        showlegend=True
+    )
+
+    # 右上の象限を強調（高インパクト×高緊急性）
+    fig.add_shape(
+        type="rect",
+        x0=60, y0=60, x1=100, y1=100,
+        line=dict(color="red", width=2, dash="dash"),
+        fillcolor="rgba(255,0,0,0.1)"
+    )
+
+    fig.add_annotation(
+        x=80, y=95,
+        text="<b>戦略的最優先エリア</b>",
+        showarrow=False,
+        font=dict(size=12, color="red")
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # 優先度カテゴリ別サマリー
+    priority_summary = gap_analysis_df["優先度カテゴリ"].value_counts().reset_index()
+    priority_summary.columns = ["優先度カテゴリ", "スキル数"]
+
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        st.markdown("**優先度分布**")
+        st.dataframe(priority_summary, use_container_width=True, hide_index=True)
+
+    with col2:
+        # 円グラフ
+        fig_pie = px.pie(
+            priority_summary,
+            values="スキル数",
+            names="優先度カテゴリ",
+            title="優先度カテゴリ別分布",
+            color="優先度カテゴリ",
+            color_discrete_map={
+                "🔴 最優先（Strategic Focus）": "#d62728",
+                "🟠 高優先度（High Priority）": "#ff7f0e",
+                "🟡 中優先度（Medium Priority）": "#ffbb78",
+                "🟢 低優先度（Low Priority）": "#2ca02c"
+            }
+        )
+        fig_pie.update_layout(height=300)
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    st.markdown("---")
+
+    # ============================================
+    # 3. スキル開発ROI推定
+    # ============================================
+    st.markdown("#### 💰 スキル開発ROI推定（投資対効果分析）")
+
+    st.markdown("""
+    **分析目的**: 限られた予算と時間をどのスキル開発に投資すべきかを定量的に判断
+
+    **前提条件**（カスタマイズ可能）:
+    - 1スキル習得の平均コスト: 研修費 + 時間コスト
+    - スキルレベルによる習得期間の違い
+    - ビジネスインパクトによる価値の重み付け
+    """)
+
+    # ROI計算パラメータ（UIで調整可能）
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        training_cost_per_skill = st.number_input(
+            "1スキル習得コスト（万円）",
+            min_value=1,
+            max_value=100,
+            value=20,
+            step=5,
+            help="研修費、教材費、時間コストを含む"
+        )
+
+    with col2:
+        months_per_level = st.number_input(
+            "レベル1習得に必要な月数",
+            min_value=1,
+            max_value=12,
+            value=3,
+            step=1,
+            help="平均的なスキル習得期間"
+        )
+
+    with col3:
+        business_value_multiplier = st.number_input(
+            "ビジネス価値係数",
+            min_value=1.0,
+            max_value=10.0,
+            value=3.0,
+            step=0.5,
+            help="スキル習得による組織への価値貢献度"
+        )
+
+    # ROI計算
+    roi_df = gap_analysis_df.copy()
+
+    # 必要な育成人数
+    roi_df["育成必要人数"] = (roi_df["保有率ギャップ"] * len(members_df)).round(0).astype(int)
+
+    # 総投資コスト（万円）
+    roi_df["総投資コスト"] = roi_df["育成必要人数"] * training_cost_per_skill
+
+    # 習得期間（月）
+    roi_df["推定習得期間"] = (roi_df["習得難易度"] * months_per_level).round(1)
+
+    # ビジネス価値（万円）- ビジネスインパクトに基づく
+    roi_df["推定ビジネス価値"] = (
+        roi_df["ビジネスインパクト"] *
+        roi_df["育成必要人数"] *
+        training_cost_per_skill *
+        business_value_multiplier
+    )
+
+    # ROI = (ビジネス価値 - 投資コスト) / 投資コスト × 100
+    roi_df["ROI率"] = (
+        (roi_df["推定ビジネス価値"] - roi_df["総投資コスト"]) /
+        roi_df["総投資コスト"] * 100
+    ).round(1)
+
+    # ROI上位10スキルを表示
+    roi_top = roi_df.nlargest(10, "ROI率")[[
+        "力量名", "育成必要人数", "総投資コスト", "推定ビジネス価値",
+        "ROI率", "推定習得期間", "優先度カテゴリ"
+    ]].copy()
+
+    st.markdown("##### 🏆 ROI上位10スキル（最も投資効果が高いスキル）")
+
+    # スタイリング
+    def highlight_roi(row):
+        colors = [''] * len(row)
+        roi_idx = row.index.get_loc("ROI率")
+
+        if row["ROI率"] >= 200:
+            colors[roi_idx] = 'background-color: #d4edda; font-weight: bold'
+        elif row["ROI率"] >= 100:
+            colors[roi_idx] = 'background-color: #fff3cd'
+
+        return colors
+
+    styled_roi = roi_top.style.apply(highlight_roi, axis=1).format({
+        "総投資コスト": "{:,.0f}万円",
+        "推定ビジネス価値": "{:,.0f}万円",
+        "ROI率": "{:.1f}%",
+        "推定習得期間": "{:.1f}ヶ月"
+    })
+
+    st.dataframe(styled_roi, use_container_width=True, hide_index=True)
+
+    st.caption("🟢 緑背景: 高ROI（200%以上） | 🟡 黄背景: 中ROI（100%以上）")
+
+    # ROI可視化
+    fig_roi = px.bar(
+        roi_top,
+        x="ROI率",
+        y="力量名",
+        color="優先度カテゴリ",
+        orientation='h',
+        title="ROI上位スキルランキング",
+        labels={"ROI率": "ROI率 (%)", "力量名": ""},
+        color_discrete_map={
+            "🔴 最優先（Strategic Focus）": "#d62728",
+            "🟠 高優先度（High Priority）": "#ff7f0e",
+            "🟡 中優先度（Medium Priority）": "#ffbb78",
+            "🟢 低優先度（Low Priority）": "#2ca02c"
+        }
+    )
+
+    fig_roi.update_layout(
+        height=400,
+        yaxis={'categoryorder':'total ascending'}
+    )
+
+    st.plotly_chart(fig_roi, use_container_width=True)
+
+    # 投資シミュレーション
+    st.markdown("##### 💡 投資シミュレーション")
+
+    total_investment = roi_df["総投資コスト"].sum()
+    total_value = roi_df["推定ビジネス価値"].sum()
+    overall_roi = ((total_value - total_investment) / total_investment * 100) if total_investment > 0 else 0
+
+    sim_col1, sim_col2, sim_col3 = st.columns(3)
+
+    with sim_col1:
+        st.metric(
+            "全ギャップ解消の総投資額",
+            f"{total_investment:,.0f}万円",
+            help="全スキルギャップを埋めるために必要な総コスト"
+        )
+
+    with sim_col2:
+        st.metric(
+            "推定総ビジネス価値",
+            f"{total_value:,.0f}万円",
+            help="全スキルギャップを解消した場合の組織価値向上"
+        )
+
+    with sim_col3:
+        st.metric(
+            "全体ROI",
+            f"{overall_roi:.1f}%",
+            delta=f"{overall_roi - 100:.1f}%" if overall_roi > 0 else "0%",
+            help="全体的な投資対効果"
+        )
+
+    st.markdown("---")
+
+    # ============================================
+    # 4. スキルギャップのパターン認識（クラスター分析）
+    # ============================================
+    st.markdown("#### 🔬 スキルギャップのパターン認識")
+
+    st.markdown("""
+    **分析手法**: K-meansクラスタリングにより、類似したギャップパターンを持つスキルをグループ化
+
+    これにより、個別スキルではなく「スキルグループ」単位での戦略的育成プログラムを設計できます。
+    """)
+
+    # クラスタリング用データ準備
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.cluster import KMeans
+
+    # 特徴量: ビジネスインパクト、緊急性、習得難易度
+    cluster_features = gap_analysis_df[[
+        "ビジネスインパクト", "緊急性", "習得難易度"
+    ]].fillna(0)
+
+    # 標準化
+    scaler = StandardScaler()
+    features_scaled = scaler.fit_transform(cluster_features)
+
+    # K-meansクラスタリング（4クラスター）
+    n_clusters = 4
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    gap_analysis_df["クラスター"] = kmeans.fit_predict(features_scaled)
+
+    # クラスターラベル付け
+    cluster_labels = {
+        0: "🎯 戦略的重要スキル群",
+        1: "⚡ 緊急対応スキル群",
+        2: "📚 基礎育成スキル群",
+        3: "🔄 長期育成スキル群"
+    }
+
+    # クラスターの特性を分析して適切にラベル付け
+    cluster_characteristics = []
+    for cluster_id in range(n_clusters):
+        cluster_data = gap_analysis_df[gap_analysis_df["クラスター"] == cluster_id]
+        avg_impact = cluster_data["ビジネスインパクト"].mean()
+        avg_urgency = cluster_data["緊急性"].mean()
+        avg_difficulty = cluster_data["習得難易度"].mean()
+
+        # 特性に基づいてラベルを決定
+        if avg_impact > 60 and avg_urgency > 60:
+            label = "🎯 戦略的重要スキル群"
+        elif avg_urgency > 60:
+            label = "⚡ 緊急対応スキル群"
+        elif avg_difficulty < 2:
+            label = "📚 基礎育成スキル群"
+        else:
+            label = "🔄 長期育成スキル群"
+
+        cluster_characteristics.append({
+            "クラスター": label,
+            "スキル数": len(cluster_data),
+            "平均ビジネスインパクト": f"{avg_impact:.1f}",
+            "平均緊急性": f"{avg_urgency:.1f}",
+            "平均習得難易度": f"{avg_difficulty:.2f}",
+            "推奨アプローチ": _get_cluster_recommendation(avg_impact, avg_urgency, avg_difficulty)
+        })
+
+        # ラベルを更新
+        gap_analysis_df.loc[gap_analysis_df["クラスター"] == cluster_id, "クラスターラベル"] = label
+
+    # クラスター特性表示
+    cluster_df = pd.DataFrame(cluster_characteristics)
+
+    st.markdown("##### 📋 スキルギャップクラスター分析結果")
+    st.dataframe(cluster_df, use_container_width=True, hide_index=True)
+
+    # 3D散布図（インタラクティブ）
+    fig_3d = px.scatter_3d(
+        gap_analysis_df.head(100),
+        x="ビジネスインパクト",
+        y="緊急性",
+        z="習得難易度",
+        color="クラスターラベル",
+        hover_name="力量名",
+        title="スキルギャップ 3D クラスター可視化",
+        labels={
+            "ビジネスインパクト": "ビジネスインパクト",
+            "緊急性": "緊急性",
+            "習得難易度": "習得難易度"
+        }
+    )
+
+    fig_3d.update_layout(height=600)
+    st.plotly_chart(fig_3d, use_container_width=True)
+
+    st.markdown("---")
+
+    # ============================================
+    # 5. アクションプラン生成
+    # ============================================
+    st.markdown("#### 📝 データドリブン・アクションプラン")
+
+    st.markdown("""
+    **HR戦略への落とし込み**: 分析結果を実行可能なアクションに変換
+    """)
+
+    # 最優先スキルTOP5の詳細アクションプラン
+    top_priority_skills = gap_analysis_df.nlargest(5, "優先度スコア")
+
+    for idx, (_, skill) in enumerate(top_priority_skills.iterrows(), 1):
+        with st.expander(f"🎯 アクションプラン {idx}: {skill['力量名']}", expanded=(idx == 1)):
+            st.markdown(f"**優先度**: {skill['優先度カテゴリ']} （スコア: {skill['優先度スコア']:.1f}/100）")
+
+            action_col1, action_col2, action_col3 = st.columns(3)
+
+            with action_col1:
+                st.metric("現在保有率", f"{skill['現在保有率']*100:.1f}%")
+                st.metric("目標保有率", f"{skill['目標保有率']*100:.1f}%")
+
+            with action_col2:
+                st.metric("ギャップ率", f"{skill['保有率ギャップ率']*100:.1f}%")
+                st.metric("育成必要人数", f"{int(skill['育成必要人数'])}人")
+
+            with action_col3:
+                st.metric("推定投資額", f"{skill['総投資コスト']:.0f}万円")
+                st.metric("ROI", f"{skill['ROI率']:.1f}%")
+
+            st.markdown("---")
+
+            # 具体的アクション
+            st.markdown("##### 📌 推奨アクション")
+
+            actions = _generate_action_recommendations(skill, members_df)
+
+            for action in actions:
+                st.markdown(f"- {action}")
+
+            st.markdown("---")
+
+            # タイムライン
+            st.markdown("##### ⏱️ 実施タイムライン")
+
+            timeline = _generate_timeline(skill)
+
+            for phase, desc in timeline.items():
+                st.markdown(f"**{phase}**: {desc}")
+
+    st.markdown("---")
+
+    # ============================================
+    # 6. スキルポートフォリオ最適化提案
+    # ============================================
+    st.markdown("#### 🎨 スキルポートフォリオ最適化提案")
+
+    st.markdown("""
+    **組織全体の視点**: 個別スキルではなく、組織のスキルポートフォリオ全体を最適化
+    """)
+
+    # 現在のポートフォリオ状態
+    current_strategic = len(gap_analysis_df[gap_analysis_df["優先度カテゴリ"] == "🔴 最優先（Strategic Focus）"])
+    current_high = len(gap_analysis_df[gap_analysis_df["優先度カテゴリ"] == "🟠 高優先度（High Priority）"])
+    current_medium = len(gap_analysis_df[gap_analysis_df["優先度カテゴリ"] == "🟡 中優先度（Medium Priority）"])
+    current_low = len(gap_analysis_df[gap_analysis_df["優先度カテゴリ"] == "🟢 低優先度（Low Priority）"])
+
+    # 理想的な配分（ベンチマーク）
+    ideal_strategic = int(total_gaps * 0.2)
+    ideal_high = int(total_gaps * 0.3)
+    ideal_medium = int(total_gaps * 0.3)
+    ideal_low = int(total_gaps * 0.2)
+
+    portfolio_comparison = pd.DataFrame({
+        "優先度カテゴリ": [
+            "🔴 最優先",
+            "🟠 高優先度",
+            "🟡 中優先度",
+            "🟢 低優先度"
+        ],
+        "現状": [current_strategic, current_high, current_medium, current_low],
+        "理想": [ideal_strategic, ideal_high, ideal_medium, ideal_low],
+        "差分": [
+            current_strategic - ideal_strategic,
+            current_high - ideal_high,
+            current_medium - ideal_medium,
+            current_low - ideal_low
+        ]
+    })
+
+    # 比較グラフ
+    fig_portfolio = go.Figure()
+
+    fig_portfolio.add_trace(go.Bar(
+        name="現状",
+        x=portfolio_comparison["優先度カテゴリ"],
+        y=portfolio_comparison["現状"],
+        marker_color='lightblue'
+    ))
+
+    fig_portfolio.add_trace(go.Bar(
+        name="理想（ベンチマーク）",
+        x=portfolio_comparison["優先度カテゴリ"],
+        y=portfolio_comparison["理想"],
+        marker_color='lightgreen'
+    ))
+
+    fig_portfolio.update_layout(
+        title="スキルポートフォリオ: 現状 vs 理想配分",
+        xaxis_title="",
+        yaxis_title="スキル数",
+        barmode='group',
+        height=400
+    )
+
+    st.plotly_chart(fig_portfolio, use_container_width=True)
+
+    # 改善提案
+    st.markdown("##### 💡 ポートフォリオ最適化の提案")
+
+    if current_strategic > ideal_strategic:
+        st.warning(
+            f"⚠️ **最優先スキルが多すぎます** ({current_strategic - ideal_strategic}件超過)\n\n"
+            "一度に多くのスキルを最優先にすると、リソースが分散します。"
+            "最も重要な20%に絞り込み、段階的に取り組むことを推奨します。"
+        )
+    elif current_strategic < ideal_strategic:
+        st.info(
+            f"ℹ️ **最優先スキルの明確化が必要** ({ideal_strategic - current_strategic}件不足)\n\n"
+            "組織戦略上、最優先で取り組むべきスキルを明確に定義することで、投資効果が向上します。"
+        )
+    else:
+        st.success("✅ 最優先スキルの数は適切です")
+
+    # 総合推奨事項
+    st.markdown("##### 🌟 総合推奨事項")
+
+    st.markdown(f"""
+    **データに基づく戦略的提言**:
+
+    1. **即座に着手すべきスキル**:
+       - {top_priority_skills.iloc[0]['力量名']}を筆頭に、最優先スキル{current_strategic}件に集中投資
+       - 推定投資額: {top_priority_skills.head(5)['総投資コスト'].sum():,.0f}万円
+       - 期待ROI: {top_priority_skills.head(5)['ROI率'].mean():.1f}%
+
+    2. **6ヶ月以内の目標**:
+       - 最優先スキルの平均保有率を現状から20%改善
+       - クリティカルギャップ（ギャップ率50%以上）を{critical_gaps}件から半減
+
+    3. **1年後の目標**:
+       - 平均スキルギャップ率を{avg_gap_rate*100:.1f}%から20%未満に削減
+       - 上位{int(percentile_used*100)}%メンバーのスキルセットを組織全体の標準に
+
+    4. **投資配分の推奨**:
+       - 最優先スキル: 予算の50%
+       - 高優先度スキル: 予算の30%
+       - 中優先度スキル: 予算の15%
+       - 低優先度スキル: 予算の5%（機会学習）
+    """)
+
+    # データエクスポート
+    st.markdown("---")
+    st.markdown("### 💾 分析結果のエクスポート")
+
+    export_df = gap_analysis_df[[
+        "力量名", "現在保有率", "目標保有率", "保有率ギャップ率",
+        "ビジネスインパクト", "緊急性", "習得難易度", "優先度スコア", "優先度カテゴリ",
+        "育成必要人数", "総投資コスト", "ROI率", "推定習得期間", "クラスターラベル"
+    ]].copy()
+
+    csv = export_df.to_csv(index=False, encoding='utf-8-sig')
+
+    st.download_button(
+        label="📥 詳細分析結果をCSVでダウンロード",
+        data=csv,
+        file_name="enhanced_skill_gap_analysis.csv",
+        mime="text/csv"
+    )
+
+
+def _get_cluster_recommendation(impact: float, urgency: float, difficulty: float) -> str:
+    """クラスターごとの推奨アプローチを生成"""
+    if impact > 60 and urgency > 60:
+        return "集中投資・即時実行プログラム"
+    elif urgency > 60:
+        return "短期集中ブートキャンプ形式"
+    elif difficulty < 2:
+        return "eラーニング・自己学習支援"
+    else:
+        return "中長期OJT・メンター制度"
+
+
+def _generate_action_recommendations(skill: pd.Series, members_df: pd.DataFrame) -> List[str]:
+    """スキルごとの具体的アクション推奨を生成"""
+    actions = []
+
+    gap_rate = skill["保有率ギャップ率"]
+    training_need = int(skill["育成必要人数"])
+
+    # 育成方法の推奨
+    if skill["習得難易度"] < 2:
+        actions.append(f"📚 **育成方法**: eラーニングプラットフォームで自己学習プログラムを提供（コスト効率◎）")
+    elif skill["習得難易度"] < 3.5:
+        actions.append(f"🎓 **育成方法**: 社内研修プログラムを実施（期間: 1-3ヶ月）")
+    else:
+        actions.append(f"👨‍🏫 **育成方法**: 外部専門研修 + 社内メンター制度の併用（期間: 3-6ヶ月）")
+
+    # 人数規模に応じた実施方法
+    if training_need <= 5:
+        actions.append(f"👥 **実施規模**: 少人数（{training_need}名）- 個別カスタマイズ型育成")
+    elif training_need <= 15:
+        actions.append(f"👥 **実施規模**: 中規模（{training_need}名）- グループ研修形式")
+    else:
+        actions.append(f"👥 **実施規模**: 大規模（{training_need}名）- 複数回に分けたローリング研修")
+
+    # 採用も検討すべきか
+    if gap_rate > 0.7:
+        actions.append(f"💼 **追加施策**: ギャップが大きいため、外部採用も並行検討を推奨")
+
+    # 社内エキスパート活用
+    if skill["現在保有率"] > 0.1:
+        actions.append(f"🌟 **社内リソース活用**: 既存保有者をメンター/トレーナーとして活用")
+
+    return actions
+
+
+def _generate_timeline(skill: pd.Series) -> Dict[str, str]:
+    """スキル習得のタイムライン生成"""
+    duration = skill["推定習得期間"]
+
+    timeline = {}
+
+    timeline["第1フェーズ（1-2週間）"] = "対象者選定、ベースライン評価、育成計画策定"
+
+    if duration <= 3:
+        timeline["第2フェーズ（1ヶ月）"] = "集中トレーニング実施"
+        timeline["第3フェーズ（2-3ヶ月）"] = "実践・OJT、スキル定着確認"
+    elif duration <= 6:
+        timeline["第2フェーズ（1-3ヶ月）"] = "基礎トレーニング実施"
+        timeline["第3フェーズ（4-6ヶ月）"] = "実践・OJT、中間評価"
+        timeline["第4フェーズ（6ヶ月以降）"] = "スキル定着、最終評価"
+    else:
+        timeline["第2フェーズ（1-4ヶ月）"] = "基礎理論習得"
+        timeline["第3フェーズ（5-8ヶ月）"] = "実践演習・プロジェクト適用"
+        timeline["第4フェーズ（9-12ヶ月）"] = "実務適用・メンタリング"
+        timeline["第5フェーズ（12ヶ月以降）"] = "マスタリー達成、後進育成"
+
+    return timeline
