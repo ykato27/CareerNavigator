@@ -120,10 +120,10 @@ def format_hierarchical_index(category_paths: List[str], hierarchy_level: int) -
                     formatted.append(f"{parent} ┬ {child}")
                 elif k == group_size - 1:
                     # グループの最後
-                    formatted.append(f"{'　' * len(parent)} └ {child}")
+                    formatted.append(f"{parent} └ {child}")
                 else:
                     # グループの中間
-                    formatted.append(f"{'　' * len(parent)} ├ {child}")
+                    formatted.append(f"{parent} ├ {child}")
 
             i += group_size
 
