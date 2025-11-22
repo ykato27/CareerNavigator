@@ -147,19 +147,23 @@ def render_hierarchical_category_heatmap(
     else:
         pivot_df = filtered_df.groupby(["カテゴリ階層", group_by])[level_col].median().unstack(fill_value=0)
 
-    # ヒートマップ描画
+    # ヒートマップ描画（職種を横軸、カテゴリを縦軸に配置）
     fig = px.imshow(
         pivot_df,
-        labels=dict(x=group_by, y="カテゴリ", color="平均保有量" if aggregation_method == "mean" else "中央保有量"),
+        labels=dict(x=group_by, y="カテゴリ", color="保有量" if aggregation_method == "mean" else "保有量"),
         aspect="auto",
-        color_continuous_scale="RdYlGn",
+        color_continuous_scale="RdYlBu_r",  # 青→黄→赤のグラデーション（高い値ほど赤）
         text_auto=".2f"
     )
 
     fig.update_layout(
         height=max(400, len(pivot_df) * 50),
         title=f"カテゴリ別 × {group_by}別 スキル保有状況（{aggregation_method == 'mean' and '平均' or '中央値'}）",
-        font=dict(size=11)
+        font=dict(size=11),
+        xaxis=dict(
+            side='top',  # x軸ラベルを上に配置
+            tickangle=-45  # ラベルを斜めに表示
+        )
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -273,19 +277,23 @@ def render_job_role_skill_heatmap(
     else:
         pivot_df = merged_df.groupby(["職種", "役職"])[level_col].median().unstack(fill_value=0)
 
-    # ヒートマップ描画
+    # ヒートマップ描画（役職を横軸、職種を縦軸に配置）
     fig = px.imshow(
         pivot_df,
-        labels=dict(x="役職", y="職種", color="平均保有量" if aggregation_method == "mean" else "中央保有量"),
+        labels=dict(x="役職", y="職種", color="保有量"),
         aspect="auto",
-        color_continuous_scale="Viridis",
+        color_continuous_scale="RdYlBu_r",  # 青→黄→赤のグラデーション（統一感）
         text_auto=".2f"
     )
 
     fig.update_layout(
         height=max(400, len(pivot_df) * 60),
         title=f"職種 × 役職別 平均スキル保有状況（{aggregation_method == 'mean' and '平均' or '中央値'}）",
-        font=dict(size=12)
+        font=dict(size=12),
+        xaxis=dict(
+            side='top',  # x軸ラベルを上に配置
+            tickangle=-45  # ラベルを斜めに表示
+        )
     )
 
     st.plotly_chart(fig, use_container_width=True)
