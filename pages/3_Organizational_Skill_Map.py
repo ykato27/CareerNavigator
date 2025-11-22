@@ -25,7 +25,8 @@ from skillnote_recommendation.utils.advanced_org_dashboards import (
     render_job_role_skill_heatmap,
     render_skill_portfolio_analysis,
     render_talent_risk_dashboard,
-    render_benchmark_dashboard
+    render_benchmark_dashboard,
+    render_enhanced_skill_gap_analysis
 )
 from skillnote_recommendation.utils.strategic_ui_components import (
     render_succession_candidate_table,
@@ -305,6 +306,24 @@ with tab2:
                         st.markdown("---")
             else:
                 st.success("✅ クリティカルスキルはありません")
+
+        # ==========================================
+        # 高度なスキルギャップ分析（データサイエンス視点）
+        # ==========================================
+        st.markdown("---")
+        st.markdown("---")
+
+        try:
+            render_enhanced_skill_gap_analysis(
+                gap_df=gap_df,
+                member_competence_df=member_competence_df,
+                competence_master_df=competence_master_df,
+                members_df=members_df,
+                percentile_used=percentile_used
+            )
+        except Exception as e:
+            st.error(f"高度なスキルギャップ分析の表示中にエラーが発生しました: {e}")
+            st.exception(e)
     else:
         st.info("👆 上記の「ギャップを計算」ボタンをクリックしてギャップ分析を開始してください")
 
