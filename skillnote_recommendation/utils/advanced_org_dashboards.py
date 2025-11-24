@@ -1499,6 +1499,10 @@ def render_enhanced_skill_gap_analysis(
     fig_3d.update_layout(height=600)
     st.plotly_chart(fig_3d, use_container_width=True)
 
+    # クラスターラベルをroi_dfにコピー（エクスポート用）
+    roi_df["クラスター"] = gap_analysis_df["クラスター"]
+    roi_df["クラスターラベル"] = gap_analysis_df["クラスターラベル"]
+
     st.markdown("---")
 
     # ============================================
