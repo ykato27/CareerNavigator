@@ -13,7 +13,7 @@ from skillnote_recommendation.ml.ml_recommender import MLRecommender
 
 @pytest.fixture
 def sample_skill_matrix():
-    """サンプルメンバー×力量マトリクス"""
+    """サンプルメンバー×力量マトリックス"""
     return pd.DataFrame(
         {
             "s001": [3, 0, 2, 0, 1],

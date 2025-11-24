@@ -273,7 +273,7 @@ import pandas as pd
 
 @pytest.fixture
 def skill_matrix():
-    """テスト用スキルマトリクス"""
+    """テスト用スキルマトリックス"""
     return pd.DataFrame(
         [[1, 0, 1], [0, 1, 1], [1, 1, 0]],
         index=["M001", "M002", "M003"],

@@ -68,7 +68,7 @@ class NMFHyperparameterTuner:
         初期化
 
         Args:
-            skill_matrix: メンバー×力量マトリクス
+            skill_matrix: メンバー×力量マトリックス
             n_trials: 試行回数
             timeout: タイムアウト（秒）
             n_jobs: 並列実行数
@@ -237,7 +237,7 @@ class NMFHyperparameterTuner:
                     train_matrix, val_mask = self._create_skill_based_split(fold_idx)
 
                     # モデルを学習（random_stateは固定、Early stopping有効）
-                    # スキルベース分割では val_mask から検証マトリクスを生成
+                    # スキルベース分割では val_mask から検証マトリックスを生成
                     val_matrix = val_mask.copy()
                     val_matrix[val_matrix == 0] = 0  # マスク部分は0で統一（Early stopping判定用）
 
@@ -950,7 +950,7 @@ def tune_nmf_hyperparameters_from_config(
     Configを使ってハイパーパラメータチューニングを実行
 
     Args:
-        skill_matrix: メンバー×力量マトリクス
+        skill_matrix: メンバー×力量マトリックス
         config: Configクラスインスタンス
         show_progress_bar: プログレスバーを表示するか
         return_tuner: Tunerオブジェクトも返すか

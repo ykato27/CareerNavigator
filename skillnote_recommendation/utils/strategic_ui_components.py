@@ -321,7 +321,7 @@ def render_skill_coverage_matrix(
     max_skills: int = 15
 ) -> None:
     """
-    スキルカバレッジマトリクス（ヒートマップ）を表示
+    スキルカバレッジマトリックス（ヒートマップ）を表示
     
     Args:
         candidates_df: 候補者DataFrame
@@ -346,7 +346,7 @@ def render_skill_coverage_matrix(
         competence_master_df["力量コード"].isin(top_skills)
     ].set_index("力量コード")["力量名"].to_dict()
     
-    # マトリクスデータを作成
+    # マトリックスデータを作成
     matrix_data = []
     candidate_names = []
     
@@ -406,7 +406,7 @@ def render_skill_coverage_matrix(
     ))
     
     fig.update_layout(
-        title="スキルカバレッジマトリクス",
+        title="スキルカバレッジマトリックス",
         xaxis_title="必須スキル",
         yaxis_title="候補者",
         height=max(400, len(top_candidates) * 40),

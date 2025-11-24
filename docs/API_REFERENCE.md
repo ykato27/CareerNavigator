@@ -351,7 +351,7 @@ class CustomRequest(BaseModel):
 
 データの品質を包括的に検証し、レポートを生成します。
 
-### スキルマトリクスの検証
+### スキルマトリックスの検証
 
 ```python
 from skillnote_recommendation.core.data_quality import DataQualityChecker
@@ -359,8 +359,8 @@ import pandas as pd
 
 checker = DataQualityChecker()
 
-# スキルマトリクスの検証
-skill_matrix = pd.DataFrame(...)  # メンバー×力量マトリクス
+# スキルマトリックスの検証
+skill_matrix = pd.DataFrame(...)  # メンバー×力量マトリックス
 report = checker.validate_skill_matrix(
     skill_matrix,
     strict=False  # 警告を許容

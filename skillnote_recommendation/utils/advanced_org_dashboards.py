@@ -29,1011 +29,609 @@ def extract_category_hierarchy(category_name: str, level: int = 1) -> str:
     if pd.isna(category_name):
         return "未分類"
 
-    parts = str(category_name).split(" > ")
-    if level > len(parts):
-        return " > ".join(parts)
+    parts = str(category_name).split(">")
 
-    return " > ".join(parts[:level])
+    if level >= len(parts):
+        return category_name
 
-
-def format_category_for_display(category_path: str) -> str:
-    """
-    カテゴリパスを階層的に表示するためにフォーマット
-
-    Args:
-        category_path: カテゴリパス（例: "技術 > プログラミング > Python"）
-
-    Returns:
-        階層に応じた表示形式
-    """
-    if pd.isna(category_path) or category_path == "未分類":
-        return "未分類"
-
-    parts = str(category_path).split(" > ")
-    level = len(parts)
-
-    if level == 1:
-        # 第一階層: そのまま表示
-        return parts[0]
-    elif level == 2:
-        # 第二階層: "第一階層─第二階層" の形式
-        return f"{parts[0]}─{parts[1]}"
-    else:
-        # 第三階層: "第一階層─第二階層─第三階層" の形式、インデント追加
-        indent = "    "
-        return indent + "└" + parts[-1]
+    return " > ".join([p.strip() for p in parts[:level]])
 
 
-def format_hierarchical_index(category_paths: List[str], hierarchy_level: int) -> List[str]:
-    """
-    カテゴリパスのリストを階層的に表示するためにフォーマット（セル結合風）
-
-    Args:
-        category_paths: カテゴリパスのリスト
-        hierarchy_level: 選択されている階層レベル (1, 2, 3)
-
-    Returns:
-        フォーマット済みのラベルリスト
-    """
-    if hierarchy_level == 1:
-        # 第一階層: シンプルに表示
-        return [cat.split(" > ")[0] if " > " in cat else cat for cat in category_paths]
-
-    elif hierarchy_level == 2:
-        # 第二階層: セル結合風に表示（罫線なし、スペースのみ）
-        formatted = []
-        prev_parent = None
-        parent_group = []
-
-        for cat_path in category_paths:
-            parts = cat_path.split(" > ")
-            if len(parts) >= 2:
-                parent = parts[0]
-                child = parts[1]
-
-                if parent != prev_parent:
-                    parent_group.append((cat_path, parent, child, True))  # グループの最初
-                    prev_parent = parent
-                else:
-                    parent_group.append((cat_path, parent, child, False))  # グループの続き
-            else:
-                parent_group.append((cat_path, cat_path, "", True))
-
-        # 各グループ内で最初・中間・最後を判定
-        i = 0
-        while i < len(parent_group):
-            cat_path, parent, child, is_first = parent_group[i]
-
-            # 同じ親を持つ要素の数をカウント
-            group_size = 1
-            j = i + 1
-            while j < len(parent_group) and parent_group[j][1] == parent:
-                group_size += 1
-                j += 1
-
-            # グループ内の位置に応じてフォーマット（罫線なし）
-            for k in range(group_size):
-                _, _, child, _ = parent_group[i + k]
-                if k == 0:
-                    # グループの最初: 親名を表示
-                    formatted.append(f"{parent}　{child}")
-                else:
-                    # グループの2行目以降: 親名と同じ長さの全角スペースでインデント
-                    formatted.append(f"{'　' * len(parent)}　{child}")
-
-            i += group_size
-
-        return formatted
-
-    else:  # hierarchy_level == 3
-        # 第三階層: 第一階層 > 第二階層 > 第三階層 を表示
-        # 第二階層ごとにグループ化して視覚的に分かりやすく表示
-        formatted = []
-
-        # まず、カテゴリを解析してグループ化
-        category_groups = {}  # key: (parent, child), value: list of grandchildren
-
-        for cat_path in category_paths:
-            parts = cat_path.split(" > ")
-            if len(parts) >= 3:
-                parent = parts[0]
-                child = parts[1]
-                grandchild = parts[2]
-                key = (parent, child)
-                if key not in category_groups:
-                    category_groups[key] = []
-                category_groups[key].append(grandchild)
-            elif len(parts) == 2:
-                parent = parts[0]
-                child = parts[1]
-                key = (parent, child)
-                if key not in category_groups:
-                    category_groups[key] = []
-            else:
-                # 第一階層のみの場合
-                key = (cat_path, "")
-                if key not in category_groups:
-                    category_groups[key] = []
-
-        # ソートされた順序でフォーマット
-        for parent, child in sorted(category_groups.keys()):
-            grandchildren = category_groups[(parent, child)]
-            parent_child_label = f"{parent}　{child}" if child else parent
-
-            if grandchildren:
-                # 第三階層がある場合
-                for idx, grandchild in enumerate(grandchildren):
-                    if idx == 0:
-                        # 最初の行: 親-子-孫を全て表示
-                        formatted.append(f"{parent_child_label}　{grandchild}")
-                    else:
-                        # 2行目以降: 親-子と同じ長さの全角スペースでインデント
-                        formatted.append(f"{'　' * len(parent_child_label)}　{grandchild}")
-            else:
-                # 第三階層がない（第二階層まで）場合
-                formatted.append(parent_child_label)
-
-        return formatted
-
-
-def render_hierarchical_category_heatmap(
+def render_org_skill_summary(
+    gap_df: pd.DataFrame,
     member_competence_df: pd.DataFrame,
     competence_master_df: pd.DataFrame,
     members_df: pd.DataFrame,
-    group_by: str = "職種"
+    percentile_used: float = 0.0
 ) -> None:
     """
-    ①カテゴリ×職種の階層的ヒートマップ
-
-    カテゴリを階層的に選択でき、平均値/中央値を選択可能
+    組織スキル概要サマリーを表示
 
     Args:
-        member_competence_df: メンバー力量マトリクス
+        gap_df: スキルギャップデータ
+        member_competence_df: メンバー習得力量データ
         competence_master_df: 力量マスタ
         members_df: メンバーマスタ
-        group_by: グループ化する軸（"職種", "役職"等）
+        percentile_used: 使用したパーセンタイル（0.0=全体平均、0.5=中央値、0.75=75%タイル）
     """
-    st.markdown(f"### 📊 カテゴリ別 × {group_by}別 スキル分析")
+    st.markdown("### 📊 組織スキル状況サマリー")
 
-    # コントロールパネル
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3, col4 = st.columns(4)
 
-    with col1:
-        hierarchy_level = st.selectbox(
-            "カテゴリ階層",
-            options=[1, 2, 3],
-            format_func=lambda x: ["第一階層", "第二階層", "第三階層"][x-1],
-            help="カテゴリの詳細度を選択します"
-        )
+    # 総スキル数
+    total_skills = len(competence_master_df)
 
-    with col2:
-        aggregation_method = st.selectbox(
-            "集計方法",
-            options=["mean", "median"],
-            format_func=lambda x: "平均値" if x == "mean" else "中央値"
-        )
+    # 組織平均保有率
+    avg_coverage = gap_df["現在保有率"].mean() if "現在保有率" in gap_df.columns else 0
 
-    with col3:
-        show_count = st.checkbox("人数も表示", value=False)
-
-    # データ準備
-    # 力量マスタにカテゴリ階層を追加
-    competence_master_df = competence_master_df.copy()
-    if "力量カテゴリー名" in competence_master_df.columns:
-        competence_master_df["カテゴリ階層"] = competence_master_df["力量カテゴリー名"].apply(
-            lambda x: extract_category_hierarchy(x, hierarchy_level)
-        )
+    # クリティカルギャップ（目標保有率との差が30%以上）
+    if "保有率ギャップ率" in gap_df.columns:
+        critical_gaps = len(gap_df[gap_df["保有率ギャップ率"] > 0.3])
     else:
-        st.warning("力量カテゴリー名がマスタに含まれていません")
-        return
+        critical_gaps = 0
 
-    # メンバー力量にカテゴリ階層を結合
-    merged_df = member_competence_df.merge(
-        competence_master_df[["力量コード", "カテゴリ階層"]],
-        on="力量コード",
-        how="left"
-    )
-
-    # メンバー情報を結合
-    if group_by not in members_df.columns:
-        st.warning(f"{group_by}情報がメンバーマスタに含まれていません")
-        return
-
-    merged_df = merged_df.merge(
-        members_df[["メンバーコード", group_by]],
-        on="メンバーコード",
-        how="left"
-    )
-
-    # カテゴリ選択（複数選択可能）
-    available_categories = sorted(merged_df["カテゴリ階層"].dropna().unique())
-
-    selected_categories = st.multiselect(
-        "表示するカテゴリを選択",
-        options=available_categories,
-        default=available_categories[:10] if len(available_categories) > 10 else available_categories,
-        help="分析対象のカテゴリを選択してください（デフォルトは上位10件）"
-    )
-
-    if not selected_categories:
-        st.info("カテゴリを選択してください")
-        return
-
-    # 選択されたカテゴリのデータのみ抽出
-    filtered_df = merged_df[merged_df["カテゴリ階層"].isin(selected_categories)]
-
-    # 保有量カラムの検出
-    level_col = None
-    for col in ["保有量", "力量レベル", "レベル"]:
-        if col in filtered_df.columns:
-            level_col = col
-            break
-
-    if level_col is None:
-        st.warning("保有量またはレベル情報が見つかりません")
-        return
-
-    # 保有量を数値型に変換（エラー回避）
-    filtered_df[level_col] = pd.to_numeric(filtered_df[level_col], errors='coerce')
-
-    # NaNを除外
-    filtered_df = filtered_df.dropna(subset=[level_col])
-
-    if len(filtered_df) == 0:
-        st.warning("有効な保有量データがありません")
-        return
-
-    # 集計
-    if aggregation_method == "mean":
-        pivot_df = filtered_df.groupby(["カテゴリ階層", group_by])[level_col].mean().unstack(fill_value=0)
-    else:
-        pivot_df = filtered_df.groupby(["カテゴリ階層", group_by])[level_col].median().unstack(fill_value=0)
-
-    # カテゴリ階層でソート（階層的な順序を保持）
-    pivot_df = pivot_df.sort_index()
-
-    # インデックスを階層的な表示にフォーマット（セル結合風）
-    formatted_index = format_hierarchical_index(list(pivot_df.index), hierarchy_level)
-    pivot_df_display = pivot_df.copy()
-    pivot_df_display.index = formatted_index
-
-    # ヒートマップ描画（職種を横軸、カテゴリを縦軸に配置）
-    fig = px.imshow(
-        pivot_df_display,
-        labels=dict(x=group_by, y="カテゴリ", color="保有量" if aggregation_method == "mean" else "保有量"),
-        aspect="auto",
-        color_continuous_scale="Greens",  # 薄い緑→濃い緑のグラデーション
-        text_auto=".2f"
-    )
-
-    fig.update_layout(
-        height=max(400, len(pivot_df) * 50),
-        title=f"カテゴリ別 × {group_by}別 スキル保有状況（{aggregation_method == 'mean' and '平均' or '中央値'}）",
-        font=dict(size=11),
-        xaxis=dict(
-            side='top',  # x軸ラベルを上に配置
-            tickangle=-45  # ラベルを斜めに表示
-        ),
-        yaxis=dict(
-            tickfont=dict(family="Courier New, monospace")  # 等幅フォントでインデントを正しく表示
-        )
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    # 人数表示（オプション）
-    if show_count:
-        st.markdown("#### 👥 グループ別人数")
-        count_df = filtered_df.groupby(["カテゴリ階層", group_by]).size().unstack(fill_value=0)
-        st.dataframe(count_df, use_container_width=True)
-
-    # データエクスポート
-    csv = pivot_df.to_csv(index=True).encode('utf-8-sig')
-    st.download_button(
-        label=f"📥 {group_by}別データをダウンロード (CSV)",
-        data=csv,
-        file_name=f"category_{group_by}_analysis.csv",
-        mime="text/csv"
-    )
-
-
-def render_job_role_skill_heatmap(
-    member_competence_df: pd.DataFrame,
-    competence_master_df: pd.DataFrame,
-    members_df: pd.DataFrame
-) -> None:
-    """
-    ②職種×役職別スキル集計ダッシュボード
-
-    Args:
-        member_competence_df: メンバー力量マトリクス
-        competence_master_df: 力量マスタ
-        members_df: メンバーマスタ
-    """
-    st.markdown("### 🎯 職種 × 役職別 スキル集計")
-
-    # コントロールパネル
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        aggregation_method = st.selectbox(
-            "集計方法",
-            options=["mean", "median"],
-            format_func=lambda x: "平均値" if x == "mean" else "中央値",
-            key="job_role_agg"
-        )
-
-    # 職種と役職の選択
-    if "職種" not in members_df.columns or "役職" not in members_df.columns:
-        st.warning("職種または役職情報がメンバーマスタに含まれていません")
-        return
-
-    with col2:
-        available_jobs = sorted(members_df["職種"].dropna().unique())
-        selected_jobs = st.multiselect(
-            "表示する職種",
-            options=available_jobs,
-            default=available_jobs,
-            key="job_select"
-        )
-
-    with col3:
-        available_roles = sorted(members_df["役職"].dropna().unique())
-        selected_roles = st.multiselect(
-            "表示する役職",
-            options=available_roles,
-            default=available_roles,
-            key="role_select"
-        )
-
-    if not selected_jobs or not selected_roles:
-        st.info("職種と役職を選択してください")
-        return
-
-    # データ準備
-    filtered_members = members_df[
-        (members_df["職種"].isin(selected_jobs)) &
-        (members_df["役職"].isin(selected_roles))
-    ]
-
-    # メンバー力量にメンバー情報を結合
-    merged_df = member_competence_df.merge(
-        filtered_members[["メンバーコード", "職種", "役職"]],
-        on="メンバーコード",
-        how="inner"
-    )
-
-    # 保有量カラムの検出
-    level_col = None
-    for col in ["保有量", "力量レベル", "レベル"]:
-        if col in merged_df.columns:
-            level_col = col
-            break
-
-    if level_col is None:
-        st.warning("保有量またはレベル情報が見つかりません")
-        return
-
-    # 保有量を数値型に変換（エラー回避）
-    merged_df[level_col] = pd.to_numeric(merged_df[level_col], errors='coerce')
-
-    # NaNを除外
-    merged_df = merged_df.dropna(subset=[level_col])
-
-    if len(merged_df) == 0:
-        st.warning("有効な保有量データがありません")
-        return
-
-    # 職種×役職でクロス集計
-    if aggregation_method == "mean":
-        pivot_df = merged_df.groupby(["職種", "役職"])[level_col].mean().unstack(fill_value=0)
-    else:
-        pivot_df = merged_df.groupby(["職種", "役職"])[level_col].median().unstack(fill_value=0)
-
-    # ヒートマップ描画（役職を横軸、職種を縦軸に配置）
-    fig = px.imshow(
-        pivot_df,
-        labels=dict(x="役職", y="職種", color="保有量"),
-        aspect="auto",
-        color_continuous_scale="Greens",  # 薄い緑→濃い緑のグラデーション
-        text_auto=".2f"
-    )
-
-    fig.update_layout(
-        height=max(400, len(pivot_df) * 60),
-        title=f"職種 × 役職別 平均スキル保有状況（{aggregation_method == 'mean' and '平均' or '中央値'}）",
-        font=dict(size=12),
-        xaxis=dict(
-            side='top',  # x軸ラベルを上に配置
-            tickangle=-45  # ラベルを斜めに表示
-        )
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    # 統計サマリー
-    st.markdown("#### 📈 統計サマリー")
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("最高スキル保有", f"{pivot_df.max().max():.2f}")
-    with col2:
-        st.metric("最低スキル保有", f"{pivot_df.min().min():.2f}")
-    with col3:
-        st.metric("全体平均", f"{pivot_df.mean().mean():.2f}")
-
-    # 人数マトリクス
-    st.markdown("#### 👥 職種 × 役職別 人数")
-    count_df = merged_df.groupby(["職種", "役職"]).size().unstack(fill_value=0)
-    st.dataframe(count_df, use_container_width=True)
-
-
-def render_skill_portfolio_analysis(
-    member_competence_df: pd.DataFrame,
-    competence_master_df: pd.DataFrame,
-    members_df: pd.DataFrame
-) -> None:
-    """
-    ③スキルポートフォリオ分析ダッシュボード
-
-    組織のスキル多様性、集中度、バランスを分析
-    """
-    st.markdown("### 💼 スキルポートフォリオ分析")
-    st.markdown("""
-    **目的**: 組織のスキル保有のバランスを評価し、リスクを特定します
-    - 🔴 **高リスク**: 特定スキルに依存（保有者が少ない）
-    - 🟡 **中リスク**: スキル偏在あり
-    - 🟢 **低リスク**: バランスの取れたポートフォリオ
-    """)
-
-    # スキル保有者数の分布分析
-    skill_holders = member_competence_df.groupby("力量コード").size().reset_index(name="保有者数")
-
-    # 力量マスタから必要なカラムを取得（存在チェック）
-    master_cols = ["力量コード", "力量名"]
-    if "力量カテゴリー名" in competence_master_df.columns:
-        master_cols.append("力量カテゴリー名")
-
-    skill_holders = skill_holders.merge(
-        competence_master_df[master_cols],
-        on="力量コード",
-        how="left"
-    )
-
-    # リスク分類
+    # 総メンバー数
     total_members = len(members_df)
-    skill_holders["保有率"] = skill_holders["保有者数"] / total_members
-
-    def classify_risk(holder_count):
-        if holder_count == 1:
-            return "🔴 高リスク（1名のみ）"
-        elif holder_count <= 3:
-            return "🟠 中高リスク（2-3名）"
-        elif holder_count <= 5:
-            return "🟡 中リスク（4-5名）"
-        else:
-            return "🟢 低リスク（6名以上）"
-
-    skill_holders["リスクレベル"] = skill_holders["保有者数"].apply(classify_risk)
-
-    # リスクレベルの順序を定義（高リスク→低リスクの順）
-    risk_order = [
-        "🔴 高リスク（1名のみ）",
-        "🟠 中高リスク（2-3名）",
-        "🟡 中リスク（4-5名）",
-        "🟢 低リスク（6名以上）"
-    ]
-
-    # リスクレベルをカテゴリカル型に変換（順序付き）
-    skill_holders["リスクレベル"] = pd.Categorical(
-        skill_holders["リスクレベル"],
-        categories=risk_order,
-        ordered=True
-    )
-
-    # リスク分布
-    col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("#### 🎯 スキルリスク分布")
-        risk_dist = skill_holders["リスクレベル"].value_counts().reset_index()
-        risk_dist.columns = ["リスクレベル", "スキル数"]
-
-        # リスクレベルの順序に従ってソート
-        risk_dist["リスクレベル"] = pd.Categorical(
-            risk_dist["リスクレベル"],
-            categories=risk_order,
-            ordered=True
-        )
-        risk_dist = risk_dist.sort_values("リスクレベル")
-
-        # 色のマッピング（順序に対応）
-        color_map = {
-            "🔴 高リスク（1名のみ）": "#d62728",      # 赤
-            "🟠 中高リスク（2-3名）": "#ff7f0e",      # オレンジ
-            "🟡 中リスク（4-5名）": "#ffbb78",        # 黄
-            "🟢 低リスク（6名以上）": "#2ca02c"       # 緑
-        }
-
-        fig = px.pie(
-            risk_dist,
-            values="スキル数",
-            names="リスクレベル",
-            title="スキル保有リスク分布",
-            color="リスクレベル",
-            color_discrete_map=color_map
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.metric("総スキル数", f"{total_skills}件")
 
     with col2:
-        st.markdown("#### 📊 保有者数分布")
-        fig = px.histogram(
-            skill_holders,
-            x="保有者数",
-            nbins=20,
-            title="スキル保有者数のヒストグラム",
-            labels={"保有者数": "保有者数", "count": "スキル数"}
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.metric("組織平均保有率", f"{avg_coverage*100:.1f}%")
 
-    # 高リスクスキル一覧
-    st.markdown("#### ⚠️ 高リスクスキル（保有者3名以下）")
-    high_risk_skills = skill_holders[skill_holders["保有者数"] <= 3].sort_values("保有者数")
+    with col3:
+        st.metric("クリティカルギャップ", f"{critical_gaps}件",
+                 delta=f"{(critical_gaps/total_skills*100):.1f}%",
+                 delta_color="inverse")
 
-    if len(high_risk_skills) > 0:
-        # 表示するカラムを動的に決定
-        display_cols = ["力量名"]
-        if "力量カテゴリー名" in high_risk_skills.columns:
-            display_cols.append("力量カテゴリー名")
-        display_cols.extend(["保有者数", "保有率", "リスクレベル"])
+    with col4:
+        st.metric("総メンバー数", f"{total_members}名")
 
-        st.dataframe(
-            high_risk_skills[display_cols],
-            use_container_width=True,
-            height=300
-        )
-
-        st.warning(f"⚠️ {len(high_risk_skills)}件のスキルが高リスク状態です。優先的に育成計画を立案することを推奨します。")
-    else:
-        st.success("✅ 高リスクスキルはありません")
-
-    # スキルカテゴリ別集中度分析
-    if "力量カテゴリー名" in skill_holders.columns:
-        st.markdown("#### 📂 カテゴリ別スキル集中度")
-
-        category_summary = skill_holders.groupby("力量カテゴリー名").agg({
-            "保有者数": ["mean", "min", "max", "std"]
-        }).reset_index()
-        category_summary.columns = ["カテゴリ", "平均保有者数", "最小保有者数", "最大保有者数", "標準偏差"]
-        category_summary["変動係数 (CV)"] = category_summary["標準偏差"] / category_summary["平均保有者数"]
-        category_summary = category_summary.sort_values("変動係数 (CV)", ascending=False)
-
-        st.dataframe(category_summary, use_container_width=True)
-        st.caption("💡 変動係数(CV)が高いカテゴリは、スキル間の保有者数のばらつきが大きく、リスクが高い可能性があります")
+    st.markdown("---")
 
 
-def render_talent_risk_dashboard(
-    member_competence_df: pd.DataFrame,
+def render_category_skill_distribution(
+    gap_df: pd.DataFrame,
     competence_master_df: pd.DataFrame,
-    members_df: pd.DataFrame
+    hierarchy_level: int = 1
 ) -> None:
     """
-    ④人材リスク分析ダッシュボード
+    カテゴリ別スキル分布を表示
 
-    キーパーソンリスク、スキル依存度を分析
+    Args:
+        gap_df: スキルギャップデータ
+        competence_master_df: 力量マスタ
+        hierarchy_level: 階層レベル（1=第一階層、2=第二階層）
     """
-    st.markdown("### 🚨 人材リスク分析")
+    st.markdown("### 📈 カテゴリ別スキル保有状況")
 
-    # 説明を改善
-    st.info("""
-    **📌 この分析の目的**
-    特定メンバーへのスキル集中リスクを特定し、組織の脆弱性を可視化します。
-    - キーパーソンの識別（スキル保有数が多いメンバー）
-    - ユニークスキル保有者の特定（そのメンバーしか持っていないスキル）
-    - スキル分布の偏り分析
-    """)
-
-    # メンバー別スキル保有数
-    member_skill_counts = member_competence_df.groupby("メンバーコード").size().reset_index(name="保有スキル数")
-
-    # メンバー情報の結合（カラム存在チェック）
-    member_cols = ["メンバーコード"]
-    optional_cols = {"メンバー名": "メンバーコード", "職種": None, "役職": None}  # フォールバック値
-
-    for col, fallback in optional_cols.items():
-        if col in members_df.columns:
-            member_cols.append(col)
-        elif fallback:
-            # メンバー名がない場合はメンバーコードで代用
-            if col == "メンバー名":
-                members_df = members_df.copy()
-                members_df["メンバー名"] = members_df["メンバーコード"]
-                member_cols.append("メンバー名")
-
-    member_skill_counts = member_skill_counts.merge(
-        members_df[member_cols],
-        on="メンバーコード",
-        how="left"
-    )
-
-    # メンバー名カラムが存在しない場合の対応
-    if "メンバー名" not in member_skill_counts.columns:
-        member_skill_counts["メンバー名"] = member_skill_counts["メンバーコード"]
-
-    # パレート分析を先に計算
-    top_20_pct_count = max(1, int(len(member_skill_counts) * 0.2))
-    top_20_pct_skills = member_skill_counts.nlargest(top_20_pct_count, "保有スキル数")["保有スキル数"].sum()
-    total_skills = member_skill_counts["保有スキル数"].sum()
-    pareto_ratio = (top_20_pct_skills / total_skills) * 100 if total_skills > 0 else 0
-
-    # サマリーメトリクスを上部に表示
-    st.markdown("---")
-    st.markdown("#### 📊 組織全体のスキル保有状況")
-
-    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-
-    with metric_col1:
-        st.metric(
-            label="平均スキル数/人",
-            value=f"{member_skill_counts['保有スキル数'].mean():.1f}",
-            help="1人あたりの平均スキル保有数"
-        )
-
-    with metric_col2:
-        st.metric(
-            label="中央値",
-            value=f"{member_skill_counts['保有スキル数'].median():.0f}",
-            help="スキル保有数の中央値"
-        )
-
-    with metric_col3:
-        st.metric(
-            label="最大スキル数",
-            value=f"{member_skill_counts['保有スキル数'].max()}",
-            help="最もスキルを多く保有しているメンバーのスキル数"
-        )
-
-    with metric_col4:
-        alert_icon = "🔴" if pareto_ratio > 50 else "🟡" if pareto_ratio > 40 else "🟢"
-        st.metric(
-            label="パレート比率",
-            value=f"{alert_icon} {pareto_ratio:.1f}%",
-            help="上位20%のメンバーが保有するスキルの割合（高いほど集中リスクあり）"
-        )
-
-    # 上位スキル保有者
-    st.markdown("---")
-    st.markdown("#### 🌟 トップスキル保有者（キーパーソン）")
-
-    top_members = member_skill_counts.nlargest(10, "保有スキル数")
-
-    # グラフを改善
-    fig = px.bar(
-        top_members,
-        y="メンバー名",  # 横棒グラフに変更
-        x="保有スキル数",
-        color="保有スキル数",
-        color_continuous_scale="Blues",
-        text="保有スキル数",
-        orientation='h'  # 横向き
-    )
-
-    fig.update_traces(
-        texttemplate='%{text}件',
-        textposition='outside',
-        textfont_size=12
-    )
-
-    fig.update_layout(
-        height=450,
-        showlegend=False,
-        xaxis_title="保有スキル数",
-        yaxis_title="",
-        yaxis={'categoryorder':'total ascending'},  # 値の昇順でソート
-        font=dict(size=11),
-        margin=dict(l=20, r=20, t=20, b=20)
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    if pareto_ratio > 50:
-        st.warning(f"⚠️ 上位20%のメンバーが全体の{pareto_ratio:.1f}%のスキルを保有しています。特定メンバーへの依存度が高い状態です。")
-    elif pareto_ratio > 40:
-        st.info(f"💡 上位20%のメンバーが全体の{pareto_ratio:.1f}%のスキルを保有しています。やや集中傾向があります。")
-    else:
-        st.success(f"✅ スキルが比較的分散されています（上位20%で{pareto_ratio:.1f}%）。")
-
-    # ユニークスキル分析（そのメンバーしか持っていないスキル）
-    st.markdown("#### 🎯 ユニークスキル保有者（離職リスク高）")
-
-    skill_holder_counts = member_competence_df.groupby("力量コード")["メンバーコード"].nunique().reset_index(name="保有者数")
-    unique_skills = skill_holder_counts[skill_holder_counts["保有者数"] == 1]["力量コード"].tolist()
-
-    if unique_skills:
-        unique_skill_holders = member_competence_df[
-            member_competence_df["力量コード"].isin(unique_skills)
-        ].merge(
-            members_df[member_cols],  # 既に構築したmember_colsを使用
-            on="メンバーコード",
-            how="left"
-        ).merge(
-            competence_master_df[["力量コード", "力量名"]],
+    # カテゴリ情報をマージ
+    if "力量コード" in gap_df.columns and "力量コード" in competence_master_df.columns:
+        merged = gap_df.merge(
+            competence_master_df[["力量コード", "力量タイプ"]],
             on="力量コード",
             how="left"
         )
-
-        # メンバー名カラムが存在しない場合の対応
-        if "メンバー名" not in unique_skill_holders.columns:
-            unique_skill_holders["メンバー名"] = unique_skill_holders["メンバーコード"]
-
-        # groupbyのカラムを動的に構築
-        groupby_cols = ["メンバー名"]
-        if "職種" in unique_skill_holders.columns:
-            groupby_cols.append("職種")
-        if "役職" in unique_skill_holders.columns:
-            groupby_cols.append("役職")
-
-        unique_summary = unique_skill_holders.groupby(groupby_cols).agg({
-            "力量コード": "count"
-        }).reset_index()
-
-        # カラム名を設定
-        new_cols = groupby_cols + ["ユニークスキル数"]
-        unique_summary.columns = new_cols
-        unique_summary = unique_summary.sort_values("ユニークスキル数", ascending=False)
-
-        st.dataframe(unique_summary, use_container_width=True, height=300)
-
-        st.error(f"⚠️ {len(unique_summary)}名のメンバーが組織で唯一のスキルを保有しています。これらのメンバーの離職は組織に重大な影響を与えます。")
-
-        # 詳細表示
-        with st.expander("ユニークスキル詳細を表示"):
-            # 表示カラムを動的に構築
-            detail_cols = ["メンバー名"]
-            if "職種" in unique_skill_holders.columns:
-                detail_cols.append("職種")
-            if "力量名" in unique_skill_holders.columns:
-                detail_cols.append("力量名")
-
-            st.dataframe(
-                unique_skill_holders[detail_cols],
-                use_container_width=True
-            )
     else:
-        st.success("✅ 全てのスキルが複数名で共有されています")
+        st.warning("⚠️ カテゴリ情報が不足しているため、この分析をスキップします")
+        return
 
-    # スキル分布の偏り分析
-    st.markdown("#### 📊 スキル分布の不均衡度")
+    # 階層抽出
+    merged["カテゴリ"] = merged["力量タイプ"].apply(
+        lambda x: extract_category_hierarchy(x, hierarchy_level)
+    )
 
-    # ジニ係数の計算（スキル保有の不平等度）
-    skill_counts_sorted = member_skill_counts["保有スキル数"].sort_values().values
-    n = len(skill_counts_sorted)
-    index = np.arange(1, n + 1)
-    gini = (2 * np.sum(index * skill_counts_sorted)) / (n * np.sum(skill_counts_sorted)) - (n + 1) / n
+    # カテゴリごとの集計
+    category_stats = merged.groupby("カテゴリ").agg({
+        "現在保有率": "mean",
+        "目標保有率": "mean",
+        "保有率ギャップ率": "mean",
+        "力量コード": "count"
+    }).reset_index()
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("ジニ係数", f"{gini:.3f}", help="0に近いほど均等、1に近いほど不均等")
-    with col2:
-        skewness = stats.skew(member_skill_counts["保有スキル数"])
-        st.metric("歪度", f"{skewness:.2f}", help="正の値は一部のメンバーにスキルが集中")
-    with col3:
-        cv = member_skill_counts["保有スキル数"].std() / member_skill_counts["保有スキル数"].mean()
-        st.metric("変動係数", f"{cv:.2f}", help="スキル保有数のばらつき度")
+    category_stats.columns = ["カテゴリ", "平均現在保有率", "平均目標保有率", "平均ギャップ率", "スキル数"]
 
-    if gini > 0.4:
-        st.warning("⚠️ スキルが一部のメンバーに集中しています。組織全体でのスキル共有・育成を推奨します。")
-    elif gini < 0.2:
-        st.success("✅ スキルが均等に分散しています。")
+    # ソート
+    category_stats = category_stats.sort_values("平均ギャップ率", ascending=False)
+
+    # 可視化
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        name="現在保有率",
+        x=category_stats["カテゴリ"],
+        y=category_stats["平均現在保有率"] * 100,
+        marker_color='lightblue'
+    ))
+
+    fig.add_trace(go.Bar(
+        name="目標保有率",
+        x=category_stats["カテゴリ"],
+        y=category_stats["平均目標保有率"] * 100,
+        marker_color='orange'
+    ))
+
+    fig.update_layout(
+        title="カテゴリ別スキル保有率（現在 vs 目標）",
+        xaxis_title="カテゴリ",
+        yaxis_title="保有率 (%)",
+        barmode='group',
+        height=500,
+        hovermode='x unified'
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # データテーブル
+    st.dataframe(
+        category_stats.style.format({
+            "平均現在保有率": "{:.1%}",
+            "平均目標保有率": "{:.1%}",
+            "平均ギャップ率": "{:.1%}"
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def render_risk_priority_matrix(
+    gap_df: pd.DataFrame,
+    top_n: int = 20
+) -> None:
+    """
+    リスク優先度マトリックスを表示
+
+    Args:
+        gap_df: スキルギャップデータ
+        top_n: 表示する上位スキル数
+    """
+    st.markdown("### 🎯 リスク優先度マトリックス")
+
+    st.markdown("""
+    **保有率ギャップ** と **目標保有率** の2軸でリスクを評価します。
+    - 右上: 高い目標 × 大きなギャップ = **最優先対応**
+    - 左上: 高い目標 × 小さなギャップ = 維持・強化
+    - 右下: 低い目標 × 大きなギャップ = 中優先度
+    """)
+
+    # 上位スキルを選択
+    if "保有率ギャップ率" in gap_df.columns:
+        top_gaps = gap_df.nlargest(top_n, "保有率ギャップ率")
     else:
-        st.info("ℹ️ スキル分布は標準的です。")
+        st.warning("⚠️ 保有率ギャップ率カラムが見つかりません")
+        return
+
+    # バブルチャート
+    fig = px.scatter(
+        top_gaps,
+        x="保有率ギャップ率",
+        y="目標保有率",
+        size="現在保有率",
+        color="保有率ギャップ率",
+        hover_name="力量名",
+        hover_data={
+            "現在保有率": ":.1%",
+            "目標保有率": ":.1%",
+            "保有率ギャップ率": ":.1%"
+        },
+        title=f"リスク優先度マトリックス（上位{top_n}スキル）",
+        labels={
+            "保有率ギャップ率": "保有率ギャップ (%)",
+            "目標保有率": "目標保有率 (%)"
+        },
+        color_continuous_scale="Reds"
+    )
+
+    # 四分位線を追加
+    median_gap = top_gaps["保有率ギャップ率"].median()
+    median_target = top_gaps["目標保有率"].median()
+
+    fig.add_hline(y=median_target, line_dash="dash", line_color="gray", opacity=0.5)
+    fig.add_vline(x=median_gap, line_dash="dash", line_color="gray", opacity=0.5)
+
+    fig.update_layout(height=600)
+    st.plotly_chart(fig, use_container_width=True)
 
 
-def render_benchmark_dashboard(
+def render_skill_coverage_by_role(
+    member_competence_df: pd.DataFrame,
+    members_df: pd.DataFrame,
+    role_column: str = "役職"
+) -> None:
+    """
+    役職・職種別のスキルカバレッジを表示
+
+    Args:
+        member_competence_df: メンバー習得力量データ
+        members_df: メンバーマスタ
+        role_column: 役職または職種のカラム名
+    """
+    st.markdown(f"### 👥 {role_column}別スキルカバレッジ分析")
+
+    # メンバー情報とマージ
+    if "メンバーコード" in member_competence_df.columns and "メンバーコード" in members_df.columns:
+        merged = member_competence_df.merge(
+            members_df[["メンバーコード", role_column]],
+            on="メンバーコード",
+            how="left"
+        )
+    else:
+        st.warning(f"⚠️ {role_column}別分析をスキップします（メンバーコードが不足）")
+        return
+
+    # 役職が欠損している行を除外
+    merged = merged[merged[role_column].notna()]
+
+    if len(merged) == 0:
+        st.warning(f"⚠️ {role_column}情報が見つかりません")
+        return
+
+    # メンバーごとのスキル保有数を計算
+    member_skill_counts = merged.groupby(["メンバーコード", role_column]).size().reset_index(name="スキル保有数")
+
+    # 役職ごとの統計
+    role_stats = member_skill_counts.groupby(role_column).agg({
+        "スキル保有数": ["mean", "median", "min", "max", "std"]
+    }).reset_index()
+
+    role_stats.columns = [role_column, "平均", "中央値", "最小", "最大", "標準偏差"]
+    role_stats = role_stats.sort_values("平均", ascending=False)
+
+    # ボックスプロット
+    fig = px.box(
+        member_skill_counts,
+        x=role_column,
+        y="スキル保有数",
+        title=f"{role_column}別スキル保有数分布",
+        labels={role_column: role_column, "スキル保有数": "スキル保有数"},
+        points="all"
+    )
+
+    fig.update_layout(height=500)
+    st.plotly_chart(fig, use_container_width=True)
+
+    # 統計テーブル
+    st.markdown("#### 📊 統計サマリー")
+    st.dataframe(
+        role_stats.style.format({
+            "平均": "{:.1f}",
+            "中央値": "{:.1f}",
+            "最小": "{:.0f}",
+            "最大": "{:.0f}",
+            "標準偏差": "{:.2f}"
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def render_succession_planning_advanced(
+    member_competence_df: pd.DataFrame,
+    members_df: pd.DataFrame,
+    competence_master_df: pd.DataFrame,
+    target_role: str,
+    role_column: str = "役職"
+) -> None:
+    """
+    高度な後継者計画分析を表示
+
+    Args:
+        member_competence_df: メンバー習得力量データ
+        members_df: メンバーマスタ
+        competence_master_df: 力量マスタ
+        target_role: 対象役職
+        role_column: 役職カラム名
+    """
+    st.markdown(f"### 👔 後継者計画: {target_role}")
+
+    # 現在の役職保持者のスキルセット分析
+    current_holders = members_df[members_df[role_column] == target_role]
+
+    if len(current_holders) == 0:
+        st.warning(f"⚠️ {target_role}の現在の保持者が見つかりません")
+        return
+
+    st.markdown(f"**現在の{target_role}保持者**: {len(current_holders)}名")
+
+    # 現在の保持者のスキルセット
+    holder_codes = current_holders["メンバーコード"].tolist()
+    holder_skills = member_competence_df[
+        member_competence_df["メンバーコード"].isin(holder_codes)
+    ]
+
+    # 役職に必要なスキルセット（現在保持者が80%以上持っているスキル）
+    required_skills = holder_skills.groupby("力量コード").size()
+    threshold = len(holder_codes) * 0.8
+    required_skill_codes = required_skills[required_skills >= threshold].index.tolist()
+
+    st.markdown(f"**必須スキル数**: {len(required_skill_codes)}件（現保持者の80%以上が保有）")
+
+    # 後継者候補の評価
+    all_members = members_df[members_df[role_column] != target_role]["メンバーコード"].tolist()
+
+    candidate_scores = []
+    for member_code in all_members:
+        member_skills = member_competence_df[
+            member_competence_df["メンバーコード"] == member_code
+        ]["力量コード"].tolist()
+
+        # 必須スキルのうち保有している割合
+        match_count = len(set(member_skills) & set(required_skill_codes))
+        coverage = match_count / len(required_skill_codes) if len(required_skill_codes) > 0 else 0
+
+        member_info = members_df[members_df["メンバーコード"] == member_code].iloc[0]
+
+        candidate_scores.append({
+            "メンバーコード": member_code,
+            "メンバー名": member_info.get("メンバー名", ""),
+            "現在の役職": member_info.get(role_column, ""),
+            "必須スキルカバー率": coverage,
+            "保有スキル数": len(member_skills),
+            "不足スキル数": len(required_skill_codes) - match_count
+        })
+
+    candidate_df = pd.DataFrame(candidate_scores)
+    candidate_df = candidate_df.sort_values("必須スキルカバー率", ascending=False).head(10)
+
+    # 準備度による分類
+    def classify_readiness(coverage):
+        if coverage >= 0.9:
+            return "🟢 即戦力（Ready Now）"
+        elif coverage >= 0.7:
+            return "🟡 短期育成（1-2年）"
+        elif coverage >= 0.5:
+            return "🟠 中期育成（2-3年）"
+        else:
+            return "🔴 長期育成（3年以上）"
+
+    candidate_df["準備度"] = candidate_df["必須スキルカバー率"].apply(classify_readiness)
+
+    # 可視化
+    fig = px.bar(
+        candidate_df.head(10),
+        x="メンバー名",
+        y="必須スキルカバー率",
+        color="準備度",
+        title=f"{target_role}後継者候補トップ10",
+        labels={"必須スキルカバー率": "必須スキルカバー率 (%)"},
+        hover_data=["現在の役職", "保有スキル数", "不足スキル数"]
+    )
+
+    fig.update_layout(height=500)
+    st.plotly_chart(fig, use_container_width=True)
+
+    # 候補者リスト
+    st.markdown("#### 📋 候補者詳細")
+    st.dataframe(
+        candidate_df.style.format({
+            "必須スキルカバー率": "{:.1%}",
+            "保有スキル数": "{:.0f}",
+            "不足スキル数": "{:.0f}"
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def render_team_composition_analysis(
+    member_competence_df: pd.DataFrame,
+    members_df: pd.DataFrame,
+    competence_master_df: pd.DataFrame,
+    team_column: str = "職種"
+) -> None:
+    """
+    チーム構成分析（スキルの相補性・冗長性）
+
+    Args:
+        member_competence_df: メンバー習得力量データ
+        members_df: メンバーマスタ
+        competence_master_df: 力量マスタ
+        team_column: チーム分類カラム（職種、部署など）
+    """
+    st.markdown(f"### 🤝 チーム構成分析（{team_column}別）")
+
+    st.markdown("""
+    **分析視点**:
+    - **カバレッジ**: チームが保有するユニークスキル数
+    - **冗長性**: 複数メンバーが保有するスキルの割合（リスク分散）
+    - **専門性**: 1名のみが保有するスキルの割合（属人化リスク）
+    """)
+
+    # メンバー情報とマージ
+    if "メンバーコード" not in member_competence_df.columns or "メンバーコード" not in members_df.columns:
+        st.warning("⚠️ メンバーコードが不足しているため、この分析をスキップします")
+        return
+
+    merged = member_competence_df.merge(
+        members_df[["メンバーコード", team_column]],
+        on="メンバーコード",
+        how="left"
+    )
+
+    merged = merged[merged[team_column].notna()]
+
+    if len(merged) == 0:
+        st.warning(f"⚠️ {team_column}情報が見つかりません")
+        return
+
+    # チームごとの分析
+    team_stats = []
+
+    for team_name, team_data in merged.groupby(team_column):
+        member_count = team_data["メンバーコード"].nunique()
+        unique_skills = team_data["力量コード"].nunique()
+
+        # スキルごとの保有メンバー数
+        skill_member_counts = team_data.groupby("力量コード")["メンバーコード"].nunique()
+
+        # 冗長性（2名以上が保有）
+        redundant_skills = (skill_member_counts >= 2).sum()
+        redundancy_rate = redundant_skills / unique_skills if unique_skills > 0 else 0
+
+        # 属人化リスク（1名のみが保有）
+        single_person_skills = (skill_member_counts == 1).sum()
+        risk_rate = single_person_skills / unique_skills if unique_skills > 0 else 0
+
+        team_stats.append({
+            team_column: team_name,
+            "メンバー数": member_count,
+            "ユニークスキル数": unique_skills,
+            "1人あたりスキル数": unique_skills / member_count if member_count > 0 else 0,
+            "冗長性率": redundancy_rate,
+            "属人化リスク率": risk_rate
+        })
+
+    team_stats_df = pd.DataFrame(team_stats)
+    team_stats_df = team_stats_df.sort_values("ユニークスキル数", ascending=False)
+
+    # 可視化
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        name="冗長性率（複数保有）",
+        x=team_stats_df[team_column],
+        y=team_stats_df["冗長性率"] * 100,
+        marker_color='lightgreen'
+    ))
+
+    fig.add_trace(go.Bar(
+        name="属人化リスク率（1名のみ）",
+        x=team_stats_df[team_column],
+        y=team_stats_df["属人化リスク率"] * 100,
+        marker_color='salmon'
+    ))
+
+    fig.update_layout(
+        title=f"{team_column}別スキル冗長性 vs 属人化リスク",
+        xaxis_title=team_column,
+        yaxis_title="割合 (%)",
+        barmode='group',
+        height=500
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # データテーブル
+    st.markdown("#### 📊 チーム構成統計")
+    st.dataframe(
+        team_stats_df.style.format({
+            "メンバー数": "{:.0f}",
+            "ユニークスキル数": "{:.0f}",
+            "1人あたりスキル数": "{:.1f}",
+            "冗長性率": "{:.1%}",
+            "属人化リスク率": "{:.1%}"
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # 推奨事項
+    st.markdown("#### 💡 推奨アクション")
+
+    high_risk_teams = team_stats_df[team_stats_df["属人化リスク率"] > 0.5]
+    low_redundancy_teams = team_stats_df[team_stats_df["冗長性率"] < 0.3]
+
+    if len(high_risk_teams) > 0:
+        st.warning(f"⚠️ **高い属人化リスク**: {', '.join(high_risk_teams[team_column].tolist())} でスキルの属人化が進んでいます。クロストレーニングを推奨します。")
+
+    if len(low_redundancy_teams) > 0:
+        st.warning(f"⚠️ **低い冗長性**: {', '.join(low_redundancy_teams[team_column].tolist())} でスキルのバックアップ体制が不足しています。")
+
+
+def render_competency_based_org_design(
     member_competence_df: pd.DataFrame,
     competence_master_df: pd.DataFrame,
     members_df: pd.DataFrame
 ) -> None:
     """
-    ⑤組織ベンチマーキング＆競合比較ダッシュボード
+    コンピテンシーベースの組織設計分析
 
-    業界標準や理想状態と比較
+    Args:
+        member_competence_df: メンバー習得力量データ
+        competence_master_df: 力量マスタ
+        members_df: メンバーマスタ
     """
-    st.markdown("### 📊 組織ベンチマーキング")
+    st.markdown("### 🏢 コンピテンシーベース組織設計")
+
     st.markdown("""
-    **分析目的**: 組織のスキル成熟度を評価し、改善領域を特定
+    **データドリブン組織設計アプローチ**:
+    スキルの共起パターンから自然なチーム編成を発見します。
     """)
 
-    # ベンチマークデータに関する注意書き
-    st.info("""
-    ℹ️ **ベンチマークデータについて**
+    # スキル共起マトリックスの作成
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.cluster import KMeans
 
-    「業界平均」と「トップ企業」の数値は**参考値**として表示しています。
-    実際の業界データや自社の目標値に置き換えることで、より正確な分析が可能になります。
-
-    **現在の参考値：**
-    - 業界平均: 平均スキル数 8.5件/人、カバレッジ率 65%
-    - トップ企業: 平均スキル数 12.0件/人、カバレッジ率 85%
-    """)
-
-    # 基本統計
-    total_members = len(members_df)
-    total_skills_available = len(competence_master_df)
-    total_skill_acquisitions = len(member_competence_df)
-    avg_skills_per_member = total_skill_acquisitions / total_members if total_members > 0 else 0
-    coverage_rate = (member_competence_df["力量コード"].nunique() / total_skills_available) * 100
-
-    # 各指標を安全に計算
-    try:
-        diversity_index = calculate_diversity_index(member_competence_df)
-    except Exception as e:
-        diversity_index = 0.0
-        st.warning(f"スキル多様性指数の計算中にエラーが発生しました: {e}")
-
-    try:
-        t_shaped_ratio = calculate_t_shaped_ratio(member_competence_df, competence_master_df)
-    except Exception as e:
-        t_shaped_ratio = 0.0
-        st.warning(f"T字型人材比率の計算中にエラーが発生しました: {e}")
-
-    # ベンチマークデータ（参考値 - サンプルデータ）
-    # NOTE: 実際の運用では、以下の方法でカスタマイズ可能：
-    # 1. 設定ファイル（YAML/JSON）から読み込み
-    # 2. 外部ベンチマークAPIから取得
-    # 3. UI上で編集可能なサイドバー入力欄を追加
-    benchmark_data = {
-        "現在の組織": {
-            "平均スキル数/人": avg_skills_per_member,
-            "スキルカバレッジ率": coverage_rate,
-            "スキル多様性指数": diversity_index,
-            "T字型人材比率": t_shaped_ratio
-        },
-        "業界平均": {
-            "平均スキル数/人": 8.5,
-            "スキルカバレッジ率": 65.0,
-            "スキル多様性指数": 0.75,
-            "T字型人材比率": 35.0
-        },
-        "トップ企業": {
-            "平均スキル数/人": 12.0,
-            "スキルカバレッジ率": 85.0,
-            "スキル多様性指数": 0.85,
-            "T字型人材比率": 50.0
-        }
-    }
-
-    df_benchmark = pd.DataFrame(benchmark_data).T
-
-    # レーダーチャート
-    st.markdown("#### 🎯 総合スコア比較")
-
-    categories = list(df_benchmark.columns)
-
-    fig = go.Figure()
-
-    for org_name in df_benchmark.index:
-        fig.add_trace(go.Scatterpolar(
-            r=df_benchmark.loc[org_name].values,
-            theta=categories,
-            fill='toself',
-            name=org_name
-        ))
-
-    fig.update_layout(
-        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-        showlegend=True,
-        height=500,
-        title="組織スキル成熟度ベンチマーク"
+    # メンバー×スキルマトリックス
+    member_skill_matrix = member_competence_df.pivot_table(
+        index="メンバーコード",
+        columns="力量コード",
+        values="レベル" if "レベル" in member_competence_df.columns else "メンバーコード",
+        aggfunc="count",
+        fill_value=0
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    # クラスタリング（メンバーを類似スキルセットでグループ化）
+    n_clusters = min(5, len(member_skill_matrix) // 3)  # 最大5クラスタ、最小3名/クラスタ
 
-    # 詳細比較テーブル
-    st.markdown("#### 📋 詳細比較")
+    if n_clusters < 2:
+        st.warning("⚠️ クラスタリングには最低6名以上のメンバーが必要です")
+        return
 
-    comparison_df = df_benchmark.copy()
-    comparison_df["vs 業界平均"] = ((comparison_df.loc["現在の組織"] / comparison_df.loc["業界平均"] - 1) * 100).round(1)
-    comparison_df["vs トップ企業"] = ((comparison_df.loc["現在の組織"] / comparison_df.loc["トップ企業"] - 1) * 100).round(1)
+    scaler = StandardScaler()
+    features_scaled = scaler.fit_transform(member_skill_matrix)
 
-    st.dataframe(comparison_df.T, use_container_width=True)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    clusters = kmeans.fit_predict(features_scaled)
 
-    # 改善推奨アクション
-    st.markdown("#### 💡 改善推奨アクション")
+    # クラスタ情報を追加
+    cluster_assignment = pd.DataFrame({
+        "メンバーコード": member_skill_matrix.index,
+        "クラスター": clusters
+    })
 
-    actions = []
-
-    if avg_skills_per_member < 8.5:
-        actions.append("📚 **スキル育成プログラムの強化**: 平均スキル数が業界平均を下回っています")
-
-    if coverage_rate < 65:
-        actions.append("🎯 **スキルカバレッジの拡大**: 組織として保有すべきスキルの範囲を広げましょう")
-
-    diversity = calculate_diversity_index(member_competence_df)
-    if diversity < 0.75:
-        actions.append("🌈 **スキル多様性の向上**: 特定スキルへの偏りを是正しましょう")
-
-    t_shaped = calculate_t_shaped_ratio(member_competence_df, competence_master_df)
-    if t_shaped < 35:
-        actions.append("🔰 **T字型人材の育成**: 専門性と幅広い知識を持つ人材を増やしましょう")
-
-    if actions:
-        for action in actions:
-            st.markdown(f"- {action}")
-    else:
-        st.success("✅ 全ての指標で業界平均以上を達成しています！")
-
-
-def calculate_diversity_index(member_competence_df: pd.DataFrame) -> float:
-    """
-    スキル多様性指数を計算（Shannon Entropy）
-    """
-    skill_counts = member_competence_df["力量コード"].value_counts()
-    proportions = skill_counts / skill_counts.sum()
-    entropy = -np.sum(proportions * np.log(proportions + 1e-10))
-    max_entropy = np.log(len(skill_counts))
-    return (entropy / max_entropy) * 100 if max_entropy > 0 else 0
-
-
-def calculate_t_shaped_ratio(member_competence_df: pd.DataFrame, competence_master_df: pd.DataFrame) -> float:
-    """
-    T字型人材比率を計算
-
-    T字型 = 1つ以上の深い専門性（レベル4以上） + 幅広い知識（3カテゴリ以上）
-    """
-    # 保有量カラムの検出
-    level_col = None
-    for col in ["保有量", "力量レベル", "レベル"]:
-        if col in member_competence_df.columns:
-            level_col = col
-            break
-
-    if level_col is None:
-        return 0.0
-
-    # 力量カテゴリー名カラムが存在しない場合は計算不可
-    if "力量カテゴリー名" not in competence_master_df.columns:
-        return 0.0
-
-    # カテゴリ情報を結合
-    merged = member_competence_df.merge(
-        competence_master_df[["力量コード", "力量カテゴリー名"]],
-        on="力量コード",
+    # メンバー情報とマージ
+    cluster_members = cluster_assignment.merge(
+        members_df[["メンバーコード", "メンバー名", "職種", "役職"]],
+        on="メンバーコード",
         how="left"
     )
 
-    # マージ後に力量カテゴリー名が存在しない場合は計算不可
-    if "力量カテゴリー名" not in merged.columns:
-        return 0.0
+    # クラスタごとの代表的なスキルを特定
+    st.markdown("#### 🎯 スキルベース人材クラスター")
 
-    # 保有量を数値型に変換
-    merged[level_col] = pd.to_numeric(merged[level_col], errors='coerce')
+    for cluster_id in range(n_clusters):
+        cluster_member_codes = cluster_assignment[
+            cluster_assignment["クラスター"] == cluster_id
+        ]["メンバーコード"].tolist()
 
-    t_shaped_count = 0
-    total_members = merged["メンバーコード"].nunique()
+        cluster_skills = member_competence_df[
+            member_competence_df["メンバーコード"].isin(cluster_member_codes)
+        ]
 
-    for member_code in merged["メンバーコード"].unique():
-        member_data = merged[merged["メンバーコード"] == member_code]
+        # クラスタの代表的なスキル（保有率が高いスキル）
+        skill_coverage = cluster_skills.groupby("力量コード").size() / len(cluster_member_codes)
+        top_skills = skill_coverage.nlargest(5)
 
-        # 深い専門性チェック（レベル4以上のスキルがあるか）
-        has_deep_skill = False
-        try:
-            valid_levels = member_data[level_col].dropna()
-            if len(valid_levels) > 0 and (valid_levels >= 4).any():
-                has_deep_skill = True
-        except:
-            pass
+        # スキル名を取得
+        skill_names = competence_master_df[
+            competence_master_df["力量コード"].isin(top_skills.index)
+        ].set_index("力量コード")["力量名"].to_dict()
 
-        # 幅広い知識チェック（3カテゴリ以上）
-        try:
-            category_count = member_data["力量カテゴリー名"].dropna().nunique()
-            has_broad_knowledge = category_count >= 3
-        except:
-            has_broad_knowledge = False
+        with st.expander(f"🔷 クラスター {cluster_id + 1} ({len(cluster_member_codes)}名)", expanded=(cluster_id == 0)):
+            st.markdown(f"**代表的なスキル**:")
+            for skill_code in top_skills.index:
+                skill_name = skill_names.get(skill_code, skill_code)
+                coverage_pct = top_skills[skill_code] * 100
+                st.markdown(f"- {skill_name} ({coverage_pct:.0f}%)")
 
-        if has_deep_skill and has_broad_knowledge:
-            t_shaped_count += 1
-
-    return (t_shaped_count / total_members * 100) if total_members > 0 else 0.0
+            st.markdown(f"**メンバー**:")
+            cluster_member_list = cluster_members[cluster_members["クラスター"] == cluster_id]
+            st.dataframe(
+                cluster_member_list[["メンバー名", "職種", "役職"]],
+                use_container_width=True,
+                hide_index=True
+            )
 
 
 def render_enhanced_skill_gap_analysis(
@@ -1041,111 +639,122 @@ def render_enhanced_skill_gap_analysis(
     member_competence_df: pd.DataFrame,
     competence_master_df: pd.DataFrame,
     members_df: pd.DataFrame,
-    percentile_used: float = 0.2
+    percentile_used: float = 0.0
 ) -> None:
     """
-    データサイエンティスト兼人事スペシャリスト視点での高度なスキルギャップ分析
+    高度なスキルギャップ分析（データサイエンス視点）
+
+    データサイエンティスト兼人事スペシャリストの視点で、
+    戦略的な意思決定に役立つ包括的なスキルギャップ分析を提供。
 
     Args:
-        gap_df: ギャップDataFrame
+        gap_df: スキルギャップデータ（力量コード、力量名、現在保有率、目標保有率、ギャップなど）
         member_competence_df: メンバー習得力量データ
-        competence_master_df: 力量マスタデータ
+        competence_master_df: 力量マスタ
         members_df: メンバーマスタ
-        percentile_used: 使用したパーセンタイル
+        percentile_used: 使用したパーセンタイル（0.0=全体平均、0.5=中央値、0.75=75%タイル）
     """
 
-    st.markdown("### 🎯 高度なスキルギャップ分析")
-
-    # 分析概要説明
-    st.info("""
-    📌 **データサイエンス × HR戦略の統合分析**
-
-    この分析では、単なるギャップの特定にとどまらず、以下の高度な視点で組織のスキル開発戦略を支援します：
-    - **多次元スキル優先度分析**: ビジネスインパクト、習得難易度、緊急性を総合評価
-    - **スキル開発ROI推定**: 投資対効果を可視化し、予算配分を最適化
-    - **パターン認識**: 機械学習的アプローチでスキルギャップのクラスター分析
-    - **予測モデリング**: スキル習得タイムラインと組織成熟度の将来予測
-    """)
-
     st.markdown("---")
-
-    # ============================================
-    # 1. エグゼクティブサマリー（KPIダッシュボード）
-    # ============================================
-    st.markdown("#### 📊 エグゼクティブサマリー")
-
-    total_gaps = len(gap_df)
-    critical_gaps = len(gap_df[gap_df["保有率ギャップ率"] >= 0.5])
-    medium_gaps = len(gap_df[(gap_df["保有率ギャップ率"] >= 0.3) & (gap_df["保有率ギャップ率"] < 0.5)])
-    avg_gap_rate = gap_df["保有率ギャップ率"].mean()
-    total_training_need = gap_df["保有率ギャップ"].sum() * len(members_df)
-
-    metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
-
-    with metric_col1:
-        st.metric(
-            label="総スキルギャップ数",
-            value=f"{total_gaps}件",
-            help="目標と現状の差があるスキルの総数"
-        )
-
-    with metric_col2:
-        st.metric(
-            label="🔴 重大ギャップ",
-            value=f"{critical_gaps}件",
-            delta=f"{critical_gaps/total_gaps*100:.1f}%" if total_gaps > 0 else "0%",
-            delta_color="inverse",
-            help="ギャップ率50%以上の緊急対応が必要なスキル"
-        )
-
-    with metric_col3:
-        st.metric(
-            label="🟡 中程度ギャップ",
-            value=f"{medium_gaps}件",
-            help="ギャップ率30-50%の計画的対応が必要なスキル"
-        )
-
-    with metric_col4:
-        st.metric(
-            label="平均ギャップ率",
-            value=f"{avg_gap_rate*100:.1f}%",
-            delta=f"{(avg_gap_rate - 0.3)*100:.1f}%" if avg_gap_rate > 0 else "0%",
-            delta_color="inverse",
-            help="全スキルの平均ギャップ率（30%未満が健全）"
-        )
-
-    with metric_col5:
-        st.metric(
-            label="推定育成人数",
-            value=f"{int(total_training_need):,}人",
-            help="ギャップを埋めるために必要な延べ育成人数"
-        )
-
     st.markdown("---")
-
-    # ============================================
-    # 2. 多次元スキル優先度マトリクス
-    # ============================================
-    st.markdown("#### 🎯 多次元スキル優先度分析（優先度マトリクス）")
+    st.markdown("## 🎓 高度なスキルギャップ分析")
+    st.markdown("**データサイエンス × 人事スペシャリスト視点での戦略的分析**")
 
     st.markdown("""
-    **分析手法**: 各スキルを3つの軸で評価し、投資優先度を科学的に判定
-    - **X軸（ビジネスインパクト）**: 目標保有率が高いほど、組織戦略上重要
-    - **Y軸（緊急性）**: ギャップ率が大きいほど、即座の対応が必要
-    - **バブルサイズ（習得難易度）**: レベルギャップが大きいほど、育成に時間とコストがかかる
+    このセクションでは、組織のスキルギャップを多角的に分析し、
+    データドリブンな人材育成戦略を策定するための洞察を提供します。
     """)
 
-    # 優先度スコア計算
+    # ============================================
+    # 1. エグゼクティブサマリー
+    # ============================================
+    st.markdown("### 📊 エグゼクティブサマリー")
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    # KPI計算
+    total_gaps = len(gap_df)
+
+    # クリティカルギャップ（ギャップ率30%以上）
+    if "保有率ギャップ率" in gap_df.columns:
+        critical_gaps = len(gap_df[gap_df["保有率ギャップ率"] > 0.3])
+        medium_gaps = len(gap_df[(gap_df["保有率ギャップ率"] > 0.1) & (gap_df["保有率ギャップ率"] <= 0.3)])
+        avg_gap_rate = gap_df["保有率ギャップ率"].mean()
+    else:
+        critical_gaps = 0
+        medium_gaps = 0
+        avg_gap_rate = 0
+
+    # 育成必要人数の推定（ギャップ率 × メンバー数）
+    total_training_needs = 0
+    if "保有率ギャップ率" in gap_df.columns:
+        total_training_needs = (gap_df["保有率ギャップ率"] * len(members_df)).sum()
+
+    with col1:
+        st.metric("総スキルギャップ数", f"{total_gaps}件")
+
+    with col2:
+        st.metric(
+            "🔴 クリティカル",
+            f"{critical_gaps}件",
+            delta=f"{(critical_gaps/total_gaps*100):.0f}%",
+            delta_color="inverse"
+        )
+
+    with col3:
+        st.metric(
+            "🟡 中程度",
+            f"{medium_gaps}件",
+            delta=f"{(medium_gaps/total_gaps*100):.0f}%",
+            delta_color="off"
+        )
+
+    with col4:
+        st.metric(
+            "平均ギャップ率",
+            f"{avg_gap_rate*100:.1f}%"
+        )
+
+    with col5:
+        st.metric(
+            "育成必要人数",
+            f"{int(total_training_needs)}人"
+        )
+
+    st.markdown("---")
+
+    # ============================================
+    # 2. 多次元優先度分析
+    # ============================================
+    st.markdown("### 🎯 多次元優先度分析")
+
+    st.markdown("""
+    **3つの重要指標でスキルギャップを評価**:
+    - **ビジネスインパクト** (1-10): ビジネス成果への影響度
+    - **緊急性** (1-10): 対応の緊急度
+    - **習得難易度** (1-10): スキル習得の難しさ（低いほど習得しやすい）
+    """)
+
+    # ギャップ分析データフレームをコピー
     gap_analysis_df = gap_df.copy()
 
-    # ビジネスインパクト: 目標保有率（0-100に正規化）
-    gap_analysis_df["ビジネスインパクト"] = gap_analysis_df["目標保有率"] * 100
+    # ビジネスインパクト推定（目標保有率の高さで代用）
+    if "目標保有率" in gap_analysis_df.columns:
+        gap_analysis_df["ビジネスインパクト"] = gap_analysis_df["目標保有率"] * 10
+    else:
+        gap_analysis_df["ビジネスインパクト"] = 5.0  # デフォルト
 
-    # 緊急性: ギャップ率（0-100に正規化）
-    gap_analysis_df["緊急性"] = gap_analysis_df["保有率ギャップ率"] * 100
+    # 緊急性推定（ギャップ率の大きさで代用）
+    if "保有率ギャップ率" in gap_analysis_df.columns:
+        gap_analysis_df["緊急性"] = gap_analysis_df["保有率ギャップ率"] * 10
+    else:
+        gap_analysis_df["緊急性"] = 5.0  # デフォルト
 
-    # 習得難易度: レベルギャップ（絶対値を使用、0-5スケール）
-    gap_analysis_df["習得難易度"] = gap_analysis_df["レベルギャップ"].abs()
+    # 習得難易度推定（現在保有率の低さで代用 - 保有率が低い = 難しい）
+    if "現在保有率" in gap_analysis_df.columns:
+        gap_analysis_df["習得難易度"] = (1 - gap_analysis_df["現在保有率"]) * 10
+    else:
+        gap_analysis_df["習得難易度"] = 5.0  # デフォルト
 
     # 総合優先度スコア（重み付き平均: ビジネスインパクト40%, 緊急性40%, 習得難易度の逆数20%）
     gap_analysis_df["優先度スコア"] = (
@@ -1178,126 +787,93 @@ def render_enhanced_skill_gap_analysis(
         hover_data={
             "ビジネスインパクト": ":.1f",
             "緊急性": ":.1f",
-            "習得難易度": ":.2f",
-            "優先度スコア": ":.1f",
-            "現在保有率": ":.1%",
-            "目標保有率": ":.1%"
+            "習得難易度": ":.1f",
+            "優先度スコア": ":.1f"
         },
-        title="スキル投資優先度マトリクス（バブルチャート）",
+        title="スキルギャップ優先度マトリックス（3次元分析）",
+        labels={
+            "ビジネスインパクト": "ビジネスインパクト",
+            "緊急性": "緊急性"
+        },
         color_discrete_map={
-            "🔴 最優先（Strategic Focus）": "#d62728",
-            "🟠 高優先度（High Priority）": "#ff7f0e",
-            "🟡 中優先度（Medium Priority）": "#ffbb78",
-            "🟢 低優先度（Low Priority）": "#2ca02c"
+            "🔴 最優先（Strategic Focus）": "red",
+            "🟠 高優先度（High Priority）": "orange",
+            "🟡 中優先度（Medium Priority）": "yellow",
+            "🟢 低優先度（Low Priority）": "green"
         }
     )
 
-    fig.update_layout(
-        height=600,
-        xaxis_title="ビジネスインパクト（目標保有率）",
-        yaxis_title="緊急性（ギャップ率）",
-        showlegend=True
-    )
-
-    # 右上の象限を強調（高インパクト×高緊急性）
-    fig.add_shape(
-        type="rect",
-        x0=60, y0=60, x1=100, y1=100,
-        line=dict(color="red", width=2, dash="dash"),
-        fillcolor="rgba(255,0,0,0.1)"
-    )
-
-    fig.add_annotation(
-        x=80, y=95,
-        text="<b>戦略的最優先エリア</b>",
-        showarrow=False,
-        font=dict(size=12, color="red")
-    )
-
+    fig.update_layout(height=600)
     st.plotly_chart(fig, use_container_width=True)
 
-    # 優先度カテゴリ別サマリー
-    priority_summary = gap_analysis_df["優先度カテゴリ"].value_counts().reset_index()
-    priority_summary.columns = ["優先度カテゴリ", "スキル数"]
+    # 優先度カテゴリ別の分布
+    priority_counts = gap_analysis_df["優先度カテゴリ"].value_counts()
 
-    col1, col2 = st.columns([1, 2])
+    fig_pie = px.pie(
+        values=priority_counts.values,
+        names=priority_counts.index,
+        title="優先度カテゴリ分布",
+        color=priority_counts.index,
+        color_discrete_map={
+            "🔴 最優先（Strategic Focus）": "red",
+            "🟠 高優先度（High Priority）": "orange",
+            "🟡 中優先度（Medium Priority）": "yellow",
+            "🟢 低優先度（Low Priority）": "green"
+        }
+    )
 
-    with col1:
-        st.markdown("**優先度分布**")
-        st.dataframe(priority_summary, use_container_width=True, hide_index=True)
-
-    with col2:
-        # 円グラフ
-        fig_pie = px.pie(
-            priority_summary,
-            values="スキル数",
-            names="優先度カテゴリ",
-            title="優先度カテゴリ別分布",
-            color="優先度カテゴリ",
-            color_discrete_map={
-                "🔴 最優先（Strategic Focus）": "#d62728",
-                "🟠 高優先度（High Priority）": "#ff7f0e",
-                "🟡 中優先度（Medium Priority）": "#ffbb78",
-                "🟢 低優先度（Low Priority）": "#2ca02c"
-            }
-        )
-        fig_pie.update_layout(height=300)
-        st.plotly_chart(fig_pie, use_container_width=True)
+    st.plotly_chart(fig_pie, use_container_width=True)
 
     st.markdown("---")
 
     # ============================================
-    # 3. スキル開発ROI推定
+    # 3. ROI（投資対効果）分析
     # ============================================
-    st.markdown("#### 💰 スキル開発ROI推定（投資対効果分析）")
+    st.markdown("### 💰 ROI（投資対効果）分析")
 
     st.markdown("""
-    **分析目的**: 限られた予算と時間をどのスキル開発に投資すべきかを定量的に判断
-
-    **前提条件**（カスタマイズ可能）:
-    - 1スキル習得の平均コスト: 研修費 + 時間コスト
-    - スキルレベルによる習得期間の違い
-    - ビジネスインパクトによる価値の重み付け
+    **スキル育成のROIを定量評価**:
+    各スキルへの投資コストとビジネス価値を推定し、優先順位付けをサポートします。
     """)
 
-    # ROI計算パラメータ（UIで調整可能）
-    col1, col2, col3 = st.columns(3)
+    # ROIパラメータ設定
+    roi_col1, roi_col2, roi_col3 = st.columns(3)
 
-    with col1:
+    with roi_col1:
         training_cost_per_skill = st.number_input(
-            "1スキル習得コスト（万円）",
+            "1人あたり育成コスト（万円/スキル）",
             min_value=1,
-            max_value=100,
-            value=20,
-            step=5,
-            help="研修費、教材費、時間コストを含む"
+            max_value=500,
+            value=50,
+            step=10,
+            help="1つのスキルを1人に習得させるのにかかる平均コスト"
         )
 
-    with col2:
+    with roi_col2:
         months_per_level = st.number_input(
-            "レベル1習得に必要な月数",
-            min_value=1,
-            max_value=12,
-            value=3,
-            step=1,
-            help="平均的なスキル習得期間"
+            "習得難易度1あたりの期間（月）",
+            min_value=0.5,
+            max_value=12.0,
+            value=2.0,
+            step=0.5,
+            help="習得難易度1ポイントあたりの習得期間の目安"
         )
 
-    with col3:
+    with roi_col3:
         business_value_multiplier = st.number_input(
-            "ビジネス価値係数",
+            "ビジネス価値倍率",
             min_value=1.0,
             max_value=10.0,
             value=3.0,
             step=0.5,
-            help="スキル習得による組織への価値貢献度"
+            help="育成コストに対するビジネス価値の倍率"
         )
 
     # ROI計算
     roi_df = gap_analysis_df.copy()
 
     # 必要な育成人数
-    roi_df["育成必要人数"] = (roi_df["保有率ギャップ"] * len(members_df)).round(0).astype(int)
+    roi_df["育成必要人数"] = (roi_df["保有率ギャップ率"] * len(members_df)).round(0).astype(int)
 
     # 総投資コスト（万円）
     roi_df["総投資コスト"] = roi_df["育成必要人数"] * training_cost_per_skill
@@ -1319,106 +895,55 @@ def render_enhanced_skill_gap_analysis(
         roi_df["総投資コスト"] * 100
     ).round(1)
 
-    # ROI上位10スキルを表示
-    roi_top = roi_df.nlargest(10, "ROI率")[[
-        "力量名", "育成必要人数", "総投資コスト", "推定ビジネス価値",
-        "ROI率", "推定習得期間", "優先度カテゴリ"
-    ]].copy()
+    # ROI上位10スキル
+    top_roi_skills = roi_df.nlargest(10, "ROI率")
 
-    st.markdown("##### 🏆 ROI上位10スキル（最も投資効果が高いスキル）")
-
-    # スタイリング
-    def highlight_roi(row):
-        colors = [''] * len(row)
-        roi_idx = row.index.get_loc("ROI率")
-
-        if row["ROI率"] >= 200:
-            colors[roi_idx] = 'background-color: #d4edda; font-weight: bold'
-        elif row["ROI率"] >= 100:
-            colors[roi_idx] = 'background-color: #fff3cd'
-
-        return colors
-
-    styled_roi = roi_top.style.apply(highlight_roi, axis=1).format({
-        "総投資コスト": "{:,.0f}万円",
-        "推定ビジネス価値": "{:,.0f}万円",
-        "ROI率": "{:.1f}%",
-        "推定習得期間": "{:.1f}ヶ月"
-    })
-
-    st.dataframe(styled_roi, use_container_width=True, hide_index=True)
-
-    st.caption("🟢 緑背景: 高ROI（200%以上） | 🟡 黄背景: 中ROI（100%以上）")
-
-    # ROI可視化
     fig_roi = px.bar(
-        roi_top,
-        x="ROI率",
-        y="力量名",
+        top_roi_skills,
+        x="力量名",
+        y="ROI率",
         color="優先度カテゴリ",
-        orientation='h',
-        title="ROI上位スキルランキング",
-        labels={"ROI率": "ROI率 (%)", "力量名": ""},
+        title="ROI上位10スキル（投資対効果が高いスキル）",
+        labels={"ROI率": "ROI率 (%)"},
+        hover_data=["総投資コスト", "推定ビジネス価値", "推定習得期間"],
         color_discrete_map={
-            "🔴 最優先（Strategic Focus）": "#d62728",
-            "🟠 高優先度（High Priority）": "#ff7f0e",
-            "🟡 中優先度（Medium Priority）": "#ffbb78",
-            "🟢 低優先度（Low Priority）": "#2ca02c"
+            "🔴 最優先（Strategic Focus）": "red",
+            "🟠 高優先度（High Priority）": "orange",
+            "🟡 中優先度（Medium Priority）": "yellow",
+            "🟢 低優先度（Low Priority）": "green"
         }
     )
 
-    fig_roi.update_layout(
-        height=400,
-        yaxis={'categoryorder':'total ascending'}
-    )
-
+    fig_roi.update_layout(height=500, xaxis_tickangle=-45)
     st.plotly_chart(fig_roi, use_container_width=True)
 
-    # 投資シミュレーション
-    st.markdown("##### 💡 投資シミュレーション")
+    # ROIサマリー統計
+    roi_summary_col1, roi_summary_col2, roi_summary_col3 = st.columns(3)
 
-    total_investment = roi_df["総投資コスト"].sum()
-    total_value = roi_df["推定ビジネス価値"].sum()
-    overall_roi = ((total_value - total_investment) / total_investment * 100) if total_investment > 0 else 0
+    with roi_summary_col1:
+        total_investment = roi_df["総投資コスト"].sum()
+        st.metric("総投資コスト", f"¥{total_investment:,.0f}万円")
 
-    sim_col1, sim_col2, sim_col3 = st.columns(3)
+    with roi_summary_col2:
+        total_value = roi_df["推定ビジネス価値"].sum()
+        st.metric("総ビジネス価値", f"¥{total_value:,.0f}万円")
 
-    with sim_col1:
-        st.metric(
-            "全ギャップ解消の総投資額",
-            f"{total_investment:,.0f}万円",
-            help="全スキルギャップを埋めるために必要な総コスト"
-        )
-
-    with sim_col2:
-        st.metric(
-            "推定総ビジネス価値",
-            f"{total_value:,.0f}万円",
-            help="全スキルギャップを解消した場合の組織価値向上"
-        )
-
-    with sim_col3:
-        st.metric(
-            "全体ROI",
-            f"{overall_roi:.1f}%",
-            delta=f"{overall_roi - 100:.1f}%" if overall_roi > 0 else "0%",
-            help="全体的な投資対効果"
-        )
+    with roi_summary_col3:
+        overall_roi = ((total_value - total_investment) / total_investment * 100) if total_investment > 0 else 0
+        st.metric("全体ROI", f"{overall_roi:.1f}%")
 
     st.markdown("---")
 
     # ============================================
-    # 4. スキルギャップのパターン認識（クラスター分析）
+    # 4. スキルギャップクラスタリング
     # ============================================
-    st.markdown("#### 🔬 スキルギャップのパターン認識")
+    st.markdown("### 🔬 スキルギャップクラスタリング（機械学習分析）")
 
     st.markdown("""
-    **分析手法**: K-meansクラスタリングにより、類似したギャップパターンを持つスキルをグループ化
-
-    これにより、個別スキルではなく「スキルグループ」単位での戦略的育成プログラムを設計できます。
+    **K-meansクラスタリングによるパターン発見**:
+    類似した特性を持つスキルギャップをグループ化し、効率的な育成戦略を提案します。
     """)
 
-    # クラスタリング用データ準備
     from sklearn.preprocessing import StandardScaler
     from sklearn.cluster import KMeans
 
@@ -1436,37 +961,32 @@ def render_enhanced_skill_gap_analysis(
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
     gap_analysis_df["クラスター"] = kmeans.fit_predict(features_scaled)
 
-    # クラスターラベル付け
-    cluster_labels = {
-        0: "🎯 戦略的重要スキル群",
-        1: "⚡ 緊急対応スキル群",
-        2: "📚 基礎育成スキル群",
-        3: "🔄 長期育成スキル群"
-    }
-
-    # クラスターの特性を分析して適切にラベル付け
+    # クラスター特性の分析
     cluster_characteristics = []
+
     for cluster_id in range(n_clusters):
         cluster_data = gap_analysis_df[gap_analysis_df["クラスター"] == cluster_id]
+
         avg_impact = cluster_data["ビジネスインパクト"].mean()
         avg_urgency = cluster_data["緊急性"].mean()
         avg_difficulty = cluster_data["習得難易度"].mean()
 
-        # 特性に基づいてラベルを決定
-        if avg_impact > 60 and avg_urgency > 60:
-            label = "🎯 戦略的重要スキル群"
-        elif avg_urgency > 60:
-            label = "⚡ 緊急対応スキル群"
-        elif avg_difficulty < 2:
-            label = "📚 基礎育成スキル群"
+        # クラスター特性に基づいてラベル付け
+        if avg_impact >= 7 and avg_urgency >= 7:
+            label = "🔴 戦略的最重要クラスター"
+        elif avg_impact >= 6 and avg_difficulty <= 5:
+            label = "🟢 クイックウィンクラスター"
+        elif avg_urgency >= 7:
+            label = "🟠 緊急対応クラスター"
         else:
-            label = "🔄 長期育成スキル群"
+            label = "🟡 中長期育成クラスター"
 
         cluster_characteristics.append({
-            "クラスター": label,
+            "クラスター": f"クラスター {cluster_id}",
+            "ラベル": label,
             "スキル数": len(cluster_data),
-            "平均ビジネスインパクト": f"{avg_impact:.1f}",
-            "平均緊急性": f"{avg_urgency:.1f}",
+            "平均ビジネスインパクト": f"{avg_impact:.2f}",
+            "平均緊急性": f"{avg_urgency:.2f}",
             "平均習得難易度": f"{avg_difficulty:.2f}",
             "推奨アプローチ": _get_cluster_recommendation(avg_impact, avg_urgency, avg_difficulty)
         })
@@ -1532,209 +1052,211 @@ def render_enhanced_skill_gap_analysis(
                 st.metric("育成必要人数", f"{int(skill['育成必要人数'])}人")
 
             with action_col3:
-                st.metric("推定投資額", f"{skill['総投資コスト']:.0f}万円")
-                st.metric("ROI", f"{skill['ROI率']:.1f}%")
+                st.metric("推定コスト", f"¥{skill['総投資コスト']:,.0f}万円")
+                st.metric("推定ROI", f"{skill['ROI率']:.1f}%")
 
-            st.markdown("---")
+            # アクション推奨事項
+            st.markdown("**推奨アクション**:")
+            recommendations = _generate_action_recommendations(
+                skill['優先度スコア'],
+                skill['習得難易度'],
+                skill['育成必要人数']
+            )
 
-            # 具体的アクション
-            st.markdown("##### 📌 推奨アクション")
-
-            actions = _generate_action_recommendations(skill, members_df)
-
-            for action in actions:
-                st.markdown(f"- {action}")
-
-            st.markdown("---")
+            for rec in recommendations:
+                st.markdown(f"- {rec}")
 
             # タイムライン
-            st.markdown("##### ⏱️ 実施タイムライン")
+            st.markdown("**実行タイムライン**:")
+            timeline = _generate_timeline(skill['推定習得期間'])
 
-            timeline = _generate_timeline(skill)
-
-            for phase, desc in timeline.items():
-                st.markdown(f"**{phase}**: {desc}")
+            for phase, description in timeline.items():
+                st.markdown(f"- **{phase}**: {description}")
 
     st.markdown("---")
 
     # ============================================
-    # 6. スキルポートフォリオ最適化提案
+    # 6. ポートフォリオ最適化
     # ============================================
-    st.markdown("#### 🎨 スキルポートフォリオ最適化提案")
+    st.markdown("#### 📊 スキルポートフォリオ最適化")
 
     st.markdown("""
-    **組織全体の視点**: 個別スキルではなく、組織のスキルポートフォリオ全体を最適化
+    **組織全体のスキル投資バランスを最適化**:
+    現在の投資分布と理想的な分布を比較し、リソース配分を最適化します。
     """)
 
-    # 現在のポートフォリオ状態
-    current_strategic = len(gap_analysis_df[gap_analysis_df["優先度カテゴリ"] == "🔴 最優先（Strategic Focus）"])
-    current_high = len(gap_analysis_df[gap_analysis_df["優先度カテゴリ"] == "🟠 高優先度（High Priority）"])
-    current_medium = len(gap_analysis_df[gap_analysis_df["優先度カテゴリ"] == "🟡 中優先度（Medium Priority）"])
-    current_low = len(gap_analysis_df[gap_analysis_df["優先度カテゴリ"] == "🟢 低優先度（Low Priority）"])
+    # 優先度カテゴリ別の投資配分
+    portfolio_df = roi_df.groupby("優先度カテゴリ").agg({
+        "総投資コスト": "sum",
+        "推定ビジネス価値": "sum",
+        "力量コード": "count"
+    }).reset_index()
 
-    # 理想的な配分（ベンチマーク）
-    ideal_strategic = int(total_gaps * 0.2)
-    ideal_high = int(total_gaps * 0.3)
-    ideal_medium = int(total_gaps * 0.3)
-    ideal_low = int(total_gaps * 0.2)
+    portfolio_df.columns = ["優先度カテゴリ", "総投資コスト", "総ビジネス価値", "スキル数"]
 
-    portfolio_comparison = pd.DataFrame({
-        "優先度カテゴリ": [
-            "🔴 最優先",
-            "🟠 高優先度",
-            "🟡 中優先度",
-            "🟢 低優先度"
-        ],
-        "現状": [current_strategic, current_high, current_medium, current_low],
-        "理想": [ideal_strategic, ideal_high, ideal_medium, ideal_low],
-        "差分": [
-            current_strategic - ideal_strategic,
-            current_high - ideal_high,
-            current_medium - ideal_medium,
-            current_low - ideal_low
-        ]
-    })
+    # 現在の投資割合
+    portfolio_df["現在の投資割合"] = portfolio_df["総投資コスト"] / portfolio_df["総投資コスト"].sum()
 
-    # 比較グラフ
+    # 理想的な投資割合（優先度に応じて）
+    ideal_allocation = {
+        "🔴 最優先（Strategic Focus）": 0.50,
+        "🟠 高優先度（High Priority）": 0.30,
+        "🟡 中優先度（Medium Priority）": 0.15,
+        "🟢 低優先度（Low Priority）": 0.05
+    }
+
+    portfolio_df["理想的な投資割合"] = portfolio_df["優先度カテゴリ"].map(ideal_allocation).fillna(0)
+
+    # 比較チャート
     fig_portfolio = go.Figure()
 
     fig_portfolio.add_trace(go.Bar(
-        name="現状",
-        x=portfolio_comparison["優先度カテゴリ"],
-        y=portfolio_comparison["現状"],
+        name="現在の投資割合",
+        x=portfolio_df["優先度カテゴリ"],
+        y=portfolio_df["現在の投資割合"] * 100,
         marker_color='lightblue'
     ))
 
     fig_portfolio.add_trace(go.Bar(
-        name="理想（ベンチマーク）",
-        x=portfolio_comparison["優先度カテゴリ"],
-        y=portfolio_comparison["理想"],
-        marker_color='lightgreen'
+        name="理想的な投資割合",
+        x=portfolio_df["優先度カテゴリ"],
+        y=portfolio_df["理想的な投資割合"] * 100,
+        marker_color='orange'
     ))
 
     fig_portfolio.update_layout(
-        title="スキルポートフォリオ: 現状 vs 理想配分",
-        xaxis_title="",
-        yaxis_title="スキル数",
+        title="スキル投資ポートフォリオ: 現在 vs 理想",
+        xaxis_title="優先度カテゴリ",
+        yaxis_title="投資割合 (%)",
         barmode='group',
-        height=400
+        height=500
     )
 
     st.plotly_chart(fig_portfolio, use_container_width=True)
 
-    # 改善提案
-    st.markdown("##### 💡 ポートフォリオ最適化の提案")
+    # ポートフォリオ最適化の推奨事項
+    st.markdown("##### 💡 ポートフォリオ最適化の推奨事項")
 
-    if current_strategic > ideal_strategic:
-        st.warning(
-            f"⚠️ **最優先スキルが多すぎます** ({current_strategic - ideal_strategic}件超過)\n\n"
-            "一度に多くのスキルを最優先にすると、リソースが分散します。"
-            "最も重要な20%に絞り込み、段階的に取り組むことを推奨します。"
-        )
-    elif current_strategic < ideal_strategic:
-        st.info(
-            f"ℹ️ **最優先スキルの明確化が必要** ({ideal_strategic - current_strategic}件不足)\n\n"
-            "組織戦略上、最優先で取り組むべきスキルを明確に定義することで、投資効果が向上します。"
-        )
-    else:
-        st.success("✅ 最優先スキルの数は適切です")
+    for _, row in portfolio_df.iterrows():
+        category = row["優先度カテゴリ"]
+        current_pct = row["現在の投資割合"] * 100
+        ideal_pct = row["理想的な投資割合"] * 100
+        diff = current_pct - ideal_pct
 
-    # 総合推奨事項
-    st.markdown("##### 🌟 総合推奨事項")
+        if abs(diff) > 10:  # 10%以上の差がある場合に推奨
+            if diff > 0:
+                st.info(f"**{category}**: 現在の投資が{diff:.1f}%過剰です。他の優先度へのリソース移動を検討してください。")
+            else:
+                st.warning(f"**{category}**: 現在の投資が{abs(diff):.1f}%不足しています。追加投資を検討してください。")
 
-    st.markdown(f"""
-    **データに基づく戦略的提言**:
+    st.markdown("---")
 
-    1. **即座に着手すべきスキル**:
-       - {top_priority_skills.iloc[0]['力量名']}を筆頭に、最優先スキル{current_strategic}件に集中投資
-       - 推定投資額: {top_priority_skills.head(5)['総投資コスト'].sum():,.0f}万円
-       - 期待ROI: {top_priority_skills.head(5)['ROI率'].mean():.1f}%
+    # ============================================
+    # 7. データエクスポート
+    # ============================================
+    st.markdown("### 💾 高度な分析結果エクスポート")
 
-    2. **6ヶ月以内の目標**:
-       - 最優先スキルの平均保有率を現状から20%改善
-       - クリティカルギャップ（ギャップ率50%以上）を{critical_gaps}件から半減
-
-    3. **1年後の目標**:
-       - 平均スキルギャップ率を{avg_gap_rate*100:.1f}%から20%未満に削減
-       - 上位{int(percentile_used*100)}%メンバーのスキルセットを組織全体の標準に
-
-    4. **投資配分の推奨**:
-       - 最優先スキル: 予算の50%
-       - 高優先度スキル: 予算の30%
-       - 中優先度スキル: 予算の15%
-       - 低優先度スキル: 予算の5%（機会学習）
+    st.markdown("""
+    **包括的な分析結果をエクスポート**:
+    全ての分析指標を含む詳細レポートをダウンロードできます。
     """)
 
-    # データエクスポート
-    st.markdown("---")
-    st.markdown("### 💾 分析結果のエクスポート")
-
+    # エクスポート用データフレーム（全指標を含む）
     export_df = roi_df[[
         "力量名", "現在保有率", "目標保有率", "保有率ギャップ率",
         "ビジネスインパクト", "緊急性", "習得難易度", "優先度スコア", "優先度カテゴリ",
         "育成必要人数", "総投資コスト", "ROI率", "推定習得期間", "クラスターラベル"
     ]].copy()
 
-    csv = export_df.to_csv(index=False, encoding='utf-8-sig')
+    # CSV出力
+    csv_buffer = io.StringIO()
+    export_df.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
+    csv_data = csv_buffer.getvalue()
 
     st.download_button(
-        label="📥 詳細分析結果をCSVでダウンロード",
-        data=csv,
+        label="📥 詳細分析結果をCSV出力",
+        data=csv_data,
         file_name="enhanced_skill_gap_analysis.csv",
-        mime="text/csv"
+        mime="text/csv",
+        use_container_width=True
     )
 
+    st.success("✅ 高度なスキルギャップ分析が完了しました。")
 
-def _get_cluster_recommendation(impact: float, urgency: float, difficulty: float) -> str:
-    """クラスターごとの推奨アプローチを生成"""
-    if impact > 60 and urgency > 60:
-        return "集中投資・即時実行プログラム"
-    elif urgency > 60:
-        return "短期集中ブートキャンプ形式"
-    elif difficulty < 2:
-        return "eラーニング・自己学習支援"
+
+def _get_cluster_recommendation(avg_impact: float, avg_urgency: float, avg_difficulty: float) -> str:
+    """
+    クラスター特性に基づいた推奨アプローチを生成
+
+    Args:
+        avg_impact: 平均ビジネスインパクト
+        avg_urgency: 平均緊急性
+        avg_difficulty: 平均習得難易度
+
+    Returns:
+        推奨アプローチの説明
+    """
+    if avg_impact >= 7 and avg_urgency >= 7:
+        return "最優先で集中投資。外部研修・専門家招聘を検討"
+    elif avg_impact >= 6 and avg_difficulty <= 5:
+        return "短期集中育成プログラム。社内トレーナー活用"
+    elif avg_urgency >= 7:
+        return "緊急対応チーム編成。即戦力の外部採用も検討"
+    elif avg_difficulty >= 7:
+        return "長期育成計画。段階的なスキルアップパスを設計"
     else:
-        return "中長期OJT・メンター制度"
+        return "OJT中心の育成。既存メンバーからの伝承"
 
 
-def _generate_action_recommendations(skill: pd.Series, members_df: pd.DataFrame) -> List[str]:
-    """スキルごとの具体的アクション推奨を生成"""
-    actions = []
+def _generate_action_recommendations(priority_score: float, difficulty: float, training_needs: int) -> List[str]:
+    """
+    アクション推奨事項を生成
 
-    gap_rate = skill["保有率ギャップ率"]
-    training_need = int(skill["育成必要人数"])
+    Args:
+        priority_score: 優先度スコア
+        difficulty: 習得難易度
+        training_needs: 育成必要人数
 
-    # 育成方法の推奨
-    if skill["習得難易度"] < 2:
-        actions.append(f"📚 **育成方法**: eラーニングプラットフォームで自己学習プログラムを提供（コスト効率◎）")
-    elif skill["習得難易度"] < 3.5:
-        actions.append(f"🎓 **育成方法**: 社内研修プログラムを実施（期間: 1-3ヶ月）")
+    Returns:
+        推奨アクションのリスト
+    """
+    recommendations = []
+
+    # 優先度に基づく推奨
+    if priority_score >= 70:
+        recommendations.append("🔴 **最優先対応**: 経営層の承認を得て即座に育成プログラムを開始")
+        recommendations.append("専任トレーナーの配置または外部専門家の招聘を検討")
+    elif priority_score >= 50:
+        recommendations.append("🟠 **高優先度**: 次四半期の育成計画に組み込み")
+
+    # 難易度に基づく推奨
+    if difficulty >= 7:
+        recommendations.append("📚 **高難度スキル**: 段階的な育成パス（基礎→応用→実践）を設計")
+        recommendations.append("メンタリング制度の活用または外部研修の導入")
+    elif difficulty <= 3:
+        recommendations.append("⚡ **習得容易**: 短期集中研修（1-2週間）で効果的に習得可能")
+
+    # 育成人数に基づく推奨
+    if training_needs >= 10:
+        recommendations.append(f"👥 **大規模育成**: {training_needs}名の育成が必要 - 集合研修やeラーニングの活用を推奨")
+    elif training_needs >= 5:
+        recommendations.append(f"👥 **中規模育成**: {training_needs}名の育成 - グループ研修が効率的")
     else:
-        actions.append(f"👨‍🏫 **育成方法**: 外部専門研修 + 社内メンター制度の併用（期間: 3-6ヶ月）")
+        recommendations.append(f"👤 **少人数育成**: {training_needs}名 - マンツーマン指導やOJTが効果的")
 
-    # 人数規模に応じた実施方法
-    if training_need <= 5:
-        actions.append(f"👥 **実施規模**: 少人数（{training_need}名）- 個別カスタマイズ型育成")
-    elif training_need <= 15:
-        actions.append(f"👥 **実施規模**: 中規模（{training_need}名）- グループ研修形式")
-    else:
-        actions.append(f"👥 **実施規模**: 大規模（{training_need}名）- 複数回に分けたローリング研修")
-
-    # 採用も検討すべきか
-    if gap_rate > 0.7:
-        actions.append(f"💼 **追加施策**: ギャップが大きいため、外部採用も並行検討を推奨")
-
-    # 社内エキスパート活用
-    if skill["現在保有率"] > 0.1:
-        actions.append(f"🌟 **社内リソース活用**: 既存保有者をメンター/トレーナーとして活用")
-
-    return actions
+    return recommendations
 
 
-def _generate_timeline(skill: pd.Series) -> Dict[str, str]:
-    """スキル習得のタイムライン生成"""
-    duration = skill["推定習得期間"]
+def _generate_timeline(duration_months: float) -> Dict[str, str]:
+    """
+    実行タイムラインを生成
 
+    Args:
+        duration_months: 推定習得期間（月）
+
+    Returns:
+        フェーズごとのタイムライン辞書
+    """
     timeline = {}
 
     timeline["第1フェーズ（1-2週間）"] = "対象者選定、ベースライン評価、育成計画策定"
@@ -1753,3 +1275,429 @@ def _generate_timeline(skill: pd.Series) -> Dict[str, str]:
         timeline["第5フェーズ（12ヶ月以降）"] = "マスタリー達成、後進育成"
 
     return timeline
+
+
+def render_enhanced_skill_matrix_analysis(
+    member_competence_df: pd.DataFrame,
+    competence_master_df: pd.DataFrame,
+    members_df: pd.DataFrame,
+    filters: Dict = {}
+) -> None:
+    """
+    高度な人材スキルマトリックス分析（データサイエンス視点）
+
+    データサイエンティスト兼人事スペシャリストの視点で、
+    人材のスキル保有状況を多角的に分析し、戦略的な人材配置や
+    育成計画に役立つ洞察を提供。
+
+    Args:
+        member_competence_df: メンバー習得力量データ
+        competence_master_df: 力量マスタ
+        members_df: メンバーマスタ
+        filters: フィルタ条件の辞書
+    """
+    import io
+
+    st.markdown("---")
+    st.markdown("---")
+    st.markdown("## 👥 高度な人材スキルマトリックス分析")
+    st.markdown("**データサイエンス × 人事スペシャリスト視点での人材スキル分析**")
+
+    st.markdown("""
+    このセクションでは、組織の人材スキル保有状況を多角的に分析し、
+    戦略的な人材配置や育成計画のための洞察を提供します。
+    """)
+
+    # ============================================
+    # 1. エグゼクティブダッシュボード
+    # ============================================
+    st.markdown("### 📊 人材スキル総合ダッシュボード")
+
+    # メンバー×スキルマトリックス作成
+    member_skill_matrix = member_competence_df.pivot_table(
+        index="メンバーコード",
+        columns="力量コード",
+        values="レベル" if "レベル" in member_competence_df.columns else "メンバーコード",
+        aggfunc="max" if "レベル" in member_competence_df.columns else "count",
+        fill_value=0
+    )
+
+    # KPI計算
+    total_members = len(member_skill_matrix)
+    total_skills = len(competence_master_df)
+    total_skill_instances = (member_skill_matrix > 0).sum().sum()
+    avg_skills_per_member = total_skill_instances / total_members if total_members > 0 else 0
+    skill_coverage_rate = (member_skill_matrix > 0).any(axis=0).sum() / total_skills if total_skills > 0 else 0
+
+    # スキル多様性（ジニ係数的指標）
+    skills_per_member = (member_skill_matrix > 0).sum(axis=1)
+    skill_diversity = skills_per_member.std() / skills_per_member.mean() if skills_per_member.mean() > 0 else 0
+
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
+
+    with kpi_col1:
+        st.metric("総メンバー数", f"{total_members}名")
+
+    with kpi_col2:
+        st.metric("総スキル数", f"{total_skills}件")
+
+    with kpi_col3:
+        st.metric("1人あたり平均スキル数", f"{avg_skills_per_member:.1f}件")
+
+    with kpi_col4:
+        st.metric("組織スキルカバー率", f"{skill_coverage_rate*100:.1f}%")
+
+    with kpi_col5:
+        st.metric("スキル分布の多様性", f"{skill_diversity:.2f}",
+                 help="低いほど均一、高いほどバラツキが大きい")
+
+    st.markdown("---")
+
+    # ============================================
+    # 2. スキル分布ヒートマップ
+    # ============================================
+    st.markdown("### 🔥 人材スキル分布ヒートマップ")
+
+    st.markdown("""
+    **組織全体のスキル保有パターンを可視化**:
+    メンバー×スキルの保有状況をヒートマップで表示し、
+    スキルの偏りや充足状況を一目で把握できます。
+    """)
+
+    # フィルタリング
+    filtered_members = members_df.copy()
+    if "職種" in filters and filters["職種"]:
+        filtered_members = filtered_members[filtered_members["職種"].isin(filters["職種"])]
+    if "役職" in filters and filters["役職"]:
+        filtered_members = filtered_members[filtered_members["役職"].isin(filters["役職"])]
+    if "等級" in filters and filters["等級"]:
+        filtered_members = filtered_members[filtered_members["職能・等級"].isin(filters["等級"])]
+
+    filtered_member_codes = filtered_members["メンバーコード"].tolist()
+
+    # フィルタ後のマトリックス
+    filtered_matrix = member_skill_matrix.loc[
+        member_skill_matrix.index.isin(filtered_member_codes)
+    ]
+
+    # 上位30スキル（保有率が高い順）
+    top_skills = (filtered_matrix > 0).sum(axis=0).nlargest(30)
+    top_skill_codes = top_skills.index.tolist()
+
+    # スキル名を取得
+    skill_names_dict = competence_master_df.set_index("力量コード")["力量名"].to_dict()
+
+    heatmap_matrix = filtered_matrix[top_skill_codes].head(50)  # 上位50メンバー
+
+    # メンバー名を取得
+    member_names_dict = members_df.set_index("メンバーコード")["メンバー名"].to_dict()
+    heatmap_matrix.index = heatmap_matrix.index.map(lambda x: member_names_dict.get(x, x))
+    heatmap_matrix.columns = heatmap_matrix.columns.map(lambda x: skill_names_dict.get(x, x))
+
+    # ヒートマップ作成
+    fig_heatmap = px.imshow(
+        heatmap_matrix,
+        labels=dict(x="スキル", y="メンバー", color="レベル"),
+        title=f"人材スキルマトリックス（上位50メンバー × 保有率上位30スキル）",
+        aspect="auto",
+        color_continuous_scale="Blues"
+    )
+
+    fig_heatmap.update_layout(height=800)
+    fig_heatmap.update_xaxes(tickangle=-45)
+
+    st.plotly_chart(fig_heatmap, use_container_width=True)
+
+    st.markdown("---")
+
+    # ============================================
+    # 3. 人材スキル多様性分析（T型人材分析）
+    # ============================================
+    st.markdown("### 🎯 人材スキル多様性分析（T型人材評価）")
+
+    st.markdown("""
+    **T型人材の識別と評価**:
+    - **広さ（Breadth）**: 保有スキル数（水平バー）
+    - **深さ（Depth）**: 高レベルスキルの割合（垂直バー）
+    - T型人材は広さと深さの両方を兼ね備えた人材
+    """)
+
+    # メンバーごとの分析
+    member_analysis = []
+
+    for member_code in filtered_member_codes:
+        member_skills = member_competence_df[
+            member_competence_df["メンバーコード"] == member_code
+        ]
+
+        skill_count = len(member_skills)
+
+        if "レベル" in member_skills.columns:
+            # レベルが3以上を「深い」と定義
+            deep_skills = len(member_skills[pd.to_numeric(member_skills["レベル"], errors='coerce') >= 3])
+            depth_ratio = deep_skills / skill_count if skill_count > 0 else 0
+        else:
+            depth_ratio = 0
+
+        member_info = members_df[members_df["メンバーコード"] == member_code].iloc[0]
+
+        # T型人材スコア（広さ × 深さ）
+        t_shape_score = skill_count * depth_ratio
+
+        member_analysis.append({
+            "メンバーコード": member_code,
+            "メンバー名": member_info.get("メンバー名", ""),
+            "職種": member_info.get("職種", ""),
+            "役職": member_info.get("役職", ""),
+            "スキル数（広さ）": skill_count,
+            "深さ比率": depth_ratio,
+            "T型スコア": t_shape_score
+        })
+
+    member_analysis_df = pd.DataFrame(member_analysis)
+    member_analysis_df = member_analysis_df.sort_values("T型スコア", ascending=False)
+
+    # T型人材分類
+    def classify_t_shape(row):
+        if row["スキル数（広さ）"] >= member_analysis_df["スキル数（広さ）"].quantile(0.75) and \
+           row["深さ比率"] >= member_analysis_df["深さ比率"].quantile(0.75):
+            return "🌟 T型人材（広く深い）"
+        elif row["スキル数（広さ）"] >= member_analysis_df["スキル数（広さ）"].quantile(0.75):
+            return "📏 I型人材（広く浅い）"
+        elif row["深さ比率"] >= member_analysis_df["深さ比率"].quantile(0.75):
+            return "📌 専門特化型（狭く深い）"
+        else:
+            return "🔰 育成中"
+
+    member_analysis_df["人材タイプ"] = member_analysis_df.apply(classify_t_shape, axis=1)
+
+    # 散布図（広さ vs 深さ）
+    fig_t_shape = px.scatter(
+        member_analysis_df,
+        x="スキル数（広さ）",
+        y="深さ比率",
+        size="T型スコア",
+        color="人材タイプ",
+        hover_name="メンバー名",
+        hover_data=["職種", "役職"],
+        title="T型人材マッピング（広さ × 深さ）",
+        labels={
+            "スキル数（広さ）": "スキル数（広さ）",
+            "深さ比率": "深さ比率（高レベルスキル割合）"
+        }
+    )
+
+    # 四分位線を追加
+    median_breadth = member_analysis_df["スキル数（広さ）"].median()
+    median_depth = member_analysis_df["深さ比率"].median()
+
+    fig_t_shape.add_hline(y=median_depth, line_dash="dash", line_color="gray", opacity=0.5)
+    fig_t_shape.add_vline(x=median_breadth, line_dash="dash", line_color="gray", opacity=0.5)
+
+    fig_t_shape.update_layout(height=600)
+    st.plotly_chart(fig_t_shape, use_container_width=True)
+
+    # T型人材ランキング
+    st.markdown("#### 🏆 T型人材トップ10")
+    st.dataframe(
+        member_analysis_df.head(10)[["メンバー名", "職種", "役職", "スキル数（広さ）", "深さ比率", "T型スコア", "人材タイプ"]].style.format({
+            "スキル数（広さ）": "{:.0f}",
+            "深さ比率": "{:.1%}",
+            "T型スコア": "{:.2f}"
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # 人材タイプ分布
+    type_distribution = member_analysis_df["人材タイプ"].value_counts()
+
+    fig_type_pie = px.pie(
+        values=type_distribution.values,
+        names=type_distribution.index,
+        title="人材タイプ分布",
+        hole=0.4
+    )
+
+    st.plotly_chart(fig_type_pie, use_container_width=True)
+
+    st.markdown("---")
+
+    # ============================================
+    # 4. スキル共起ネットワーク分析
+    # ============================================
+    st.markdown("### 🕸️ スキル共起ネットワーク分析")
+
+    st.markdown("""
+    **スキルの関連性パターンを発見**:
+    よく一緒に保有されるスキルの組み合わせを分析し、
+    効果的なスキルセット形成のヒントを提供します。
+    """)
+
+    # スキル共起マトリックス（上位20スキルに絞る）
+    top_20_skills = (member_skill_matrix > 0).sum(axis=0).nlargest(20).index.tolist()
+
+    cooccurrence_matrix = np.zeros((len(top_20_skills), len(top_20_skills)))
+
+    for i, skill1 in enumerate(top_20_skills):
+        for j, skill2 in enumerate(top_20_skills):
+            if i != j:
+                # 両方のスキルを持っているメンバー数
+                cooccurrence = ((member_skill_matrix[skill1] > 0) & (member_skill_matrix[skill2] > 0)).sum()
+                cooccurrence_matrix[i, j] = cooccurrence
+
+    # スキル名に変換
+    top_20_skill_names = [skill_names_dict.get(code, code) for code in top_20_skills]
+
+    # ヒートマップ作成
+    fig_cooccurrence = px.imshow(
+        cooccurrence_matrix,
+        labels=dict(x="スキル", y="スキル", color="共起人数"),
+        x=top_20_skill_names,
+        y=top_20_skill_names,
+        title="スキル共起マトリックス（保有率上位20スキル）",
+        color_continuous_scale="Greens"
+    )
+
+    fig_cooccurrence.update_layout(height=700)
+    fig_cooccurrence.update_xaxes(tickangle=-45)
+    fig_cooccurrence.update_yaxes(tickangle=0)
+
+    st.plotly_chart(fig_cooccurrence, use_container_width=True)
+
+    # 強い共起関係（共起人数が多い組み合わせトップ10）
+    cooccurrence_pairs = []
+    for i in range(len(top_20_skills)):
+        for j in range(i+1, len(top_20_skills)):
+            cooccurrence_pairs.append({
+                "スキル1": top_20_skill_names[i],
+                "スキル2": top_20_skill_names[j],
+                "共起人数": int(cooccurrence_matrix[i, j])
+            })
+
+    cooccurrence_df = pd.DataFrame(cooccurrence_pairs)
+    cooccurrence_df = cooccurrence_df.sort_values("共起人数", ascending=False).head(10)
+
+    st.markdown("#### 🔗 強い関連性を持つスキルペア（トップ10）")
+    st.dataframe(cooccurrence_df, use_container_width=True, hide_index=True)
+
+    st.info("💡 **活用ヒント**: これらのスキルペアは一緒に育成することで相乗効果が期待できます。")
+
+    st.markdown("---")
+
+    # ============================================
+    # 5. 人材セグメンテーション（クラスタリング）
+    # ============================================
+    st.markdown("### 🔬 人材セグメンテーション（機械学習分析）")
+
+    st.markdown("""
+    **K-meansクラスタリングによる人材グループ化**:
+    スキルパターンの類似性に基づいてメンバーをグループ化し、
+    効果的なチーム編成や育成施策の立案を支援します。
+    """)
+
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.cluster import KMeans
+
+    # 標準化
+    scaler = StandardScaler()
+    member_features_scaled = scaler.fit_transform(member_skill_matrix)
+
+    # クラスタ数の決定（メンバー数に応じて）
+    n_member_clusters = min(5, max(3, total_members // 10))
+
+    if total_members < 10:
+        st.warning("⚠️ クラスタリングには最低10名以上のメンバーが必要です")
+    else:
+        kmeans_members = KMeans(n_clusters=n_member_clusters, random_state=42, n_init=10)
+        member_clusters = kmeans_members.fit_predict(member_features_scaled)
+
+        # クラスタ情報を追加
+        cluster_assignment_df = pd.DataFrame({
+            "メンバーコード": member_skill_matrix.index,
+            "クラスター": member_clusters
+        })
+
+        # メンバー情報とマージ
+        cluster_members_df = cluster_assignment_df.merge(
+            members_df[["メンバーコード", "メンバー名", "職種", "役職"]],
+            on="メンバーコード",
+            how="left"
+        )
+
+        # クラスタごとの代表的なスキルを特定
+        st.markdown("#### 🎯 人材クラスター分析結果")
+
+        for cluster_id in range(n_member_clusters):
+            cluster_member_codes = cluster_assignment_df[
+                cluster_assignment_df["クラスター"] == cluster_id
+            ]["メンバーコード"].tolist()
+
+            cluster_skills_df = member_competence_df[
+                member_competence_df["メンバーコード"].isin(cluster_member_codes)
+            ]
+
+            # クラスタの代表的なスキル（保有率が高いスキル）
+            skill_coverage = cluster_skills_df.groupby("力量コード").size() / len(cluster_member_codes)
+            top_cluster_skills = skill_coverage.nlargest(5)
+
+            # スキル名を取得
+            cluster_skill_names = competence_master_df[
+                competence_master_df["力量コード"].isin(top_cluster_skills.index)
+            ].set_index("力量コード")["力量名"].to_dict()
+
+            with st.expander(f"🔷 クラスター {cluster_id + 1} ({len(cluster_member_codes)}名)", expanded=(cluster_id == 0)):
+                st.markdown(f"**代表的なスキルセット**:")
+                for skill_code in top_cluster_skills.index:
+                    skill_name = cluster_skill_names.get(skill_code, skill_code)
+                    coverage_pct = top_cluster_skills[skill_code] * 100
+                    st.markdown(f"- {skill_name} ({coverage_pct:.0f}%)")
+
+                st.markdown(f"**所属メンバー**:")
+                cluster_member_list = cluster_members_df[cluster_members_df["クラスター"] == cluster_id]
+                st.dataframe(
+                    cluster_member_list[["メンバー名", "職種", "役職"]],
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                # クラスタの特徴
+                st.markdown("**クラスターの特徴**:")
+                avg_skills = member_analysis_df[
+                    member_analysis_df["メンバーコード"].isin(cluster_member_codes)
+                ]["スキル数（広さ）"].mean()
+                st.markdown(f"- 平均スキル保有数: {avg_skills:.1f}件")
+
+        st.markdown("---")
+
+    # ============================================
+    # 6. 高度なデータエクスポート
+    # ============================================
+    st.markdown("### 💾 高度な分析結果エクスポート")
+
+    st.markdown("""
+    **包括的な人材スキル分析結果をエクスポート**:
+    T型人材評価、スキル多様性指標など全ての分析結果をダウンロードできます。
+    """)
+
+    # エクスポート用データフレーム
+    export_member_df = member_analysis_df.copy()
+
+    # CSV出力
+    csv_buffer = io.StringIO()
+    export_member_df.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
+    csv_data = csv_buffer.getvalue()
+
+    st.download_button(
+        label="📥 人材スキル分析結果をCSV出力",
+        data=csv_data,
+        file_name="enhanced_skill_matrix_analysis.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+    st.success("✅ 高度な人材スキルマトリックス分析が完了しました。")
+
+
+# 必要なモジュールインポート
+import io

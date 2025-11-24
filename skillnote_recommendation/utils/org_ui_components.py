@@ -21,7 +21,7 @@ def render_skill_heatmap(
     スキル保有状況のヒートマップを描画
     
     Args:
-        skill_matrix_df: メンバー × スキルのマトリクス（0/1またはレベル値）
+        skill_matrix_df: メンバー × スキルのマトリックス（0/1またはレベル値）
         title: グラフタイトル
         max_skills: 表示する最大スキル数（多すぎると重くなるため）
     """
@@ -137,7 +137,7 @@ def render_skill_matrix_table(
     filters: Dict = {}
 ) -> pd.DataFrame:
     """
-    フィルタリング可能なスキルマトリクステーブルを表示
+    フィルタリング可能なスキルマトリックステーブルを表示
     
     Args:
         member_competence_df: メンバー習得力量データ

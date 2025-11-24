@@ -131,7 +131,7 @@ class SkillTransitionSankeyVisualizer:
         self, transition_matrix: Dict[Tuple[str, str], int], skill_names: Dict[str, str]
     ) -> go.Figure:
         """
-        スキル遷移マトリクスをヒートマップで可視化
+        スキル遷移マトリックスをヒートマップで可視化
 
         Args:
             transition_matrix: {(source_skill, target_skill): count}
@@ -145,7 +145,7 @@ class SkillTransitionSankeyVisualizer:
             set([s for s, t in transition_matrix.keys()] + [t for s, t in transition_matrix.keys()])
         )
 
-        # マトリクスを作成
+        # マトリックスを作成
         n = len(all_skills)
         matrix = np.zeros((n, n))
 
@@ -192,7 +192,7 @@ class SkillTransitionSankeyVisualizer:
 
         fig.update_layout(
             title=dict(
-                text="🗺️ スキル遷移マトリクス（ヒートマップ）",
+                text="🗺️ スキル遷移マトリックス（ヒートマップ）",
                 x=0.5,
                 xanchor="center",
                 font=dict(size=22, family="Arial, sans-serif"),

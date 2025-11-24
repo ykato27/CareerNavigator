@@ -75,7 +75,7 @@ class CausalGraphRecommender:
         """
         logger.info("因果グラフ推薦モデルの学習開始")
         
-        # 1. データ前処理: メンバー×スキルのマトリクス作成
+        # 1. データ前処理: メンバー×スキルのマトリックス作成
         # 正規化レベルを使用
         skill_matrix = self.member_competence.pivot_table(
             index='メンバーコード',
@@ -349,7 +349,7 @@ class CausalGraphRecommender:
         
         # スキル名がskill_matrixに存在しない場合
         if skill_name not in self.skill_matrix_.columns:
-            logger.warning(f"スキル {skill_name} がスキルマトリクスに存在しません")
+            logger.warning(f"スキル {skill_name} がスキルマトリックスに存在しません")
             return {
                 'readiness': 0.0,
                 'bayesian': 0.0,

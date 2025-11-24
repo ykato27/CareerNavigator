@@ -349,21 +349,21 @@ class DataTransformer:
 
     def create_skill_matrix(self, member_competence: pd.DataFrame) -> pd.DataFrame:
         """
-        メンバー×力量マトリクスを作成
+        メンバー×力量マトリックスを作成
 
         Args:
             member_competence: メンバー習得力量データ
 
         Returns:
-            メンバー×力量マトリクス
+            メンバー×力量マトリックス
         """
         logger.info("\n" + "=" * 80)
-        logger.info("メンバー×力量マトリクス作成")
+        logger.info("メンバー×力量マトリックス作成")
         logger.info("=" * 80)
 
-        # 空データの場合は空のマトリクスを返す
+        # 空データの場合は空のマトリックスを返す
         if member_competence.empty:
-            logger.warning("  ⚠ メンバー習得力量データが空のため、空のマトリクスを返します")
+            logger.warning("  ⚠ メンバー習得力量データが空のため、空のマトリックスを返します")
             return pd.DataFrame()
 
         # 必須カラムの確認
@@ -381,7 +381,7 @@ class DataTransformer:
         )
 
         logger.info(
-            "\nマトリクスサイズ: %d名 × %d力量",
+            "\nマトリックスサイズ: %d名 × %d力量",
             skill_matrix.shape[0],
             skill_matrix.shape[1],
         )

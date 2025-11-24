@@ -2,7 +2,7 @@
 Matrix Factorizationベースの推薦モデル
 
 NMF (Non-negative Matrix Factorization)またはALS (Alternating Least Squares)を
-使用してメンバー×力量マトリクスを潜在因子に分解し、未習得力量のスコアを予測する
+使用してメンバー×力量マトリックスを潜在因子に分解し、未習得力量のスコアを予測する
 
 改善内容:
 1. Implicit feedback対応（ALS with confidence weighting）
@@ -109,7 +109,7 @@ class MatrixFactorizationModel:
             self.model = NMF(n_components=n_components, random_state=random_state, **final_params)
 
         # 学習後のデータ
-        self.X = None  # 元のデータマトリクス（再構成誤差計算用）
+        self.X = None  # 元のデータマトリックス（再構成誤差計算用）
         self.W = None  # メンバー因子行列（item factors for ALS）
         self.H = None  # 力量因子行列（user factors for ALS）
         self.member_codes = None  # メンバーコードのリスト
@@ -131,8 +131,8 @@ class MatrixFactorizationModel:
         - 検証セット監視による過学習防止
 
         Args:
-            skill_matrix: メンバー×力量マトリクス (index=メンバーコード, columns=力量コード)
-            validation_matrix: 検証用マトリクス（Early stopping時に使用、NMFのみ）
+            skill_matrix: メンバー×力量マトリックス (index=メンバーコード, columns=力量コード)
+            validation_matrix: 検証用マトリックス（Early stopping時に使用、NMFのみ）
 
         Returns:
             self
@@ -152,7 +152,7 @@ class MatrixFactorizationModel:
             # NMFを使用した学習
             training_matrix = skill_matrix.values
 
-            # 検証用マトリクスを準備
+            # 検証用マトリックスを準備
             if validation_matrix is not None:
                 validation_matrix_values = validation_matrix.values
             else:
@@ -175,7 +175,7 @@ class MatrixFactorizationModel:
         Hu et al. (2008)のimplicit feedbackアプローチに基づく。
 
         Args:
-            skill_matrix: メンバー×力量マトリクス (index=メンバーコード, columns=力量コード)
+            skill_matrix: メンバー×力量マトリックス (index=メンバーコード, columns=力量コード)
         """
         # Preference matrix (binary: 1 if acquired, 0 otherwise)
         preference_matrix = (skill_matrix > 0).astype(np.float32)
@@ -199,7 +199,7 @@ class MatrixFactorizationModel:
         self.W = self.model.user_factors  # member × factors
         self.H = self.model.item_factors.T  # factors × competence
 
-        # 元のデータマトリクスを保存（再構成誤差計算用）
+        # 元のデータマトリックスを保存（再構成誤差計算用）
         self.X = skill_matrix.values
 
         # イテレーション数を保存
@@ -209,7 +209,7 @@ class MatrixFactorizationModel:
 
     def _fit_normal(self, X: np.ndarray) -> None:
         """通常の学習（Early stoppingなし）"""
-        self.X = X  # 元のデータマトリクスを保存（再構成誤差計算用）
+        self.X = X  # 元のデータマトリックスを保存（再構成誤差計算用）
         self.W = self.model.fit_transform(X)
         self.H = self.model.components_
         self.actual_n_iter_ = self.model.n_iter_
@@ -222,8 +222,8 @@ class MatrixFactorizationModel:
         Lee & Seung (2001)のMultiplicative Update Ruleを使用。
 
         Args:
-            X: 訓練用マトリクス (m × n)
-            X_val: 検証用マトリクス（Noneの場合は訓練誤差で判定）
+            X: 訓練用マトリックス (m × n)
+            X_val: 検証用マトリックス（Noneの場合は訓練誤差で判定）
         """
         m, n = X.shape
         max_iter = self.model.max_iter
@@ -342,7 +342,7 @@ class MatrixFactorizationModel:
         SVD分解に基づく初期化により、収束を高速化する。
 
         Args:
-            X: データマトリクス (m × n)
+            X: データマトリックス (m × n)
             n_components: 潜在因子数
 
         Returns:
@@ -413,7 +413,7 @@ class MatrixFactorizationModel:
         Lee & Seung (2001)のアルゴリズムに正則化を追加。
 
         Args:
-            X: データマトリクス (m × n)
+            X: データマトリックス (m × n)
             W: メンバー因子行列 (m × k)
             H: 力量因子行列 (k × n)
             alpha_W: Wの正則化係数
@@ -463,7 +463,7 @@ class MatrixFactorizationModel:
         新しいデータに対してWを計算（Hは固定）
 
         Args:
-            X_new: 新しいデータマトリクス (m_new × n)
+            X_new: 新しいデータマトリックス (m_new × n)
             H: 学習済みの力量因子行列 (k × n)
             alpha: 正則化係数
             l1_ratio: L1正則化の比率
