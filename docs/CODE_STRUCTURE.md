@@ -55,7 +55,7 @@ CareerNavigator/
 - **data_transformer.py**: データ変換
   - 力量マスタ作成
   - メンバー力量データ作成
-  - スキルマトリクス作成
+  - スキルマトリックス作成
 
 - **reference_persons.py**: 参考人物検索
   - 類似キャリアの人物検索

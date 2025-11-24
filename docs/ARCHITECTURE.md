@@ -189,9 +189,9 @@ CSVファイル（data/）
 ### 2. ML推薦フロー
 
 ```
-メンバー×力量マトリクス
+メンバー×力量マトリックス
     ↓ DataPreprocessor（前処理）
-前処理済みマトリクス
+前処理済みマトリックス
     ↓ MatrixFactorizationModel（NMF学習）
 学習済みモデル（W, H行列）
     ↓ MLRecommender
@@ -239,7 +239,7 @@ data = loader.load_all_data()
 **責務**: 機械学習ベースの推薦
 
 **アルゴリズム**:
-1. **Matrix Factorization（NMF）**: メンバー×力量マトリクスを潜在因子に分解
+1. **Matrix Factorization（NMF）**: メンバー×力量マトリックスを潜在因子に分解
 2. **予測**: 未習得力量のスコアを予測
 3. **多様性再ランキング**: MMR/Category/Type/Hybridで多様化
 

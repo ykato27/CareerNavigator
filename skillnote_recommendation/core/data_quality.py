@@ -28,10 +28,10 @@ class DataQualityChecker(LoggerMixin):
         self, matrix: pd.DataFrame, strict: bool = False
     ) -> DataQualityReport:
         """
-        スキルマトリクスを検証
+        スキルマトリックスを検証
 
         Args:
-            matrix: スキルマトリクス（メンバー×力量）
+            matrix: スキルマトリックス（メンバー×力量）
             strict: 厳格モード（警告もエラーとして扱う）
 
         Returns:

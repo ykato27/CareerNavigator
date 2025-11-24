@@ -1,7 +1,7 @@
 """
 DataTransformerクラスのテスト
 
-データ変換（レベル正規化、マスタ作成、マトリクス生成）をテスト
+データ変換（レベル正規化、マスタ作成、マトリックス生成）をテスト
 """
 
 import pytest
@@ -354,14 +354,14 @@ class TestCreateMemberCompetence:
         assert "力量カテゴリー名" in member_comp.columns
 
 
-# ==================== スキルマトリクス作成テスト ====================
+# ==================== スキルマトリックス作成テスト ====================
 
 
 class TestCreateSkillMatrix:
-    """スキルマトリクス作成のテスト"""
+    """スキルマトリックス作成のテスト"""
 
     def test_create_skill_matrix(self, sample_member_competence):
-        """メンバー×力量マトリクスが作成される"""
+        """メンバー×力量マトリックスが作成される"""
         transformer = DataTransformer()
         matrix = transformer.create_skill_matrix(sample_member_competence)
 
@@ -370,7 +370,7 @@ class TestCreateSkillMatrix:
         assert len(matrix.columns) > 0
 
     def test_skill_matrix_shape(self, sample_member_competence):
-        """マトリクスの行列数が正しい"""
+        """マトリックスの行列数が正しい"""
         transformer = DataTransformer()
         matrix = transformer.create_skill_matrix(sample_member_competence)
 
@@ -387,11 +387,11 @@ class TestCreateSkillMatrix:
         transformer = DataTransformer()
         matrix = transformer.create_skill_matrix(sample_member_competence)
 
-        # マトリクスに0が含まれること（未習得の力量がある）
+        # マトリックスに0が含まれること（未習得の力量がある）
         assert (matrix == 0).any().any()
 
     def test_skill_matrix_values(self, sample_member_competence):
-        """マトリクスの値が正規化レベルと一致"""
+        """マトリックスの値が正規化レベルと一致"""
         transformer = DataTransformer()
         matrix = transformer.create_skill_matrix(sample_member_competence)
 

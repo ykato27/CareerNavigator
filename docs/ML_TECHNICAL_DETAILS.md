@@ -66,14 +66,14 @@ skillnote_recommendation/ml/
 
 #### 数式
 
-メンバー×力量マトリクス $V$ を2つの低ランク行列の積に分解：
+メンバー×力量マトリックス $V$ を2つの低ランク行列の積に分解：
 
 $$
 V \approx WH
 $$
 
 where:
-- $V \in \mathbb{R}^{m \times n}$ : メンバー×力量マトリクス (mメンバー, n力量)
+- $V \in \mathbb{R}^{m \times n}$ : メンバー×力量マトリックス (mメンバー, n力量)
 - $W \in \mathbb{R}^{m \times k}$ : メンバーの潜在因子行列
 - $H \in \mathbb{R}^{k \times n}$ : 力量の潜在因子行列
 - $k$ : 潜在因子数（デフォルト: 20）
@@ -636,7 +636,7 @@ MLRecommender
 
 ### データ構造
 
-#### スキルマトリクス (skill_matrix)
+#### スキルマトリックス (skill_matrix)
 
 ```python
 # DataFrame形式

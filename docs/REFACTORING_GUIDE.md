@@ -378,12 +378,12 @@ def test_recommendation_request_validation():
 def test_validate_skill_matrix():
     checker = DataQualityChecker()
 
-    # 正常なマトリクス
+    # 正常なマトリックス
     matrix = pd.DataFrame(...)
     report = checker.validate_skill_matrix(matrix)
     assert report.is_valid
 
-    # NaNを含むマトリクス
+    # NaNを含むマトリックス
     matrix_with_nan = matrix.copy()
     matrix_with_nan.iloc[0, 0] = np.nan
     report = checker.validate_skill_matrix(matrix_with_nan)

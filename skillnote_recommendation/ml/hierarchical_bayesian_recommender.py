@@ -103,7 +103,7 @@ class HierarchicalBayesianRecommender(BaseRecommender):
         )
         self.hierarchy = self.hierarchy_extractor.extract_hierarchy()
         
-        # 2. ユーザー×スキルマトリクスを準備
+        # 2. ユーザー×スキルマトリックスを準備
         user_skills = self._prepare_user_skill_matrix()
         
         # 3. Layer 1: ベイジアンネットワークを学習
@@ -146,7 +146,7 @@ class HierarchicalBayesianRecommender(BaseRecommender):
     
     def _prepare_user_skill_matrix(self) -> pd.DataFrame:
         """
-        ユーザー×スキルマトリクスを準備
+        ユーザー×スキルマトリックスを準備
 
         Returns:
             ユーザー×スキルのDataFrame
@@ -159,7 +159,7 @@ class HierarchicalBayesianRecommender(BaseRecommender):
         # レベルを数値型に変換（文字列として保存されている場合に対応）
         skill_data['レベル'] = pd.to_numeric(skill_data['レベル'], errors='coerce').fillna(0)
 
-        # ピボットしてユーザー×スキルマトリクスを作成
+        # ピボットしてユーザー×スキルマトリックスを作成
         user_skill_matrix = skill_data.pivot_table(
             index='メンバーコード',
             columns='力量コード',

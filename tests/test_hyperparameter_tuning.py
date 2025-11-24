@@ -20,9 +20,9 @@ from skillnote_recommendation.ml.hyperparameter_tuning import (
 
 @pytest.fixture
 def sample_skill_matrix():
-    """サンプルメンバー×力量マトリクス（学習用）"""
+    """サンプルメンバー×力量マトリックス（学習用）"""
     np.random.seed(42)
-    # 20メンバー × 10力量のランダムマトリクス
+    # 20メンバー × 10力量のランダムマトリックス
     data = np.random.choice([0, 0, 0, 1, 2, 3, 4, 5], size=(20, 10))
     return pd.DataFrame(
         data,
@@ -33,7 +33,7 @@ def sample_skill_matrix():
 
 @pytest.fixture
 def small_skill_matrix():
-    """小さなスキルマトリクス（高速テスト用）"""
+    """小さなスキルマトリックス（高速テスト用）"""
     return pd.DataFrame(
         {
             "s001": [3, 0, 2, 0, 1],
@@ -257,7 +257,7 @@ class TestObjectiveFunction:
 
         mock_trial = Mock()
         mock_trial.number = 0
-        mock_trial.suggest_int = Mock(side_effect=[3, 500])  # n_components=3 (小さなマトリクス用)
+        mock_trial.suggest_int = Mock(side_effect=[3, 500])  # n_components=3 (小さなマトリックス用)
         mock_trial.suggest_float = Mock(side_effect=[0.01, 0.01, 0.5])
         mock_trial.set_user_attr = Mock()
 
@@ -282,7 +282,7 @@ class TestObjectiveFunction:
 
         mock_trial = Mock()
         mock_trial.number = 0
-        mock_trial.suggest_int = Mock(side_effect=[3, 500])  # n_components=3 (小さなマトリクス用)
+        mock_trial.suggest_int = Mock(side_effect=[3, 500])  # n_components=3 (小さなマトリックス用)
         mock_trial.suggest_float = Mock(side_effect=[0.01, 0.01, 0.5])
         mock_trial.set_user_attr = Mock()
 
@@ -310,7 +310,7 @@ class TestObjectiveFunction:
         mock_trial = Mock()
         mock_trial.number = 0
         # n_componentsを大きくしてValueErrorを発生させる（NMFの初期化時）
-        mock_trial.suggest_int = Mock(side_effect=[100, 500])  # n_components=100は5x5マトリクスには大きすぎる
+        mock_trial.suggest_int = Mock(side_effect=[100, 500])  # n_components=100は5x5マトリックスには大きすぎる
         mock_trial.suggest_float = Mock(side_effect=[0.01, 0.01, 0.5])
         mock_trial.set_user_attr = Mock()
 
@@ -331,7 +331,7 @@ class TestObjectiveFunction:
 
         mock_trial = Mock()
         mock_trial.number = 0
-        mock_trial.suggest_int = Mock(side_effect=[3, 500])  # n_components=3 (小さなマトリクス用)
+        mock_trial.suggest_int = Mock(side_effect=[3, 500])  # n_components=3 (小さなマトリックス用)
         mock_trial.suggest_float = Mock(side_effect=[0.01, 0.01, 0.5])
         mock_trial.set_user_attr = Mock()
 
@@ -468,7 +468,7 @@ class TestOptimization:
     @pytest.mark.skipif(not OPTUNA_AVAILABLE, reason="Optuna not available")
     def test_optimize_with_timeout(self, small_skill_matrix):
         """タイムアウト設定での最適化"""
-        # 小さなマトリクス用の探索空間（成功するトライアルを作るため）
+        # 小さなマトリックス用の探索空間（成功するトライアルを作るため）
         custom_search_space = {
             "n_components": (2, 4),
             "alpha_W": (0.001, 0.1),
@@ -489,7 +489,7 @@ class TestOptimization:
         best_params, best_value = tuner.optimize(show_progress_bar=False)
 
         # タイムアウトが設定されていることを確認（完了数は問わない）
-        # 注: 小さなマトリクスでは処理が速いため、100個完了する可能性もある
+        # 注: 小さなマトリックスでは処理が速いため、100個完了する可能性もある
         assert len(tuner.study.trials) <= 100
 
 
@@ -502,9 +502,9 @@ class TestModelRetrieval:
     @pytest.mark.skipif(not OPTUNA_AVAILABLE, reason="Optuna not available")
     def test_get_best_model(self, small_skill_matrix):
         """最適モデルの取得"""
-        # 小さなマトリクス用の探索空間
+        # 小さなマトリックス用の探索空間
         custom_search_space = {
-            "n_components": (2, 4),  # 5x5マトリクスに適した範囲
+            "n_components": (2, 4),  # 5x5マトリックスに適した範囲
             "alpha_W": (0.001, 0.1),
             "alpha_H": (0.001, 0.1),
             "l1_ratio": (0.0, 1.0),
@@ -574,11 +574,11 @@ class TestHelperFunctions:
 
         train_matrix, val_mask = tuner._create_skill_based_split(fold_idx=0)
 
-        # トレーニングマトリクスとバリデーションマスクのサイズが一致
+        # トレーニングマトリックスとバリデーションマスクのサイズが一致
         assert train_matrix.shape == small_skill_matrix.shape
         assert val_mask.shape == small_skill_matrix.shape
 
-        # バリデーションマスクの非ゼロ要素がトレーニングマトリクスでゼロになっている
+        # バリデーションマスクの非ゼロ要素がトレーニングマトリックスでゼロになっている
         for member in small_skill_matrix.index:
             val_skills = val_mask.loc[member][val_mask.loc[member] > 0].index
             for skill in val_skills:
@@ -720,7 +720,7 @@ class TestHistoryAndPlotting:
     @pytest.mark.skipif(not OPTUNA_AVAILABLE, reason="Optuna not available")
     def test_plot_param_importances(self, small_skill_matrix):
         """パラメータ重要度のプロット"""
-        # 小さなマトリクス用の探索空間
+        # 小さなマトリックス用の探索空間
         custom_search_space = {
             "n_components": (2, 4),
             "alpha_W": (0.001, 0.1),
@@ -814,7 +814,7 @@ class TestEdgeCases:
 
     @pytest.mark.skipif(not OPTUNA_AVAILABLE, reason="Optuna not available")
     def test_optimize_with_very_small_matrix(self):
-        """非常に小さなマトリクスでの最適化"""
+        """非常に小さなマトリックスでの最適化"""
         tiny_matrix = pd.DataFrame(
             {"s001": [1, 0], "s002": [0, 1]}, index=["m001", "m002"]
         )
@@ -833,7 +833,7 @@ class TestEdgeCases:
 
     @pytest.mark.skipif(not OPTUNA_AVAILABLE, reason="Optuna not available")
     def test_optimize_with_all_zero_matrix(self):
-        """全てゼロのマトリクスでの最適化"""
+        """全てゼロのマトリックスでの最適化"""
         zero_matrix = pd.DataFrame(
             np.zeros((5, 5)),
             index=[f"m{i:03d}" for i in range(5)],

@@ -2653,7 +2653,7 @@ elif model_type == "HierarchicalSEM（実データ）":
                                     zmax=1,
                                 )
                                 fig_corr.update_layout(
-                                    title="カテゴリースコア相関マトリクス",
+                                    title="カテゴリースコア相関マトリックス",
                                     height=600
                                 )
 

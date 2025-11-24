@@ -189,14 +189,14 @@ class DataPreprocessorProtocol(Protocol):
         self, skill_matrix: pd.DataFrame, verbose: bool = True
     ) -> tuple[pd.DataFrame, dict[str, Any]]:
         """
-        スキルマトリクスを前処理
+        スキルマトリックスを前処理
 
         Args:
-            skill_matrix: スキルマトリクス
+            skill_matrix: スキルマトリックス
             verbose: 詳細情報を出力するか
 
         Returns:
-            (前処理済みマトリクス, 統計情報)
+            (前処理済みマトリックス, 統計情報)
         """
         ...
 

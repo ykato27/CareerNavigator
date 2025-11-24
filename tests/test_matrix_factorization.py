@@ -13,7 +13,7 @@ from skillnote_recommendation.ml.matrix_factorization import MatrixFactorization
 
 @pytest.fixture
 def sample_skill_matrix():
-    """サンプルメンバー×力量マトリクス"""
+    """サンプルメンバー×力量マトリックス"""
     return pd.DataFrame(
         {
             "s001": [3, 0, 2, 0, 1],
@@ -270,7 +270,7 @@ class TestEdgeCases:
     """エッジケースのテスト"""
 
     def test_small_matrix(self):
-        """小さなマトリクスでの学習"""
+        """小さなマトリックスでの学習"""
         small_matrix = pd.DataFrame({"s001": [1, 0], "s002": [0, 1]}, index=["m001", "m002"])
 
         model = MatrixFactorizationModel(n_components=1, random_state=42)
@@ -281,7 +281,7 @@ class TestEdgeCases:
         assert len(scores) == 2
 
     def test_sparse_matrix(self):
-        """疎なマトリクスでの学習"""
+        """疎なマトリックスでの学習"""
         sparse_matrix = pd.DataFrame(
             np.zeros((10, 10)),
             index=[f"m{i:03d}" for i in range(10)],

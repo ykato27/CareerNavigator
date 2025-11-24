@@ -1,7 +1,7 @@
 """
 データ前処理モジュール
 
-NMFモデルの学習前にスキルマトリクスを前処理し、
+NMFモデルの学習前にスキルマトリックスを前処理し、
 データ品質を向上させる
 """
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class SkillMatrixPreprocessor:
-    """スキルマトリクス前処理クラス"""
+    """スキルマトリックス前処理クラス"""
 
     def __init__(
         self,
@@ -46,18 +46,18 @@ class SkillMatrixPreprocessor:
         self, skill_matrix: pd.DataFrame, verbose: bool = True
     ) -> Tuple[pd.DataFrame, dict]:
         """
-        スキルマトリクスを前処理
+        スキルマトリックスを前処理
 
         Args:
-            skill_matrix: メンバー×力量マトリクス (index=メンバーコード, columns=力量コード)
+            skill_matrix: メンバー×力量マトリックス (index=メンバーコード, columns=力量コード)
             verbose: 詳細情報を出力するか
 
         Returns:
-            (前処理済みマトリクス, 統計情報)
+            (前処理済みマトリックス, 統計情報)
         """
         if verbose:
             logger.info("=" * 60)
-            logger.info("スキルマトリクス前処理開始")
+            logger.info("スキルマトリックス前処理開始")
             logger.info("=" * 60)
 
         original_shape = skill_matrix.shape
@@ -101,11 +101,11 @@ class SkillMatrixPreprocessor:
         外れ値（極端に力量が少ないメンバー・保有者が少ない力量）を除去
 
         Args:
-            skill_matrix: スキルマトリクス
+            skill_matrix: スキルマトリックス
             verbose: 詳細情報を出力するか
 
         Returns:
-            フィルタリング済みマトリクス
+            フィルタリング済みマトリックス
         """
         if verbose:
             logger.info("\n--- 外れ値除去 ---")
@@ -137,14 +137,14 @@ class SkillMatrixPreprocessor:
 
     def _normalize(self, skill_matrix: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
         """
-        スキルマトリクスを正規化
+        スキルマトリックスを正規化
 
         Args:
-            skill_matrix: スキルマトリクス
+            skill_matrix: スキルマトリックス
             verbose: 詳細情報を出力するか
 
         Returns:
-            正規化済みマトリクス
+            正規化済みマトリックス
         """
         if self.normalization_method is None:
             if verbose:
@@ -198,7 +198,7 @@ class SkillMatrixPreprocessor:
         スパース性（ゼロ要素の割合）を計算
 
         Args:
-            matrix: マトリクス
+            matrix: マトリックス
 
         Returns:
             スパース性（0-100%）
@@ -227,11 +227,11 @@ class SkillMatrixPreprocessor:
         テストデータには transform_test() を使用してください。
 
         Args:
-            skill_matrix: 訓練用スキルマトリクス
+            skill_matrix: 訓練用スキルマトリックス
             verbose: 詳細情報を出力するか
 
         Returns:
-            (前処理済み訓練マトリクス, 統計情報)
+            (前処理済み訓練マトリックス, 統計情報)
 
         Raises:
             RuntimeError: 既にfitされている場合
@@ -295,11 +295,11 @@ class SkillMatrixPreprocessor:
         訓練データで計算した統計量を使ってテストデータを変換します。
 
         Args:
-            skill_matrix: テスト用スキルマトリクス
+            skill_matrix: テスト用スキルマトリックス
             verbose: 詳細情報を出力するか
 
         Returns:
-            前処理済みテストマトリクス
+            前処理済みテストマトリックス
 
         Raises:
             RuntimeError: fit_transform_train() が実行されていない場合
@@ -335,11 +335,11 @@ class SkillMatrixPreprocessor:
         正規化をfitして適用（訓練データ用）
 
         Args:
-            skill_matrix: スキルマトリクス
+            skill_matrix: スキルマトリックス
             verbose: 詳細情報を出力するか
 
         Returns:
-            正規化済みマトリクス
+            正規化済みマトリックス
         """
         if self.normalization_method is None:
             if verbose:
@@ -385,11 +385,11 @@ class SkillMatrixPreprocessor:
         保存されたscalerを使って正規化を適用（テストデータ用）
 
         Args:
-            skill_matrix: スキルマトリクス
+            skill_matrix: スキルマトリックス
             verbose: 詳細情報を出力するか
 
         Returns:
-            正規化済みマトリクス
+            正規化済みマトリックス
         """
         if self.normalization_method is None:
             if verbose:

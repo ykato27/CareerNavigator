@@ -98,7 +98,7 @@ st.markdown("---")
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 組織スキルマップダッシュボード",
     "📉 スキルギャップ分析", 
-    "👥 人材スキルマトリクス",
+    "👥 人材スキルマトリックス",
     "👔 後継者計画",
     "🔄 組織シミュレーション"
 ])
@@ -328,12 +328,12 @@ with tab2:
         st.info("👆 上記の「ギャップを計算」ボタンをクリックしてギャップ分析を開始してください")
 
 # =========================================================
-# タブ3: 人材スキルマトリクス
+# タブ3: 人材スキルマトリックス
 # =========================================================
 with tab3:
-    st.subheader("👥 人材スキルマトリクス")
+    st.subheader("👥 人材スキルマトリックス")
     
-    st.markdown("メンバー × スキルのマトリクスを表示します。フィルタリングして絞り込みができます。")
+    st.markdown("メンバー × スキルのマトリックスを表示します。フィルタリングして絞り込みができます。")
     
     # フィルタUI
     with st.expander("🔍 フィルター設定", expanded=True):
@@ -376,7 +376,7 @@ with tab3:
     
     st.markdown("---")
     
-    # マトリクステーブル表示
+    # マトリックステーブル表示
     try:
         matrix_df = render_skill_matrix_table(
             member_competence_df,
@@ -392,7 +392,23 @@ with tab3:
         render_export_buttons(matrix_df, filename_prefix="skill_matrix")
         
     except Exception as e:
-        st.error(f"マトリクステーブルの表示中にエラーが発生しました: {e}")
+        st.error(f"マトリックステーブルの表示中にエラーが発生しました: {e}")
+
+    # ==========================================
+    # 高度な人材スキルマトリックス分析（データサイエンス視点）
+    # ==========================================
+    try:
+        from skillnote_recommendation.utils.advanced_org_dashboards import render_enhanced_skill_matrix_analysis
+
+        render_enhanced_skill_matrix_analysis(
+            member_competence_df=member_competence_df,
+            competence_master_df=competence_master_df,
+            members_df=members_df,
+            filters=filters
+        )
+    except Exception as e:
+        st.error(f"高度な人材スキルマトリックス分析の表示中にエラーが発生しました: {e}")
+        st.exception(e)
 
 # =========================================================
 # タブ4: 後継者計画
@@ -608,8 +624,8 @@ with tab4:
             
             st.markdown("---")
             
-            # スキルカバレッジマトリクス
-            st.markdown("### 📊 スキルカバレッジマトリクス")
+            # スキルカバレッジマトリックス
+            st.markdown("### 📊 スキルカバレッジマトリックス")
             st.markdown("候補者ごとに必須スキルの保有状況を可視化します")
             
             try:
@@ -625,7 +641,7 @@ with tab4:
                 else:
                     st.info("目標プロファイルが見つかりません")
             except Exception as e:
-                st.error(f"スキルカバレッジマトリクスの表示中にエラーが発生しました: {e}")
+                st.error(f"スキルカバレッジマトリックスの表示中にエラーが発生しました: {e}")
             
             st.markdown("---")
             

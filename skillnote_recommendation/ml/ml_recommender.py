@@ -57,7 +57,7 @@ class MLRecommender:
         tuning_progress_callback: Optional[object] = None,
     ):
         """
-        member_competence（会員習得力量データ）から会員×力量マトリクスを生成し、
+        member_competence（会員習得力量データ）から会員×力量マトリックスを生成し、
         MatrixFactorizationModel（NMF）を学習。
 
         Args:
@@ -81,7 +81,7 @@ class MLRecommender:
         print("MLモデル学習開始（NMF）")
         print("=" * 80)
 
-        # 会員×力量マトリクスを作成
+        # 会員×力量マトリックスを作成
         skill_matrix = member_competence.pivot_table(
             index="メンバーコード", columns="力量コード", values="正規化レベル", fill_value=0
         )

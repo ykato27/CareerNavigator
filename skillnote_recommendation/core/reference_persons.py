@@ -77,7 +77,7 @@ class ReferencePersonFinder:
         self.competence_master = competence_master
         self.config = config or ReferencePersonConfig()
 
-        # メンバー×力量マトリクスを作成
+        # メンバー×力量マトリックスを作成
         self.member_skill_matrix = member_competence.pivot_table(
             index="メンバーコード", columns="力量コード", values="正規化レベル", fill_value=0
         )

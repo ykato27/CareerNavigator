@@ -294,19 +294,19 @@ class CompetenceKnowledgeGraph:
             )
             return
 
-        # メンバー×力量マトリクスを作成
+        # メンバー×力量マトリックスを作成
         member_comp_matrix = self.member_competence_df.pivot_table(
             index="メンバーコード", columns="力量コード", values="正規化レベル", fill_value=0
         )
 
-        # マトリクスが空でないか確認
+        # マトリックスが空でないか確認
         if (
             member_comp_matrix.empty
             or member_comp_matrix.shape[0] == 0
             or member_comp_matrix.shape[1] == 0
         ):
             logger.warning(
-                "  ⚠ メンバー×力量マトリクスが空のため、類似度エッジをスキップします "
+                "  ⚠ メンバー×力量マトリックスが空のため、類似度エッジをスキップします "
                 "(メンバー数: %d, 力量数: %d)",
                 member_comp_matrix.shape[0] if len(member_comp_matrix.shape) > 0 else 0,
                 member_comp_matrix.shape[1] if len(member_comp_matrix.shape) > 1 else 0,

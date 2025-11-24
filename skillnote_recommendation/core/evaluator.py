@@ -161,7 +161,7 @@ class RecommendationEvaluator:
                 }
             )
 
-            # マトリクスサイズを計算してn_componentsを決定
+            # マトリックスサイズを計算してn_componentsを決定
             n_members = len(train_data["メンバーコード"].unique())
             n_competences = len(train_data["力量コード"].unique())
             # n_componentsはmin(n_members, n_competences)以下にする
@@ -836,7 +836,7 @@ class RecommendationEvaluator:
                 }
             )
 
-            # マトリクスサイズを計算してn_componentsを決定
+            # マトリックスサイズを計算してn_componentsを決定
             n_members = len(train_data["メンバーコード"].unique())
             n_competences = len(train_data["力量コード"].unique())
             # n_componentsはmin(n_members, n_competences)以下にする
@@ -1128,7 +1128,7 @@ class RecommendationEvaluator:
                 }
             )
 
-            # マトリクスサイズを計算してn_componentsを決定
+            # マトリックスサイズを計算してn_componentsを決定
             n_members = len(train_data["メンバーコード"].unique())
             n_competences = len(train_data["力量コード"].unique())
             safe_n_components = min(20, n_members, n_competences)

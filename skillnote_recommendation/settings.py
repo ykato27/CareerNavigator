@@ -114,7 +114,7 @@ class OutputFileSettings(BaseSettings):
     members_clean: str = Field(default="members_clean.csv", description="クリーンなメンバーファイル名")
     competence_master: str = Field(default="competence_master.csv", description="力量マスターファイル名")
     member_competence: str = Field(default="member_competence.csv", description="メンバー×力量ファイル名")
-    skill_matrix: str = Field(default="skill_matrix.csv", description="力量マトリクスファイル名")
+    skill_matrix: str = Field(default="skill_matrix.csv", description="力量マトリックスファイル名")
     competence_similarity: str = Field(default="competence_similarity.csv", description="力量類似度ファイル名")
 
 
