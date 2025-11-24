@@ -1800,6 +1800,9 @@ def render_enhanced_skill_matrix_analysis(
         fill_value=0
     )
 
+    # データ型を数値に変換（文字列が含まれる場合の対策）
+    member_skill_matrix = member_skill_matrix.apply(pd.to_numeric, errors='coerce').fillna(0)
+
     # KPI計算
     total_members = len(member_skill_matrix)
     total_skills = len(competence_master_df)
