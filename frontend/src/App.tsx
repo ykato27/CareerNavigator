@@ -1,10 +1,12 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutGrid, Upload, Brain, Shield, TrendingUp, Database, Settings, HelpCircle, User, FolderOpen, ChevronLeft } from 'lucide-react';
+import { LayoutGrid, Upload, Brain, Shield, TrendingUp, Database, Settings, HelpCircle, User, FolderOpen, ChevronLeft, Zap, Network } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { DataUpload } from './pages/DataUpload';
 import { CausalAnalysis } from './pages/CausalAnalysis';
 import { CausalRecommendation } from './pages/CausalRecommendation';
 import { EmployeeCareerDashboard } from './pages/EmployeeCareerDashboard';
+import { ModelTraining } from './pages/ModelTraining';
+import { OrganizationalSkillMap } from './pages/OrganizationalSkillMap';
 
 const NavItem = ({ to, icon: Icon, label }: { to: string; icon: any; label: string }) => {
   const location = useLocation();
@@ -45,9 +47,11 @@ function App() {
         {/* Navigation */}
         <nav className="flex-1 flex flex-col py-2">
           <NavItem to="/" icon={LayoutGrid} label="力量管理" />
+          <NavItem to="/data-upload" icon={Database} label="データ管理" />
+          <NavItem to="/model-training" icon={Zap} label="モデル学習" />
           <NavItem to="/causal-recommendation" icon={Brain} label="因果推論" />
           <NavItem to="/career-dashboard" icon={User} label="キャリア" />
-          <NavItem to="/data-upload" icon={Database} label="データ管理" />
+          <NavItem to="/skill-map" icon={Network} label="スキルマップ" />
           <div className="mt-auto">
             <NavItem to="/settings" icon={Settings} label="設定" />
             <NavItem to="/help" icon={HelpCircle} label="ガイド" />
@@ -79,9 +83,11 @@ function App() {
         <main className="flex-1">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/data-upload" element={<DataUpload />} />
+            <Route path="/model-training" element={<ModelTraining />} />
             <Route path="/causal-recommendation" element={<CausalRecommendation />} />
             <Route path="/career-dashboard" element={<EmployeeCareerDashboard />} />
-            <Route path="/data-upload" element={<DataUpload />} />
+            <Route path="/skill-map" element={<OrganizationalSkillMap />} />
             <Route path="/causal-analysis" element={<CausalAnalysis />} />
           </Routes>
         </main>
