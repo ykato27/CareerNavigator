@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 import time
 import os
 import pandas as pd
@@ -10,6 +10,9 @@ from skillnote_recommendation.core.data_transformer import DataTransformer
 from skillnote_recommendation.ml.causal_graph_recommender import CausalGraphRecommender
 
 router = APIRouter()
+
+# Get project root directory
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 # Simple in-memory storage for trained models
 trained_models: Dict[str, CausalGraphRecommender] = {}
@@ -25,7 +28,7 @@ class TrainRequest(BaseModel):
 class TrainResponse(BaseModel):
     success: bool
     model_id: str
-    summary: Dict[str, any]
+    summary: Dict[str, Any]
     message: str
 
 
@@ -36,7 +39,7 @@ async def train_causal_model(request: TrainRequest):
     """
     try:
         # Get upload directory for this session
-        base_upload_dir = Path("backend/temp_uploads")
+        base_upload_dir = PROJECT_ROOT / "backend" / "temp_uploads"
         session_dir = base_upload_dir / request.session_id
         
         if not session_dir.exists():

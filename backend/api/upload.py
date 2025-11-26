@@ -9,6 +9,9 @@ router = APIRouter()
 # Session storage
 SESSION_STORAGE: Dict = {}
 
+# Get project root directory
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+
 
 @router.post("/upload")
 async def upload_files(
@@ -27,7 +30,7 @@ async def upload_files(
         session_id = f"session_{int(time.time())}"
         
         # Create upload directory
-        upload_dir = Path("backend/temp_uploads") / session_id
+        upload_dir = PROJECT_ROOT / "backend" / "temp_uploads" / session_id
         upload_dir.mkdir(parents=True, exist_ok=True)
         
         # Save files

@@ -10,6 +10,9 @@ from .train import trained_models
 
 router = APIRouter()
 
+# Get project root directory
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+
 
 class EgoGraphRequest(BaseModel):
     model_id: str
@@ -40,9 +43,9 @@ async def get_ego_network(request: EgoGraphRequest):
     try:
         adj_matrix = recommender.learner.get_adjacency_matrix()
         visualizer = CausalGraphVisualizer(adj_matrix)
-        
-        output_dir = Path("backend/temp_graphs")
-        output_dir.mkdir(exist_ok=True)
+
+        output_dir = PROJECT_ROOT / "backend" / "temp_graphs"
+        output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"ego_{request.model_id}_{request.center_node}.html"
         
         html_path = visualizer.visualize_ego_network_pyvis(
@@ -82,9 +85,9 @@ async def get_full_graph(request: FullGraphRequest):
     try:
         adj_matrix = recommender.learner.get_adjacency_matrix()
         visualizer = CausalGraphVisualizer(adj_matrix)
-        
-        output_dir = Path("backend/temp_graphs")
-        output_dir.mkdir(exist_ok=True)
+
+        output_dir = PROJECT_ROOT / "backend" / "temp_graphs"
+        output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"full_{request.model_id}.html"
         
         html_path = visualizer.visualize_interactive(

@@ -28,11 +28,18 @@ AIによる因果推論を用いたキャリア推薦システムのWeb版実装
 
 ## セットアップ
 
+### 前提条件
+- Python 3.11以上
+- Node.js 18以上
+- uv (Pythonパッケージマネージャー)
+
 ### バックエンド
 ```bash
-cd backend
-pip install -r requirements.txt
-uvicorn backend.main:app --reload --port 8000
+# プロジェクトルートで実行
+uv sync --extra web
+
+# サーバー起動
+uv run uvicorn backend.main:app --reload --port 8000
 ```
 
 ### フロントエンド
