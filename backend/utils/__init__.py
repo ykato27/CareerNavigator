@@ -3,6 +3,8 @@ Backend utilities package.
 """
 from .common import (
     PROJECT_ROOT,
+    clean_column_name,
+    clean_dataframe_columns,
     get_upload_dir,
     load_csv_files,
     transform_data,
@@ -14,6 +16,8 @@ from .session_manager import session_manager, SessionManager
 
 __all__ = [
     'PROJECT_ROOT',
+    'clean_column_name',
+    'clean_dataframe_columns',
     'get_upload_dir',
     'load_csv_files',
     'transform_data',

@@ -4,6 +4,7 @@ Common utilities and constants for the backend API.
 from pathlib import Path
 from typing import Dict, Any
 import pandas as pd
+import re
 from fastapi import HTTPException
 
 from skillnote_recommendation.core.data_transformer import DataTransformer
@@ -11,6 +12,36 @@ from skillnote_recommendation.core.data_transformer import DataTransformer
 
 # Project root directory - centralized definition
 PROJECT_ROOT = Path(__file__).parent.parent.parent
+
+
+def clean_column_name(col_name: str) -> str:
+    """
+    Clean column name by removing metadata markers.
+
+    Removes patterns like ###[...]### from column names.
+
+    Args:
+        col_name: Original column name
+
+    Returns:
+        Cleaned column name
+    """
+    return re.sub(r'\s*###\[.*?\]###', '', col_name).strip()
+
+
+def clean_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean all column names in a DataFrame.
+
+    Args:
+        df: DataFrame with potentially dirty column names
+
+    Returns:
+        DataFrame with cleaned column names
+    """
+    df_copy = df.copy()
+    df_copy.columns = [clean_column_name(col) for col in df_copy.columns]
+    return df_copy
 
 
 def get_upload_dir(session_id: str) -> Path:
@@ -91,6 +122,12 @@ def transform_data(data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
 
     # Create cleaned members DataFrame
     members_df = data['members'].copy()
+
+    # Clean column names (remove ###[...]### markers)
+    members_df = clean_dataframe_columns(members_df)
+    competence_master = clean_dataframe_columns(competence_master)
+
+    # Filter to valid members only
     members_df = members_df[members_df['メンバーコード'].isin(valid_members)]
 
     return {
