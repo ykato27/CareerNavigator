@@ -2,20 +2,18 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Optional, Any
 import time
-import os
-import pandas as pd
-from pathlib import Path
+import logging
 
-from skillnote_recommendation.core.data_transformer import DataTransformer
+from backend.utils import (
+    load_and_transform_session_data,
+    DEFAULT_WEIGHTS,
+    validate_weights,
+    session_manager
+)
 from skillnote_recommendation.ml.causal_graph_recommender import CausalGraphRecommender
 
 router = APIRouter()
-
-# Get project root directory
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-
-# Simple in-memory storage for trained models
-trained_models: Dict[str, CausalGraphRecommender] = {}
+logger = logging.getLogger(__name__)
 
 
 class TrainRequest(BaseModel):
@@ -35,64 +33,34 @@ class TrainResponse(BaseModel):
 @router.post("/train", response_model=TrainResponse)
 async def train_causal_model(request: TrainRequest):
     """
-    Train a causal model using LiNGAM.
+    Train a causal model using LiNGAM algorithm.
+
+    Args:
+        request: Training parameters including session_id, min_members_per_skill,
+                correlation_threshold, and optional custom weights
+
+    Returns:
+        TrainResponse: Model ID, training summary, and success message
+
+    Raises:
+        HTTPException: If session not found or training fails
     """
     try:
-        # Get upload directory for this session
-        base_upload_dir = PROJECT_ROOT / "backend" / "temp_uploads"
-        session_dir = base_upload_dir / request.session_id
-        
-        if not session_dir.exists():
-            raise HTTPException(status_code=404, detail="Session data not found. Please upload data first.")
-        
-        print(f"[TRAIN] Loading data from {session_dir}")
-        start_load = time.time()
-        
-        # Load CSV files directly
-        data = {}
-        csv_files = {
-            'members': 'members.csv',
-            'skills': 'skills.csv',
-            'education': 'education.csv',
-            'license': 'license.csv',
-            'categories': 'categories.csv',
-            'acquired': 'acquired.csv'
-        }
-        
-        for key, filename in csv_files.items():
-            filepath = session_dir / filename
-            if not filepath.exists():
-                raise HTTPException(status_code=404, detail=f"File not found: {filename}")
-            data[key] = pd.read_csv(filepath)
-        
-        print(f"[TRAIN] Data loaded in {time.time() - start_load:.2f}s")
-        
-        # Transform data
-        start_transform = time.time()
-        transformer = DataTransformer()
-        
-        competence_master = transformer.create_competence_master(data)
-        member_competence, valid_members = transformer.create_member_competence(data, competence_master)
-        
-        print(f"[TRAIN] Data transformed in {time.time() - start_transform:.2f}s")
-        
-        # Prepare transformed data
-        transformed_data = {
-            "member_competence": member_competence,
-            "competence_master": competence_master
-        }
-        
-        # Default weights
-        weights = request.weights or {
-            'readiness': 0.6,
-            'bayesian': 0.3,
-            'utility': 0.1
-        }
-        
-        # Start training
-        start_train = time.time()
-        print(f"[TRAIN] Starting model training...")
-        
+        logger.info(f"[TRAIN] Starting model training for session {request.session_id}")
+        start_time = time.time()
+
+        # Load and transform data (with caching)
+        transformed_data = load_and_transform_session_data(request.session_id)
+
+        # Validate and prepare weights
+        weights = request.weights or DEFAULT_WEIGHTS.copy()
+        if request.weights:
+            validate_weights(weights)
+
+        logger.info(f"[TRAIN] Data loaded and transformed, starting model fit...")
+        train_start = time.time()
+
+        # Create and train recommender
         recommender = CausalGraphRecommender(
             member_competence=transformed_data["member_competence"],
             competence_master=transformed_data["competence_master"],
@@ -102,55 +70,120 @@ async def train_causal_model(request: TrainRequest):
             },
             weights=weights
         )
-        
+
         recommender.fit(min_members_per_skill=request.min_members_per_skill)
-        
-        learning_time = time.time() - start_train
-        print(f"[TRAIN] Model training completed in {learning_time:.2f}s")
-        
-        # Generate model ID
+
+        learning_time = time.time() - train_start
+        total_time = time.time() - start_time
+
+        logger.info(f"[TRAIN] Model training completed in {learning_time:.2f}s")
+
+        # Generate unique model ID
         model_id = f"model_{request.session_id}_{int(time.time())}"
-        
-        # Store trained model
-        trained_models[model_id] = recommender
-        
-        # Prepare summary
+
+        # Store trained model using session manager
+        session_manager.add_model(model_id, recommender)
+
+        # Prepare training summary
         summary = {
             "num_members": len(recommender.skill_matrix_.index),
             "num_skills": len(recommender.skill_matrix_.columns),
             "learning_time": round(learning_time, 2),
-            "weights": weights
+            "total_time": round(total_time, 2),
+            "weights": weights,
+            "parameters": {
+                "min_members_per_skill": request.min_members_per_skill,
+                "correlation_threshold": request.correlation_threshold
+            }
         }
-        
+
+        logger.info(f"[TRAIN] Model {model_id} stored successfully")
+
         return TrainResponse(
             success=True,
             model_id=model_id,
             summary=summary,
             message="因果構造の学習が完了しました"
         )
-        
+
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=f"Data file not found: {str(e)}")
+        logger.error(f"[TRAIN] Data file not found: {str(e)}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Data file not found: {str(e)}"
+        )
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
+        logger.error(f"[TRAIN] Training failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Training failed: {str(e)}"
+        )
 
 
 @router.get("/model/{model_id}/summary")
 async def get_model_summary(model_id: str):
     """
-    Get summary of a trained model.
+    Get summary information about a trained model.
+
+    Args:
+        model_id: The unique model identifier
+
+    Returns:
+        dict: Model summary including dimensions and weights
+
+    Raises:
+        HTTPException: If model not found
     """
-    if model_id not in trained_models:
-        raise HTTPException(status_code=404, detail="Model not found")
-    
-    recommender = trained_models[model_id]
-    weights = recommender.get_weights() if hasattr(recommender, 'get_weights') else recommender.weights
-    
+    recommender = session_manager.get_model(model_id)
+
+    if not recommender:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model '{model_id}' not found. Please train a model first."
+        )
+
+    # Get weights (try method first, then attribute)
+    weights = (
+        recommender.get_weights()
+        if hasattr(recommender, 'get_weights')
+        else recommender.weights
+    )
+
     return {
         "model_id": model_id,
         "num_members": len(recommender.skill_matrix_.index),
         "num_skills": len(recommender.skill_matrix_.columns),
-        "weights": weights
+        "weights": weights,
+        "has_causal_graph": hasattr(recommender, 'adj_matrix_')
+    }
+
+
+@router.delete("/model/{model_id}")
+async def delete_model(model_id: str):
+    """
+    Delete a trained model from memory.
+
+    Args:
+        model_id: The unique model identifier
+
+    Returns:
+        dict: Deletion status
+
+    Raises:
+        HTTPException: If model not found
+    """
+    removed = session_manager.remove_model(model_id)
+
+    if not removed:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model '{model_id}' not found"
+        )
+
+    return {
+        "success": True,
+        "message": f"Model {model_id} deleted successfully"
     }
