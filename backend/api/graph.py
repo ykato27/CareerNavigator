@@ -2,16 +2,13 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
-import os
-from pathlib import Path
+import logging
 
+from backend.utils import PROJECT_ROOT, session_manager
 from skillnote_recommendation.graph.causal_graph_visualizer import CausalGraphVisualizer
-from .train import trained_models
 
 router = APIRouter()
-
-# Get project root directory
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+logger = logging.getLogger(__name__)
 
 
 class EgoGraphRequest(BaseModel):
@@ -33,21 +30,36 @@ class FullGraphRequest(BaseModel):
 @router.post("/graph/ego")
 async def get_ego_network(request: EgoGraphRequest):
     """
-    Generate ego network graph.
+    Generate ego network graph visualization.
+
+    Args:
+        request: Graph parameters including model_id, center_node, radius, etc.
+
+    Returns:
+        dict: HTML content of the interactive graph
+
+    Raises:
+        HTTPException: If model not found or graph generation fails
     """
-    if request.model_id not in trained_models:
-        raise HTTPException(status_code=404, detail="Model not found")
-    
-    recommender = trained_models[request.model_id]
-    
+    # Get model from session manager
+    recommender = session_manager.get_model(request.model_id)
+
+    if not recommender:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model '{request.model_id}' not found. Please train a model first."
+        )
+
     try:
+        logger.info(f"[GRAPH] Generating ego network for {request.center_node}")
+
         adj_matrix = recommender.learner.get_adjacency_matrix()
         visualizer = CausalGraphVisualizer(adj_matrix)
 
         output_dir = PROJECT_ROOT / "backend" / "temp_graphs"
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"ego_{request.model_id}_{request.center_node}.html"
-        
+
         html_path = visualizer.visualize_ego_network_pyvis(
             center_node=request.center_node,
             radius=request.radius,
@@ -57,39 +69,58 @@ async def get_ego_network(request: EgoGraphRequest):
             output_path=str(output_path),
             height="600px"
         )
-        
+
         with open(html_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
-        
+
+        logger.info(f"[GRAPH] Ego network generated successfully")
+
         return {
             "success": True,
             "html": html_content
         }
-        
+
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Graph generation failed: {str(e)}")
+        logger.error(f"[GRAPH] Graph generation failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Graph generation failed: {str(e)}"
+        )
 
 
 @router.post("/graph/full")
 async def get_full_graph(request: FullGraphRequest):
     """
-    Generate full causal graph.
+    Generate full causal graph visualization.
+
+    Args:
+        request: Graph parameters including model_id, threshold, top_n, etc.
+
+    Returns:
+        dict: HTML content of the interactive graph
+
+    Raises:
+        HTTPException: If model not found or graph generation fails
     """
-    if request.model_id not in trained_models:
-        raise HTTPException(status_code=404, detail="Model not found")
-    
-    recommender = trained_models[request.model_id]
-    
+    # Get model from session manager
+    recommender = session_manager.get_model(request.model_id)
+
+    if not recommender:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model '{request.model_id}' not found. Please train a model first."
+        )
+
     try:
+        logger.info(f"[GRAPH] Generating full causal graph (top {request.top_n})")
+
         adj_matrix = recommender.learner.get_adjacency_matrix()
         visualizer = CausalGraphVisualizer(adj_matrix)
 
         output_dir = PROJECT_ROOT / "backend" / "temp_graphs"
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"full_{request.model_id}.html"
-        
+
         html_path = visualizer.visualize_interactive(
             output_path=str(output_path),
             threshold=request.threshold,
@@ -98,17 +129,21 @@ async def get_full_graph(request: FullGraphRequest):
             height="800px",
             width="100%"
         )
-        
+
         with open(html_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
-        
+
+        logger.info(f"[GRAPH] Full causal graph generated successfully")
+
         return {
             "success": True,
             "html": html_content,
             "node_count": request.top_n
         }
-        
+
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Graph generation failed: {str(e)}")
+        logger.error(f"[GRAPH] Graph generation failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Graph generation failed: {str(e)}"
+        )
