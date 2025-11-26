@@ -1,22 +1,16 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Optional, Any, List
-import pandas as pd
-from pathlib import Path
+import logging
 
-from skillnote_recommendation.core.data_transformer import DataTransformer
+from backend.utils import load_and_transform_session_data, session_manager
 from skillnote_recommendation.organizational.skill_gap_analyzer import SkillGapAnalyzer
 from skillnote_recommendation.organizational import org_metrics
 from skillnote_recommendation.strategic.succession_planner import SuccessionPlanner
 from skillnote_recommendation.strategic.org_simulator import OrganizationSimulator
 
 router = APIRouter()
-
-# Get project root directory
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-
-# In-memory storage for session data
-session_data_cache: Dict[str, Dict[str, Any]] = {}
+logger = logging.getLogger(__name__)
 
 
 class OrganizationalMetricsRequest(BaseModel):
@@ -40,62 +34,30 @@ class OrganizationSimulationRequest(BaseModel):
     group_column: str = "職種"
 
 
-def load_session_data(session_id: str) -> Dict[str, pd.DataFrame]:
-    """Load session data from CSV files"""
-    if session_id in session_data_cache:
-        return session_data_cache[session_id]
-
-    base_upload_dir = PROJECT_ROOT / "backend" / "temp_uploads"
-    session_dir = base_upload_dir / session_id
-
-    if not session_dir.exists():
-        raise HTTPException(status_code=404, detail="Session data not found. Please upload data first.")
-
-    # Load CSV files
-    data = {}
-    csv_files = {
-        'members': 'members.csv',
-        'skills': 'skills.csv',
-        'education': 'education.csv',
-        'license': 'license.csv',
-        'categories': 'categories.csv',
-        'acquired': 'acquired.csv'
-    }
-
-    for key, filename in csv_files.items():
-        filepath = session_dir / filename
-        if not filepath.exists():
-            raise HTTPException(status_code=404, detail=f"File not found: {filename}")
-        data[key] = pd.read_csv(filepath)
-
-    # Transform data
-    transformer = DataTransformer()
-    competence_master = transformer.create_competence_master(data)
-    member_competence, valid_members = transformer.create_member_competence(data, competence_master)
-
-    # Create members_clean DataFrame
-    members_df = data['members'].copy()
-    members_df = members_df[members_df['メンバーコード'].isin(valid_members)]
-
-    transformed_data = {
-        "member_competence": member_competence,
-        "competence_master": competence_master,
-        "members_clean": members_df
-    }
-
-    # Cache the transformed data
-    session_data_cache[session_id] = transformed_data
-
-    return transformed_data
-
-
 @router.post("/organizational/metrics")
 async def get_organizational_metrics(request: OrganizationalMetricsRequest):
     """
     Get organizational skill map metrics and dashboard data.
+
+    Args:
+        request: Contains session_id
+
+    Returns:
+        dict: Organizational metrics including coverage, diversity, and top skills
+
+    Raises:
+        HTTPException: If session not found or analysis fails
     """
     try:
-        transformed_data = load_session_data(request.session_id)
+        logger.info(f"[ORG] Calculating metrics for session {request.session_id}")
+
+        # Load transformed data (with caching via session_manager)
+        cache_key = f"org_data_{request.session_id}"
+        transformed_data = session_manager.get_cache(cache_key)
+
+        if not transformed_data:
+            transformed_data = load_and_transform_session_data(request.session_id)
+            session_manager.add_cache(cache_key, transformed_data)
 
         member_competence_df = transformed_data["member_competence"]
         competence_master_df = transformed_data["competence_master"]
@@ -107,17 +69,13 @@ async def get_organizational_metrics(request: OrganizationalMetricsRequest):
         total_skill_records = len(member_competence_df)
         avg_skills_per_member = total_skill_records / total_members if total_members > 0 else 0
 
-        # Calculate coverage
+        # Calculate organizational metrics
         coverage_info = org_metrics.calculate_skill_coverage(
             member_competence_df, competence_master_df
         )
-
-        # Calculate concentration
         concentration_info = org_metrics.calculate_skill_concentration(
             member_competence_df, threshold=3
         )
-
-        # Calculate diversity
         diversity_index = org_metrics.calculate_skill_diversity_index(
             member_competence_df
         )
@@ -140,6 +98,8 @@ async def get_organizational_metrics(request: OrganizationalMetricsRequest):
                     "member_count": int(count)
                 })
 
+        logger.info(f"[ORG] Metrics calculated successfully")
+
         return {
             "success": True,
             "metrics": {
@@ -155,19 +115,40 @@ async def get_organizational_metrics(request: OrganizationalMetricsRequest):
             "top_skills": top_skills
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to get organizational metrics: {str(e)}")
+        logger.error(f"[ORG] Metrics calculation failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get organizational metrics: {str(e)}"
+        )
 
 
 @router.post("/organizational/skill-gap")
 async def analyze_skill_gap(request: SkillGapAnalysisRequest):
     """
     Analyze skill gaps using top percentile approach.
+
+    Args:
+        request: Contains session_id and percentile (default: 0.2)
+
+    Returns:
+        dict: Skill gap analysis with critical skills identified
+
+    Raises:
+        HTTPException: If session not found or analysis fails
     """
     try:
-        transformed_data = load_session_data(request.session_id)
+        logger.info(f"[ORG] Analyzing skill gap for session {request.session_id}")
+
+        # Load transformed data (with caching)
+        cache_key = f"org_data_{request.session_id}"
+        transformed_data = session_manager.get_cache(cache_key)
+
+        if not transformed_data:
+            transformed_data = load_and_transform_session_data(request.session_id)
+            session_manager.add_cache(cache_key, transformed_data)
 
         member_competence_df = transformed_data["member_competence"]
         competence_master_df = transformed_data["competence_master"]
@@ -175,48 +156,26 @@ async def analyze_skill_gap(request: SkillGapAnalysisRequest):
         # Initialize analyzer
         analyzer = SkillGapAnalyzer()
 
-        # Calculate current profile
+        # Calculate profiles and gap
         current_profile = analyzer.calculate_current_profile(
             member_competence_df,
             competence_master_df
         )
-
-        # Calculate target profile (top N% approach)
         target_profile = analyzer.calculate_target_profile_top_percentile(
             member_competence_df,
             competence_master_df,
             percentile=request.percentile
         )
-
-        # Calculate gap
         gap_df = analyzer.calculate_gap(current_profile, target_profile)
 
-        # Identify critical skills (gap rate > 30%)
+        # Identify critical skills
         critical_skills = analyzer.identify_critical_skills(gap_df, threshold=0.3)
 
-        # Format gap data for frontend
-        gap_data = []
-        for idx, row in gap_df.head(20).iterrows():
-            gap_data.append({
-                "skill_code": row["力量コード"],
-                "skill_name": row["力量名"],
-                "current_rate": round(row["現在保有率"], 3),
-                "target_rate": round(row["目標保有率"], 3),
-                "gap_rate": round(row["保有率ギャップ"], 3),
-                "gap_percentage": round(row["保有率ギャップ率"], 3)
-            })
+        # Format results
+        gap_data = _format_gap_dataframe(gap_df.head(20))
+        critical_skills_data = _format_gap_dataframe(critical_skills.head(10))
 
-        # Format critical skills
-        critical_skills_data = []
-        for idx, row in critical_skills.head(10).iterrows():
-            critical_skills_data.append({
-                "skill_code": row["力量コード"],
-                "skill_name": row["力量名"],
-                "current_rate": round(row["現在保有率"], 3),
-                "target_rate": round(row["目標保有率"], 3),
-                "gap_rate": round(row["保有率ギャップ"], 3),
-                "gap_percentage": round(row["保有率ギャップ率"], 3)
-            })
+        logger.info(f"[ORG] Gap analysis completed successfully")
 
         return {
             "success": True,
@@ -230,19 +189,43 @@ async def analyze_skill_gap(request: SkillGapAnalysisRequest):
             }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Skill gap analysis failed: {str(e)}")
+        logger.error(f"[ORG] Skill gap analysis failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Skill gap analysis failed: {str(e)}"
+        )
 
 
 @router.post("/organizational/succession")
 async def find_succession_candidates(request: SuccessionPlanningRequest):
     """
     Find succession candidates for a target position.
+
+    Args:
+        request: Contains session_id, target_position, and max_candidates
+
+    Returns:
+        dict: Succession candidates ranked by readiness score
+
+    Raises:
+        HTTPException: If session not found or search fails
     """
     try:
-        transformed_data = load_session_data(request.session_id)
+        logger.info(
+            f"[ORG] Finding succession candidates for {request.target_position} "
+            f"in session {request.session_id}"
+        )
+
+        # Load transformed data (with caching)
+        cache_key = f"org_data_{request.session_id}"
+        transformed_data = session_manager.get_cache(cache_key)
+
+        if not transformed_data:
+            transformed_data = load_and_transform_session_data(request.session_id)
+            session_manager.add_cache(cache_key, transformed_data)
 
         member_competence_df = transformed_data["member_competence"]
         competence_master_df = transformed_data["competence_master"]
@@ -251,7 +234,7 @@ async def find_succession_candidates(request: SuccessionPlanningRequest):
         # Initialize succession planner
         planner = SuccessionPlanner()
 
-        # Calculate position skill profile
+        # Calculate position profile and find candidates
         profile = planner.calculate_position_skill_profile(
             request.target_position,
             members_df,
@@ -259,8 +242,6 @@ async def find_succession_candidates(request: SuccessionPlanningRequest):
             competence_master_df,
             position_column="役職"
         )
-
-        # Find candidates
         candidates = planner.find_succession_candidates(
             request.target_position,
             members_df,
@@ -272,22 +253,10 @@ async def find_succession_candidates(request: SuccessionPlanningRequest):
             max_candidates=request.max_candidates
         )
 
-        # Format candidates for frontend
-        candidates_data = []
-        for idx, row in candidates.head(request.max_candidates).iterrows():
-            timeline = planner.estimate_development_timeline(row['不足スキル数'])
+        # Format candidates
+        candidates_data = _format_succession_candidates(candidates, planner, request.max_candidates)
 
-            candidates_data.append({
-                "member_code": row["メンバーコード"],
-                "member_name": row["メンバー名"],
-                "current_position": row.get("現在の役職", ""),
-                "current_grade": row.get("現在の等級", ""),
-                "readiness_score": round(row["準備度スコア"], 3),
-                "skill_match_rate": round(row["スキルマッチ度"], 3),
-                "owned_skills_count": int(row["保有スキル数"]),
-                "missing_skills_count": int(row["不足スキル数"]),
-                "estimated_timeline": timeline
-            })
+        logger.info(f"[ORG] Found {len(candidates_data)} succession candidates")
 
         return {
             "success": True,
@@ -298,19 +267,40 @@ async def find_succession_candidates(request: SuccessionPlanningRequest):
             }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Succession planning failed: {str(e)}")
+        logger.error(f"[ORG] Succession planning failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Succession planning failed: {str(e)}"
+        )
 
 
 @router.post("/organizational/simulate")
 async def simulate_organization_changes(request: OrganizationSimulationRequest):
     """
     Simulate organizational changes (member transfers).
+
+    Args:
+        request: Contains session_id, transfers list, and group_column
+
+    Returns:
+        dict: Simulation results with before/after comparison
+
+    Raises:
+        HTTPException: If session not found or simulation fails
     """
     try:
-        transformed_data = load_session_data(request.session_id)
+        logger.info(f"[ORG] Simulating {len(request.transfers)} transfers for session {request.session_id}")
+
+        # Load transformed data (with caching)
+        cache_key = f"org_data_{request.session_id}"
+        transformed_data = session_manager.get_cache(cache_key)
+
+        if not transformed_data:
+            transformed_data = load_and_transform_session_data(request.session_id)
+            session_manager.add_cache(cache_key, transformed_data)
 
         member_competence_df = transformed_data["member_competence"]
         competence_master_df = transformed_data["competence_master"]
@@ -347,17 +337,9 @@ async def simulate_organization_changes(request: OrganizationSimulationRequest):
         simulated_balance = simulator.calculate_balance_score(simulated_state)
 
         # Format comparison data
-        comparison_data = []
-        for idx, row in comparison_df.iterrows():
-            comparison_data.append({
-                "group": row.get("グループ", ""),
-                "current_members": int(row.get("現在のメンバー数", 0)),
-                "simulated_members": int(row.get("シミュレーション後のメンバー数", 0)),
-                "current_avg_skills": round(row.get("現在の平均スキル数", 0), 1),
-                "simulated_avg_skills": round(row.get("シミュレーション後の平均スキル数", 0), 1),
-                "member_change": int(row.get("メンバー数変化", 0)),
-                "skill_change": round(row.get("平均スキル数変化", 0), 1)
-            })
+        comparison_data = _format_simulation_comparison(comparison_df)
+
+        logger.info(f"[ORG] Simulation completed successfully")
 
         return {
             "success": True,
@@ -370,7 +352,62 @@ async def simulate_organization_changes(request: OrganizationSimulationRequest):
             }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Organization simulation failed: {str(e)}")
+        logger.error(f"[ORG] Organization simulation failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Organization simulation failed: {str(e)}"
+        )
+
+
+# Helper functions
+def _format_gap_dataframe(df) -> List[Dict]:
+    """Format gap analysis DataFrame for JSON response."""
+    result = []
+    for idx, row in df.iterrows():
+        result.append({
+            "skill_code": row["力量コード"],
+            "skill_name": row["力量名"],
+            "current_rate": round(row["現在保有率"], 3),
+            "target_rate": round(row["目標保有率"], 3),
+            "gap_rate": round(row["保有率ギャップ"], 3),
+            "gap_percentage": round(row["保有率ギャップ率"], 3)
+        })
+    return result
+
+
+def _format_succession_candidates(candidates, planner, max_count: int) -> List[Dict]:
+    """Format succession candidates DataFrame for JSON response."""
+    result = []
+    for idx, row in candidates.head(max_count).iterrows():
+        timeline = planner.estimate_development_timeline(row['不足スキル数'])
+        result.append({
+            "member_code": row["メンバーコード"],
+            "member_name": row["メンバー名"],
+            "current_position": row.get("現在の役職", ""),
+            "current_grade": row.get("現在の等級", ""),
+            "readiness_score": round(row["準備度スコア"], 3),
+            "skill_match_rate": round(row["スキルマッチ度"], 3),
+            "owned_skills_count": int(row["保有スキル数"]),
+            "missing_skills_count": int(row["不足スキル数"]),
+            "estimated_timeline": timeline
+        })
+    return result
+
+
+def _format_simulation_comparison(df) -> List[Dict]:
+    """Format simulation comparison DataFrame for JSON response."""
+    result = []
+    for idx, row in df.iterrows():
+        result.append({
+            "group": row.get("グループ", ""),
+            "current_members": int(row.get("現在のメンバー数", 0)),
+            "simulated_members": int(row.get("シミュレーション後のメンバー数", 0)),
+            "current_avg_skills": round(row.get("現在の平均スキル数", 0), 1),
+            "simulated_avg_skills": round(row.get("シミュレーション後の平均スキル数", 0), 1),
+            "member_change": int(row.get("メンバー数変化", 0)),
+            "skill_change": round(row.get("平均スキル数変化", 0), 1)
+        })
+    return result
