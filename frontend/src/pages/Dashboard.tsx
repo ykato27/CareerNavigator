@@ -1,42 +1,63 @@
+import { Home, LayoutGrid, Edit } from 'lucide-react';
+
 export const Dashboard = () => {
     return (
-        <div className="space-y-6">
-            <div className="text-center py-12">
-                <h2 className="text-2xl font-bold text-gray-700 mb-2">メンバーの力量をシートで管理してみましょう。</h2>
+        <div className="flex-1 px-8 py-12">
+            <div className="text-center mb-16">
+                <h2 className="text-2xl font-normal text-gray-700">メンバーの力量を</h2>
+                <h2 className="text-2xl font-normal text-gray-700 mb-2">シートで管理してみましょう。</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
                 {/* Card 1 */}
-                <div className="bg-white p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col items-center text-center">
-                    <div className="w-16 h-16 bg-green-100 rounded-lg flex items-center justify-center mb-4 text-green-600">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
+                <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+                    <div className="p-8 flex flex-col items-center text-center">
+                        <div className="w-24 h-24 bg-gray-50 rounded-lg flex items-center justify-center mb-6">
+                            <Home size={48} className="text-gray-300" strokeWidth={1} />
+                        </div>
+                        <h3 className="text-base font-bold text-gray-800 mb-4">プロジェクトを<br />設定</h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                            企業や工場、部署など、<br />
+                            管理したい組織単位でプ<br />
+                            ロジェクトを作成してみ<br />
+                            ましょう。
+                        </p>
                     </div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">プロジェクトを設定</h3>
-                    <p className="text-sm text-gray-500 leading-relaxed">
-                        企業や工場、部署など、管理したい組織単位でプロジェクトを作成してみましょう。
-                    </p>
                 </div>
 
                 {/* Card 2 */}
-                <div className="bg-white p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col items-center text-center">
-                    <div className="w-16 h-16 bg-green-100 rounded-lg flex items-center justify-center mb-4 text-green-600">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" /></svg>
+                <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+                    <div className="p-8 flex flex-col items-center text-center">
+                        <div className="w-24 h-24 bg-gray-50 rounded-lg flex items-center justify-center mb-6">
+                            <LayoutGrid size={48} className="text-gray-300" strokeWidth={1} />
+                        </div>
+                        <h3 className="text-base font-bold text-gray-800 mb-4">シートを作成</h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                            メンバーの力量マップや<br />
+                            育成計画、個人力量を管<br />
+                            理するシートを作成でき<br />
+                            ます。運用にそってシー<br />
+                            トを使い分けてみてくだ<br />
+                            さい。
+                        </p>
                     </div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">シートを作成</h3>
-                    <p className="text-sm text-gray-500 leading-relaxed">
-                        メンバーの力量マップや育成計画、個人力量を管理するシートを作成できます。運用にそってシートを使い分けてみてください。
-                    </p>
                 </div>
 
                 {/* Card 3 */}
-                <div className="bg-white p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col items-center text-center">
-                    <div className="w-16 h-16 bg-green-100 rounded-lg flex items-center justify-center mb-4 text-green-600">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+                    <div className="p-8 flex flex-col items-center text-center">
+                        <div className="w-24 h-24 bg-gray-50 rounded-lg flex items-center justify-center mb-6">
+                            <Edit size={48} className="text-gray-300" strokeWidth={1} />
+                        </div>
+                        <h3 className="text-base font-bold text-gray-800 mb-4">運用開始</h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                            シートを作成したらメン<br />
+                            バーにスキルや教育・資<br />
+                            格を登録したり、育成計<br />
+                            画の記録をつけてみまし<br />
+                            ょう。
+                        </p>
                     </div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">運用開始</h3>
-                    <p className="text-sm text-gray-500 leading-relaxed">
-                        シートを作成したらメンバーにスキルや教育・資格を登録したり、育成計画の記録をつけてみましょう。
-                    </p>
                 </div>
             </div>
         </div>
