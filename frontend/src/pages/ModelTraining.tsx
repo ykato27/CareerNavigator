@@ -19,7 +19,7 @@ export const ModelTraining = () => {
 
   // Training parameters
   const [minMembers, setMinMembers] = useState(5);
-  const [corrThreshold, setCorr Threshold] = useState(0.2);
+  const [corrThreshold, setCorrThreshold] = useState(0.2);
 
   // Weight mode
   const [weightMode, setWeightMode] = useState<'default' | 'manual' | 'auto'>('default');
