@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Home, Upload, Brain } from 'lucide-react';
+import { LayoutGrid, Upload, Brain, Database, Settings, HelpCircle, User } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { DataUpload } from './pages/DataUpload';
 import { CausalAnalysis } from './pages/CausalAnalysis';
@@ -12,45 +12,46 @@ const NavItem = ({ to, icon: Icon, label }: { to: string; icon: any; label: stri
     <Link
       to={to}
       className={`
-        flex items-center gap-3 px-4 py-3 rounded-lg transition-all
+        flex flex-col items-center justify-center py-4 px-2 text-center transition-colors
         ${isActive
-          ? 'bg-green-600 text-white shadow-md'
-          : 'text-gray-600 hover:bg-gray-100'
+          ? 'bg-[#008F58] text-white'
+          : 'text-white hover:bg-[#008F58]'
         }
       `}
     >
-      <Icon size={20} />
-      <span className="font-medium">{label}</span>
+      <Icon size={24} className="mb-1" />
+      <span className="text-xs font-medium">{label}</span>
     </Link>
   );
 };
 
 function App() {
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-[#F5F7F9]">
       {/* Sidebar */}
-      <aside className="w-64 bg-white shadow-lg">
-        <div className="p-6">
-          <div className="flex items-center gap-2 mb-8">
-            <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">S</span>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">CareerNavigator</h1>
-              <p className="text-xs text-gray-500">AI因果推論推薦</p>
-            </div>
+      <aside className="w-20 bg-[#00A968] flex flex-col">
+        {/* Logo */}
+        <div className="h-16 flex items-center justify-center border-b border-[#008F58]">
+          <div className="w-10 h-10 bg-white rounded-md flex items-center justify-center">
+            <span className="text-[#00A968] font-bold text-lg">S</span>
           </div>
-
-          <nav className="space-y-2">
-            <NavItem to="/" icon={Home} label="ダッシュボード" />
-            <NavItem to="/data-upload" icon={Upload} label="データ管理" />
-            <NavItem to="/causal-analysis" icon={Brain} label="Career" />
-          </nav>
         </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 flex flex-col">
+          <NavItem to="/" icon={LayoutGrid} label="力量管理" />
+          <NavItem to="/causal-analysis" icon={Brain} label="Career" />
+          <NavItem to="/data-upload" icon={Upload} label="データ管理" />
+          <div className="mt-auto">
+            <NavItem to="/settings" icon={Settings} label="設定" />
+            <NavItem to="/help" icon={HelpCircle} label="ガイド" />
+            <NavItem to="/profile" icon={User} label="Myページ" />
+          </div>
+        </nav>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8">
+      <main className="flex-1">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/data-upload" element={<DataUpload />} />
