@@ -30,6 +30,32 @@ const NavItem = ({ to, icon: Icon, label }: { to: string; icon: any; label: stri
 };
 
 function App() {
+  const location = useLocation();
+
+  // Get page title based on current route
+  const getPageTitle = () => {
+    switch (location.pathname) {
+      case '/':
+        return '力量管理';
+      case '/data-upload':
+        return 'データ管理';
+      case '/model-training':
+        return 'モデル学習';
+      case '/causal-recommendation':
+        return '因果推論';
+      case '/career-dashboard':
+        return 'キャリア';
+      case '/skill-map':
+        return 'スキルマップ';
+      case '/settings':
+        return '設定';
+      case '/help':
+        return 'ガイド';
+      default:
+        return '力量管理';
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-[#F5F7F9]">
       {/* Sidebar */}
@@ -66,7 +92,7 @@ function App() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm text-gray-700">
               <FolderOpen size={18} className="text-gray-500" />
-              <span>力量管理</span>
+              <span>{getPageTitle()}</span>
             </div>
           </div>
           <div className="flex items-center gap-4">
