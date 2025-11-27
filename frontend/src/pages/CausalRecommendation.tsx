@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Brain, TrendingUp, AlertCircle, Loader2, Network, Info, ChevronDown, ChevronUp, Zap, Settings } from 'lucide-react';
+import { Brain, TrendingUp, AlertCircle, Loader2, Network, Info, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 
 interface Member {
   member_code: string;
@@ -60,8 +60,8 @@ export const CausalRecommendation = () => {
   const [updatingWeights, setUpdatingWeights] = useState(false);
 
   // Graph parameters
-  const [graphRadius, setGraphRadius] = useState(1);
-  const [graphThreshold, setGraphThreshold] = useState(0.05);
+  const graphRadius = 1;
+  const graphThreshold = 0.05;
 
   useEffect(() => {
     const sid = sessionStorage.getItem('career_session_id');

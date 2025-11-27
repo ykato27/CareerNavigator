@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
-  LayoutGrid, TrendingDown, Users, Briefcase, Shuffle,
-  AlertCircle, Info, CheckCircle, Loader2, Download, BarChart3,
-  Target, Award, Clock, ArrowRight
+  LayoutGrid, TrendingDown, Users, Briefcase,
+  AlertCircle, Info, Loader2, BarChart3,
+  Target, Award, Clock
 } from 'lucide-react';
 
 interface OrganizationalMetrics {

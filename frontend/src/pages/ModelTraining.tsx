@@ -36,8 +36,7 @@ export const ModelTraining = () => {
 
   // Weight optimization state
   const [optimizing, setOptimizing] = useState(false);
-  const [nTrials, setNTrials] = useState(50);
-  const [optimizedWeights, setOptimizedWeights] = useState<any>(null);
+  const nTrials = 50;
 
   useEffect(() => {
     const sid = sessionStorage.getItem('career_session_id');
@@ -70,8 +69,6 @@ export const ModelTraining = () => {
         holdout_ratio: 0.2,
         top_k: 10
       });
-
-      setOptimizedWeights(response.data.optimized_weights);
 
       // Re-train with optimized weights
       setTraining(true);

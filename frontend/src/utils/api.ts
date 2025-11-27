@@ -1,7 +1,8 @@
 /**
  * API client utilities with centralized error handling and configuration.
  */
-import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
+import axios, { AxiosError } from 'axios';
+import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { API_BASE_URL } from '../config/constants';
 
 /**
