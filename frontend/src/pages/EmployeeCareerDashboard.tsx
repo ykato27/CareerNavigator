@@ -227,7 +227,7 @@ export const EmployeeCareerDashboard = () => {
   // =========================================================
   // Load ego graph for a specific skill
   // =========================================================
-  const loadEgoGraph = async (skillName: string, skillCode?: string) => {
+  const loadEgoGraph = async (skillName: string) => {
     if (!modelId) return;
 
     setLoadingGraph(true);
@@ -235,7 +235,7 @@ export const EmployeeCareerDashboard = () => {
     try {
       const response = await axios.post('http://localhost:8000/api/graph/ego', {
         model_id: modelId,
-        center_node: skillCode || skillName,
+        center_node: skillName,
         radius: graphRadius,
         threshold: graphThreshold,
         show_negative: false,
@@ -914,7 +914,7 @@ export const EmployeeCareerDashboard = () => {
                                 {showGraphSettings ? '閉じる' : '設定'}
                               </button>
                               <button
-                                onClick={() => loadEgoGraph(skill.competence_name, skill.competence_code)}
+                                onClick={() => loadEgoGraph(skill.competence_name)}
                                 disabled={loadingGraph}
                                 className="px-3 py-1 text-xs bg-[#00A968] text-white rounded hover:bg-[#008f5a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
