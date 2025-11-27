@@ -1,83 +1,360 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { User, Briefcase, Target, Award, TrendingUp, Loader2, AlertCircle } from 'lucide-react';
+import {
+  User,
+  Briefcase,
+  Target,
+  Award,
+  TrendingUp,
+  Loader2,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Info,
+  Network,
+  BarChart3,
+  Settings
+} from 'lucide-react';
+
+// =========================================================
+// Type Definitions
+// =========================================================
+
+interface MemberInfo {
+  member_code: string;
+  member_name: string;
+  role: string;
+  skill_count?: number;
+  display_name?: string;
+}
 
 interface Skill {
+  skill_code: string;
   skill_name: string;
-  level: number;
   category: string;
+  level: number;
 }
 
-interface CareerRecommendation {
-  skill_name: string;
-  score: number;
-  reason: string;
+interface RecommendedSkill {
+  competence_code: string;
+  competence_name: string;
+  category: string;
+  total_score: number;
+  readiness_score: number;
+  bayesian_score: number;
+  utility_score: number;
+  readiness_reasons: [string, number][];
+  utility_reasons: [string, number][];
+  prerequisites: { skill_name: string; effect: number }[];
+  enables: { skill_name: string; effect: number }[];
+  explanation?: string;
 }
 
-interface DashboardData {
-  member_id: string;
-  member_name: string;
-  current_skills: Skill[];
-  recommendations: CareerRecommendation[];
+interface GapAnalysisResult {
+  success: boolean;
+  source_member: MemberInfo;
+  target_member: MemberInfo;
+  gap_skills: { skill_code: string; skill_name: string; category: string }[];
+  gap_count: number;
+  source_skill_count: number;
+  target_skill_count: number;
+  completion_rate: number;
 }
+
+interface CareerPathResult {
+  success: boolean;
+  recommended_skills: RecommendedSkill[];
+  skill_count: number;
+  avg_score: number;
+  total_dependencies: number;
+  estimated_months: number;
+  message: string;
+}
+
+// =========================================================
+// Main Component
+// =========================================================
 
 export const EmployeeCareerDashboard = () => {
-  const [memberId, setMemberId] = useState('');
+  // Session state
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [dataUploaded, setDataUploaded] = useState(false);
   const [modelId, setModelId] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  // Member selection
+  const [availableMembers, setAvailableMembers] = useState<MemberInfo[]>([]);
+  const [selectedMember, setSelectedMember] = useState('');
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
+  // Target selection
+  const [targetSelectionMode, setTargetSelectionMode] = useState<'role_model' | 'role'>('role_model');
+  const [targetMember, setTargetMember] = useState('');
+  const [availableRoles, setAvailableRoles] = useState<{ role_name: string; member_count: number }[]>([]);
+  const [selectedRole, setSelectedRole] = useState('');
+
+  // Current skills
+  const [currentSkills, setCurrentSkills] = useState<Skill[]>([]);
+  const [loadingSkills, setLoadingSkills] = useState(false);
+
+  // Gap analysis
+  const [gapAnalysis, setGapAnalysis] = useState<GapAnalysisResult | null>(null);
+  const [loadingGap, setLoadingGap] = useState(false);
+
+  // Career path
+  const [careerPath, setCareerPath] = useState<CareerPathResult | null>(null);
+  const [loadingPath, setLoadingPath] = useState(false);
+
+  // Filtering settings
+  const [minTotalScore, setMinTotalScore] = useState(0.3);
+  const [minReadinessScore, setMinReadinessScore] = useState(0.0);
+  const [minEffectThreshold, setMinEffectThreshold] = useState(0.03);
+  const [showFilterSettings, setShowFilterSettings] = useState(false);
+
+  // UI state
   const [error, setError] = useState('');
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [expandedSkillIndex, setExpandedSkillIndex] = useState<number | null>(null);
 
-  const handleLoadDashboard = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    setDashboardData(null);
+  // =========================================================
+  // Initialize session from sessionStorage
+  // =========================================================
+  useEffect(() => {
+    const sid = sessionStorage.getItem('career_session_id');
+    const uploaded = sessionStorage.getItem('career_data_uploaded');
+    const savedModelId = sessionStorage.getItem('career_model_id');
 
+    setSessionId(sid);
+    setDataUploaded(uploaded === 'true');
+    if (savedModelId) {
+      setModelId(savedModelId);
+    }
+
+    if (sid && uploaded === 'true') {
+      loadAvailableMembers(sid);
+      loadAvailableRoles(sid);
+    }
+  }, []);
+
+  // =========================================================
+  // Load available members
+  // =========================================================
+  const loadAvailableMembers = async (sid: string) => {
+    setLoadingMembers(true);
     try {
-      // Get recommendations
-      const response = await axios.post('http://localhost:8000/api/recommend', {
-        model_id: modelId,
-        member_id: memberId,
-        top_n: 5,
+      const response = await axios.get(`http://localhost:8000/api/career/members`, {
+        params: { session_id: sid }
       });
-
-      // Mock current skills data (in production, this would come from another API endpoint)
-      setDashboardData({
-        member_id: memberId,
-        member_name: `メンバー ${memberId}`,
-        current_skills: [
-          { skill_name: 'Python', level: 3, category: 'プログラミング' },
-          { skill_name: 'データ分析', level: 2, category: 'Analytics' },
-          { skill_name: 'SQL', level: 3, category: 'Database' },
-        ],
-        recommendations: response.data.recommendations.map((rec: any) => ({
-          skill_name: rec.skill_name,
-          score: rec.score,
-          reason: rec.explanation || '因果推論に基づく推薦',
-        })),
-      });
+      setAvailableMembers(response.data.members);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'データの読み込みに失敗しました');
+      console.error('Failed to load members:', err);
+      setError('メンバーリストの読み込みに失敗しました');
     } finally {
-      setLoading(false);
+      setLoadingMembers(false);
     }
   };
 
-  const getLevelColor = (level: number) => {
-    if (level >= 4) return 'bg-green-500';
-    if (level >= 3) return 'bg-blue-500';
-    if (level >= 2) return 'bg-yellow-500';
-    return 'bg-gray-400';
+  // =========================================================
+  // Load available roles
+  // =========================================================
+  const loadAvailableRoles = async (sid: string) => {
+    try {
+      const response = await axios.get(`http://localhost:8000/api/career/roles`, {
+        params: { session_id: sid }
+      });
+      if (response.data.success) {
+        setAvailableRoles(response.data.roles);
+      }
+    } catch (err: any) {
+      console.error('Failed to load roles:', err);
+    }
   };
 
-  const getLevelText = (level: number) => {
-    if (level >= 4) return '上級';
-    if (level >= 3) return '中級';
-    if (level >= 2) return '初級';
-    return '基礎';
+  // =========================================================
+  // Load member's current skills
+  // =========================================================
+  const loadMemberSkills = async (memberCode: string) => {
+    if (!sessionId) return;
+
+    setLoadingSkills(true);
+    setError('');
+
+    try {
+      const response = await axios.post(`http://localhost:8000/api/career/member-skills`, {
+        session_id: sessionId,
+        member_code: memberCode
+      });
+
+      if (response.data.success) {
+        setCurrentSkills(response.data.current_skills);
+      }
+    } catch (err: any) {
+      setError('スキル情報の読み込みに失敗しました');
+      console.error('Failed to load member skills:', err);
+    } finally {
+      setLoadingSkills(false);
+    }
   };
 
+  // =========================================================
+  // Handle member selection
+  // =========================================================
+  useEffect(() => {
+    if (selectedMember) {
+      loadMemberSkills(selectedMember);
+    }
+  }, [selectedMember]);
+
+  // =========================================================
+  // Perform gap analysis
+  // =========================================================
+  const performGapAnalysis = async () => {
+    if (!sessionId || !modelId || !selectedMember || !targetMember) {
+      setError('必要な情報が入力されていません');
+      return;
+    }
+
+    setLoadingGap(true);
+    setError('');
+    setGapAnalysis(null);
+    setCareerPath(null);
+
+    try {
+      const response = await axios.post(`http://localhost:8000/api/career/gap-analysis`, {
+        session_id: sessionId,
+        model_id: modelId,
+        source_member_code: selectedMember,
+        target_member_code: targetMember,
+        min_total_score: minTotalScore,
+        min_readiness_score: minReadinessScore
+      });
+
+      setGapAnalysis(response.data);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'ギャップ分析に失敗しました');
+    } finally {
+      setLoadingGap(false);
+    }
+  };
+
+  // =========================================================
+  // Generate career path
+  // =========================================================
+  const generateCareerPath = async () => {
+    if (!sessionId || !modelId || !selectedMember || !targetMember) {
+      setError('必要な情報が入力されていません');
+      return;
+    }
+
+    setLoadingPath(true);
+    setError('');
+    setCareerPath(null);
+
+    try {
+      const response = await axios.post(`http://localhost:8000/api/career/career-path`, {
+        session_id: sessionId,
+        model_id: modelId,
+        source_member_code: selectedMember,
+        target_member_code: targetMember,
+        min_total_score: minTotalScore,
+        min_readiness_score: minReadinessScore,
+        min_effect_threshold: minEffectThreshold
+      });
+
+      setCareerPath(response.data);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'キャリアパス生成に失敗しました');
+    } finally {
+      setLoadingPath(false);
+    }
+  };
+
+  // =========================================================
+  // Handle analyze button click
+  // =========================================================
+  const handleAnalyze = async () => {
+    await performGapAnalysis();
+    await generateCareerPath();
+  };
+
+  // =========================================================
+  // Auto-select target member when role is selected
+  // =========================================================
+  useEffect(() => {
+    if (targetSelectionMode === 'role' && selectedRole && availableMembers.length > 0) {
+      // Find members with this role
+      const roleMembers = availableMembers.filter(m => m.role === selectedRole && m.member_code !== selectedMember);
+
+      // Select the one with most skills
+      if (roleMembers.length > 0) {
+        const topMember = roleMembers.reduce((prev, current) =>
+          (current.skill_count || 0) > (prev.skill_count || 0) ? current : prev
+        );
+        setTargetMember(topMember.member_code);
+      }
+    }
+  }, [selectedRole, targetSelectionMode, availableMembers, selectedMember]);
+
+  // =========================================================
+  // Download CSV
+  // =========================================================
+  const downloadCSV = () => {
+    if (!careerPath || !careerPath.recommended_skills) return;
+
+    const headers = ['力量名', 'カテゴリー', '総合スコア', '準備完了度', '確率', '有用性', '前提数', '次へ'];
+    const rows = careerPath.recommended_skills.map(skill => [
+      skill.competence_name,
+      skill.category,
+      skill.total_score.toFixed(3),
+      skill.readiness_score.toFixed(3),
+      skill.bayesian_score.toFixed(3),
+      skill.utility_score.toFixed(3),
+      skill.prerequisites.length,
+      skill.enables.length
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `career_path_${selectedMember}.csv`;
+    link.click();
+  };
+
+  // =========================================================
+  // Render: Data not loaded
+  // =========================================================
+  if (!dataUploaded) {
+    return (
+      <div className="flex-1 px-8 py-12">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 flex items-start gap-3">
+            <AlertCircle size={24} className="text-yellow-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-yellow-800 mb-2">データが読み込まれていません</h3>
+              <p className="text-yellow-700 mb-3">
+                まず「データ管理」ページで6種類のCSVファイルをアップロードし、
+                「モデル学習」ページでモデルを学習してください。
+              </p>
+              <button
+                onClick={() => (window.location.href = '/data-upload')}
+                className="bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700 transition-colors"
+              >
+                データ管理ページへ
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================
+  // Main Render
+  // =========================================================
   return (
     <div className="flex-1 px-8 py-12">
       <div className="max-w-7xl mx-auto">
@@ -88,60 +365,250 @@ export const EmployeeCareerDashboard = () => {
             <h1 className="text-3xl font-bold text-gray-800">従業員キャリアダッシュボード</h1>
           </div>
           <p className="text-gray-600">
-            個人のスキルセットとキャリア開発の推薦を可視化します
+            個人のキャリアパスを可視化し、目標達成に向けた最適な学習計画を提案します
           </p>
         </div>
 
-        {/* Input Form */}
+        {/* Info Box */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+          <div className="flex items-start gap-3">
+            <Info size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-blue-800">
+              <p className="font-semibold mb-2">このダッシュボードでできること</p>
+              <ul className="space-y-1 list-disc list-inside">
+                <li><strong>現状分析</strong>: あなたの保有スキルを可視化</li>
+                <li><strong>目標設定</strong>: ロールモデルまたは職種を選択</li>
+                <li><strong>ギャップ分析</strong>: 目標との差分を自動抽出</li>
+                <li><strong>Causal学習ロードマップ</strong>: 因果関係ベースの効率的な学習順序を提案</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Member Selection */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">ダッシュボード設定</h2>
-          <form onSubmit={handleLoadDashboard} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  メンバーID
-                </label>
-                <input
-                  type="text"
-                  value={memberId}
-                  onChange={(e) => setMemberId(e.target.value)}
-                  placeholder="例: M001"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  モデルID
-                </label>
-                <input
-                  type="text"
-                  value={modelId}
-                  onChange={(e) => setModelId(e.target.value)}
-                  placeholder="例: model_001"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
-                  required
-                />
+          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            <User size={20} className="text-[#00A968]" />
+            メンバー選択
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">モデルID</label>
+              <input
+                type="text"
+                value={modelId}
+                onChange={(e) => setModelId(e.target.value)}
+                placeholder="例: model_001"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">分析対象メンバー（あなた）</label>
+              <select
+                value={selectedMember}
+                onChange={(e) => setSelectedMember(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
+                disabled={loadingMembers}
+              >
+                <option value="">メンバーを選択してください</option>
+                {availableMembers.map((member) => (
+                  <option key={member.member_code} value={member.member_code}>
+                    {member.display_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">現在の保有スキル</label>
+              <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50">
+                {loadingSkills ? (
+                  <span className="text-gray-500">読み込み中...</span>
+                ) : (
+                  <span className="font-bold text-[#00A968]">{currentSkills.length}件</span>
+                )}
               </div>
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#00A968] text-white py-3 rounded-md font-medium hover:bg-[#008F58] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  読み込み中...
-                </>
-              ) : (
-                <>
-                  <Briefcase size={20} />
-                  ダッシュボードを表示
-                </>
-              )}
-            </button>
-          </form>
+          </div>
+        </div>
+
+        {/* Target Selection */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            <Target size={20} className="text-[#00A968]" />
+            キャリア目標の設定
+          </h2>
+
+          {/* Selection Mode */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">目標設定方法</label>
+            <div className="flex gap-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="role_model"
+                  checked={targetSelectionMode === 'role_model'}
+                  onChange={(e) => setTargetSelectionMode(e.target.value as 'role_model' | 'role')}
+                  className="mr-2"
+                />
+                ロールモデルから選ぶ
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="role"
+                  checked={targetSelectionMode === 'role'}
+                  onChange={(e) => setTargetSelectionMode(e.target.value as 'role_model' | 'role')}
+                  className="mr-2"
+                />
+                職種・役職から選ぶ
+              </label>
+            </div>
+          </div>
+
+          {/* Target Member or Role Selection */}
+          {targetSelectionMode === 'role_model' ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">ロールモデル（目標メンバー）</label>
+              <select
+                value={targetMember}
+                onChange={(e) => setTargetMember(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
+                disabled={loadingMembers}
+              >
+                <option value="">目標メンバーを選択してください</option>
+                {availableMembers
+                  .filter((m) => m.member_code !== selectedMember)
+                  .map((member) => (
+                    <option key={member.member_code} value={member.member_code}>
+                      {member.display_name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">目標役職</label>
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
+                >
+                  <option value="">役職を選択してください</option>
+                  {availableRoles.map((role) => (
+                    <option key={role.role_name} value={role.role_name}>
+                      {role.role_name} ({role.member_count}人)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">代表メンバー</label>
+                <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50">
+                  {targetMember ? (
+                    <span className="text-gray-800">
+                      {availableMembers.find((m) => m.member_code === targetMember)?.display_name || targetMember}
+                    </span>
+                  ) : (
+                    <span className="text-gray-500">役職を選択すると自動設定されます</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Filter Settings */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <button
+            onClick={() => setShowFilterSettings(!showFilterSettings)}
+            className="w-full flex items-center justify-between text-left"
+            type="button"
+          >
+            <div className="flex items-center gap-2">
+              <Settings size={20} className="text-[#00A968]" />
+              <h2 className="text-lg font-semibold text-gray-800">フィルタリング設定（オプション）</h2>
+            </div>
+            {showFilterSettings ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </button>
+
+          {showFilterSettings && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    総合スコア最小値 ({minTotalScore.toFixed(2)})
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={minTotalScore}
+                    onChange={(e) => setMinTotalScore(parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">推薦スキルの最小スコア</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    準備完了度最小値 ({minReadinessScore.toFixed(2)})
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={minReadinessScore}
+                    onChange={(e) => setMinReadinessScore(parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">準備ができているスキルを優先</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    依存関係閾値 ({minEffectThreshold.toFixed(2)})
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="0.5"
+                    step="0.01"
+                    value={minEffectThreshold}
+                    onChange={(e) => setMinEffectThreshold(parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">スキル間の依存関係判定閾値</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Analyze Button */}
+        <div className="mb-6">
+          <button
+            onClick={handleAnalyze}
+            disabled={!selectedMember || !targetMember || !modelId || loadingGap || loadingPath}
+            className="w-full bg-[#00A968] text-white py-4 rounded-md font-medium hover:bg-[#008F58] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
+          >
+            {loadingGap || loadingPath ? (
+              <>
+                <Loader2 size={24} className="animate-spin" />
+                分析中...
+              </>
+            ) : (
+              <>
+                <BarChart3 size={24} />
+                キャリアパスを分析
+              </>
+            )}
+          </button>
         </div>
 
         {/* Error Message */}
@@ -155,107 +622,262 @@ export const EmployeeCareerDashboard = () => {
           </div>
         )}
 
-        {/* Dashboard Content */}
-        {dashboardData && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Current Skills */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Award size={24} className="text-[#00A968]" />
-                <h2 className="text-lg font-semibold text-gray-800">現在のスキル</h2>
+        {/* Gap Analysis Results */}
+        {gapAnalysis && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <Target size={20} className="text-[#00A968]" />
+              ギャップ分析結果
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+              <div className="bg-blue-50 rounded-lg p-4">
+                <p className="text-sm text-gray-600 mb-1">現在の保有スキル</p>
+                <p className="text-2xl font-bold text-blue-600">{gapAnalysis.source_skill_count}</p>
               </div>
-              <div className="space-y-4">
-                {dashboardData.current_skills.map((skill, index) => (
-                  <div key={index} className="border-b border-gray-100 pb-3 last:border-0">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <h3 className="font-medium text-gray-800">{skill.skill_name}</h3>
-                        <p className="text-xs text-gray-500">{skill.category}</p>
-                      </div>
-                      <span
-                        className={`px-3 py-1 rounded-full text-white text-sm font-medium ${getLevelColor(
-                          skill.level
-                        )}`}
-                      >
-                        {getLevelText(skill.level)}
-                      </span>
-                    </div>
-                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${getLevelColor(skill.level)}`}
-                        style={{ width: `${(skill.level / 5) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+              <div className="bg-green-50 rounded-lg p-4">
+                <p className="text-sm text-gray-600 mb-1">目標スキル数</p>
+                <p className="text-2xl font-bold text-green-600">{gapAnalysis.target_skill_count}</p>
+              </div>
+              <div className="bg-orange-50 rounded-lg p-4">
+                <p className="text-sm text-gray-600 mb-1">不足スキル</p>
+                <p className="text-2xl font-bold text-orange-600">{gapAnalysis.gap_count}</p>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-4">
+                <p className="text-sm text-gray-600 mb-1">達成率</p>
+                <p className="text-2xl font-bold text-purple-600">{gapAnalysis.completion_rate.toFixed(1)}%</p>
               </div>
             </div>
 
-            {/* Career Recommendations */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Target size={24} className="text-[#00A968]" />
-                <h2 className="text-lg font-semibold text-gray-800">キャリア開発推薦</h2>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                {gapAnalysis.source_member.member_name} → {gapAnalysis.target_member.member_name} (
+                {gapAnalysis.target_member.role})
+              </p>
+              <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#00A968]"
+                  style={{ width: `${gapAnalysis.completion_rate}%` }}
+                />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Career Path Results */}
+        {careerPath && careerPath.recommended_skills && careerPath.recommended_skills.length > 0 && (
+          <>
+            {/* Summary Metrics */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <Briefcase size={20} className="text-[#00A968]" />
+                Causal学習ロードマップ
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4 text-center">
+                  <Award size={32} className="text-blue-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600 mb-1">推薦スキル数</p>
+                  <p className="text-2xl font-bold text-blue-600">{careerPath.skill_count}</p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4 text-center">
+                  <TrendingUp size={32} className="text-green-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600 mb-1">平均スコア</p>
+                  <p className="text-2xl font-bold text-green-600">{careerPath.avg_score.toFixed(2)}</p>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4 text-center">
+                  <Network size={32} className="text-purple-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600 mb-1">依存関係</p>
+                  <p className="text-2xl font-bold text-purple-600">{careerPath.total_dependencies}</p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-4 text-center">
+                  <Briefcase size={32} className="text-orange-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600 mb-1">推定期間</p>
+                  <p className="text-2xl font-bold text-orange-600">{careerPath.estimated_months}ヶ月</p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={downloadCSV}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#00A968] text-white rounded-md hover:bg-[#008F58] transition-colors"
+                >
+                  <Download size={18} />
+                  CSVダウンロード
+                </button>
+              </div>
+            </div>
+
+            {/* Recommended Skills List */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">推薦スキル詳細（Causalスコア順）</h3>
+
               <div className="space-y-3">
-                {dashboardData.recommendations.map((rec, index) => (
-                  <div
-                    key={index}
-                    className="border border-gray-200 rounded-lg p-4 hover:border-[#00A968] transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <TrendingUp size={18} className="text-[#00A968]" />
-                        <h3 className="font-semibold text-gray-800">
-                          {index + 1}. {rec.skill_name}
-                        </h3>
-                      </div>
-                      <div className="bg-[#00A968] text-white px-2 py-1 rounded-full text-xs font-medium">
-                        {(rec.score * 100).toFixed(0)}%
+                {careerPath.recommended_skills.map((skill, index) => (
+                  <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
+                    {/* Skill Header */}
+                    <div className="p-4 bg-gradient-to-r from-white to-gray-50">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xl font-bold text-gray-400">#{index + 1}</span>
+                            <h4 className="font-bold text-gray-800 text-lg">{skill.competence_name}</h4>
+                            <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded">
+                              {skill.category}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 text-sm">
+                            <div>
+                              <span className="text-gray-600">総合: </span>
+                              <span className="font-bold text-[#00A968]">
+                                {(skill.total_score * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">準備度: </span>
+                              <span className="font-bold text-blue-600">
+                                {(skill.readiness_score * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">確率: </span>
+                              <span className="font-bold text-purple-600">
+                                {(skill.bayesian_score * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">将来性: </span>
+                              <span className="font-bold text-green-600">
+                                {(skill.utility_score * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="text-sm">
+                            <span className="text-gray-600">前提:</span>{' '}
+                            <span className="font-bold">{skill.prerequisites.length}</span> |{' '}
+                            <span className="text-gray-600">次へ:</span>{' '}
+                            <span className="font-bold">{skill.enables.length}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-600 ml-6">{rec.reason}</p>
+
+                    {/* Expandable Details */}
+                    <button
+                      onClick={() => setExpandedSkillIndex(expandedSkillIndex === index ? null : index)}
+                      className="w-full px-4 py-2 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between text-sm font-medium text-gray-700"
+                    >
+                      <span>詳細な推薦理由を表示</span>
+                      {expandedSkillIndex === index ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </button>
+
+                    {expandedSkillIndex === index && (
+                      <div className="p-4 bg-gray-50 border-t border-gray-200">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Readiness Reasons */}
+                          <div className="bg-blue-50 rounded-lg p-3">
+                            <h5 className="font-semibold text-blue-800 mb-2 text-sm">準備度の根拠</h5>
+                            {skill.readiness_reasons && skill.readiness_reasons.length > 0 ? (
+                              <ul className="text-xs text-blue-700 space-y-1">
+                                {skill.readiness_reasons.map(([name, effect], idx) => (
+                                  <li key={idx}>
+                                    • {name} (因果効果: {effect.toFixed(3)})
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-xs text-blue-700">基礎スキルとして推奨</p>
+                            )}
+                          </div>
+
+                          {/* Utility Reasons */}
+                          <div className="bg-green-50 rounded-lg p-3">
+                            <h5 className="font-semibold text-green-800 mb-2 text-sm">将来性の根拠</h5>
+                            {skill.utility_reasons && skill.utility_reasons.length > 0 ? (
+                              <ul className="text-xs text-green-700 space-y-1">
+                                {skill.utility_reasons.map(([name, effect], idx) => (
+                                  <li key={idx}>
+                                    • {name}の習得に役立つ (効果: {effect.toFixed(3)})
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-xs text-green-700">汎用スキル</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Dependencies */}
+                        {(skill.prerequisites.length > 0 || skill.enables.length > 0) && (
+                          <div className="mt-3 p-3 bg-purple-50 rounded-lg">
+                            <h5 className="font-semibold text-purple-800 mb-2 text-sm">スキル依存関係</h5>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {skill.prerequisites.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-purple-700 mb-1">
+                                    前提スキル ({skill.prerequisites.length}個):
+                                  </p>
+                                  <ul className="text-xs text-purple-600 space-y-0.5">
+                                    {skill.prerequisites.map((prereq, idx) => (
+                                      <li key={idx}>← {prereq.skill_name}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {skill.enables.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-purple-700 mb-1">
+                                    このスキルが役立つ ({skill.enables.length}個):
+                                  </p>
+                                  <ul className="text-xs text-purple-600 space-y-0.5">
+                                    {skill.enables.map((enable, idx) => (
+                                      <li key={idx}>→ {enable.skill_name}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Career Path */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 lg:col-span-2">
-              <div className="flex items-center gap-2 mb-4">
-                <Briefcase size={24} className="text-[#00A968]" />
-                <h2 className="text-lg font-semibold text-gray-800">キャリアパス提案</h2>
-              </div>
-              <div className="flex items-center justify-between py-4">
-                <div className="flex-1 text-center">
-                  <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <Award size={32} className="text-blue-600" />
-                  </div>
-                  <p className="font-medium text-gray-800">現在</p>
-                  <p className="text-xs text-gray-500">中級エンジニア</p>
+            {/* Action Plan */}
+            <div className="bg-gradient-to-r from-[#00A968] to-[#008F58] rounded-lg p-6 mt-6 text-white">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <TrendingUp size={24} />
+                次のアクションステップ
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white/10 rounded-lg p-4">
+                  <h4 className="font-semibold mb-2">🔹 今週のアクション</h4>
+                  <p className="text-sm">上位3つのスキルを確認し、学習リソースを探す</p>
                 </div>
-                <div className="flex-shrink-0 px-4">
-                  <div className="h-1 w-16 bg-[#00A968]"></div>
+                <div className="bg-white/10 rounded-lg p-4">
+                  <h4 className="font-semibold mb-2">🔹 今月の目標</h4>
+                  <p className="text-sm">前提スキルが少ないスキルを最低1つ習得</p>
                 </div>
-                <div className="flex-1 text-center">
-                  <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <Target size={32} className="text-green-600" />
-                  </div>
-                  <p className="font-medium text-gray-800">次のステップ</p>
-                  <p className="text-xs text-gray-500">シニアエンジニア</p>
-                </div>
-                <div className="flex-shrink-0 px-4">
-                  <div className="h-1 w-16 bg-gray-300"></div>
-                </div>
-                <div className="flex-1 text-center">
-                  <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <TrendingUp size={32} className="text-purple-600" />
-                  </div>
-                  <p className="font-medium text-gray-800">将来の目標</p>
-                  <p className="text-xs text-gray-500">テックリード</p>
+                <div className="bg-white/10 rounded-lg p-4">
+                  <h4 className="font-semibold mb-2">🔹 3ヶ月後の目標</h4>
+                  <p className="text-sm">推薦スキルの30%以上を習得完了</p>
                 </div>
               </div>
             </div>
+          </>
+        )}
+
+        {/* No Results Message */}
+        {careerPath && careerPath.recommended_skills && careerPath.recommended_skills.length === 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+            <p className="text-yellow-800">
+              推薦スキルが見つかりませんでした。フィルタリング設定を調整してみてください。
+            </p>
           </div>
         )}
       </div>
