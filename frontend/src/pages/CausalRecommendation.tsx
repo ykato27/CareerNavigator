@@ -11,11 +11,16 @@ interface Member {
 interface Recommendation {
   skill_name: string;
   skill_code?: string;
+  competence_name?: string;
   score: number;
-  readiness_score: number;
-  bayesian_score: number;
-  utility_score: number;
   explanation: string;
+  details?: {
+    readiness_score_normalized?: number;
+    bayesian_score_normalized?: number;
+    utility_score_normalized?: number;
+    readiness_reasons?: [string, number][];
+    utility_reasons?: [string, number][];
+  };
 }
 
 interface RecommendationResponse {
@@ -652,7 +657,7 @@ export const CausalRecommendation = () => {
                             <div className="flex items-center gap-2 mb-2">
                               <span className="text-2xl font-bold text-gray-400">#{index + 1}</span>
                               <h3 className="font-bold text-gray-800 text-xl">
-                                {rec.skill_name}
+                                {rec.competence_name || rec.skill_name}
                               </h3>
                             </div>
                             {rec.explanation && (
@@ -664,7 +669,7 @@ export const CausalRecommendation = () => {
                               {(rec.score * 100).toFixed(1)}%
                             </div>
                             <button
-                              onClick={() => loadEgoGraph(rec.skill_name, rec.skill_code)}
+                              onClick={() => loadEgoGraph(rec.competence_name || rec.skill_name, rec.skill_code)}
                               disabled={loadingGraph}
                               className="text-sm text-[#00A968] hover:text-[#008F58] font-medium flex items-center gap-1 disabled:opacity-50"
                             >
@@ -680,13 +685,13 @@ export const CausalRecommendation = () => {
                             <div className="flex justify-between items-center mb-2">
                               <p className="text-xs font-medium text-gray-600">Readiness（準備度）</p>
                               <p className="text-sm font-bold text-blue-600">
-                                {(rec.readiness_score * 100).toFixed(0)}%
+                                {((rec.details?.readiness_score_normalized || 0) * 100).toFixed(0)}%
                               </p>
                             </div>
                             <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-blue-500 transition-all"
-                                style={{ width: `${rec.readiness_score * 100}%` }}
+                                style={{ width: `${(rec.details?.readiness_score_normalized || 0) * 100}%` }}
                               />
                             </div>
                             <p className="text-xs text-gray-500 mt-1">保有スキルからの習得しやすさ</p>
@@ -695,13 +700,13 @@ export const CausalRecommendation = () => {
                             <div className="flex justify-between items-center mb-2">
                               <p className="text-xs font-medium text-gray-600">Bayesian（確率）</p>
                               <p className="text-sm font-bold text-purple-600">
-                                {(rec.bayesian_score * 100).toFixed(0)}%
+                                {((rec.details?.bayesian_score_normalized || 0) * 100).toFixed(0)}%
                               </p>
                             </div>
                             <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-purple-500 transition-all"
-                                style={{ width: `${rec.bayesian_score * 100}%` }}
+                                style={{ width: `${(rec.details?.bayesian_score_normalized || 0) * 100}%` }}
                               />
                             </div>
                             <p className="text-xs text-gray-500 mt-1">同様パターンでの習得確率</p>
@@ -710,13 +715,13 @@ export const CausalRecommendation = () => {
                             <div className="flex justify-between items-center mb-2">
                               <p className="text-xs font-medium text-gray-600">Utility（将来性）</p>
                               <p className="text-sm font-bold text-green-600">
-                                {(rec.utility_score * 100).toFixed(0)}%
+                                {((rec.details?.utility_score_normalized || 0) * 100).toFixed(0)}%
                               </p>
                             </div>
                             <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-green-500 transition-all"
-                                style={{ width: `${rec.utility_score * 100}%` }}
+                                style={{ width: `${(rec.details?.utility_score_normalized || 0) * 100}%` }}
                               />
                             </div>
                             <p className="text-xs text-gray-500 mt-1">習得後の将来的な価値</p>
@@ -738,24 +743,41 @@ export const CausalRecommendation = () => {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="bg-blue-50 rounded-lg p-4">
                               <h4 className="font-semibold text-blue-800 mb-2 text-sm">準備度の根拠</h4>
-                              <p className="text-xs text-blue-700">
-                                あなたが既に保有しているスキルから、このスキルへの因果的なつながりが強く、
-                                習得に必要な基礎が整っています。
-                              </p>
+                              {rec.details?.readiness_reasons && rec.details.readiness_reasons.length > 0 ? (
+                                <ul className="text-xs text-blue-700 space-y-1">
+                                  {rec.details.readiness_reasons.slice(0, 5).map(([skill, effect], idx) => (
+                                    <li key={idx}>• {skill} (因果効果: {effect.toFixed(3)})</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-xs text-blue-700">
+                                  あなたが既に保有しているスキルから、このスキルへの因果的なつながりが強く、
+                                  習得に必要な基礎が整っています。
+                                </p>
+                              )}
                             </div>
                             <div className="bg-purple-50 rounded-lg p-4">
                               <h4 className="font-semibold text-purple-800 mb-2 text-sm">確率の根拠</h4>
                               <p className="text-xs text-purple-700">
                                 同様のスキルセットを持つメンバーがこのスキルを高確率で習得しているため、
                                 あなたも習得できる可能性が高いです。
+                                ({((rec.details?.bayesian_score_normalized || 0) * 100).toFixed(1)}%の確率)
                               </p>
                             </div>
                             <div className="bg-green-50 rounded-lg p-4">
                               <h4 className="font-semibold text-green-800 mb-2 text-sm">将来性の根拠</h4>
-                              <p className="text-xs text-green-700">
-                                このスキルを習得すると、さらに多くの高度なスキルへの道が開かれ、
-                                キャリアの選択肢が大きく広がります。
-                              </p>
+                              {rec.details?.utility_reasons && rec.details.utility_reasons.length > 0 ? (
+                                <ul className="text-xs text-green-700 space-y-1">
+                                  {rec.details.utility_reasons.slice(0, 5).map(([skill, effect], idx) => (
+                                    <li key={idx}>• {skill} (因果効果: {effect.toFixed(3)})</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-xs text-green-700">
+                                  このスキルを習得すると、さらに多くの高度なスキルへの道が開かれ、
+                                  キャリアの選択肢が大きく広がります。
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>
