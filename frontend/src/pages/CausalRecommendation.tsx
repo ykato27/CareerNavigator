@@ -666,62 +666,62 @@ export const CausalRecommendation = () => {
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Causal Graph */}
-                      {loadingGraph && (
-                        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-12">
-                          <div className="flex items-center justify-center">
-                            <Loader2 size={32} className="animate-spin text-[#00A968]" />
-                            <span className="ml-3 text-gray-600">グラフを生成中...</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {graphHtml && !loadingGraph && (
-                        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                            <Network size={20} className="text-[#00A968]" />
-                            因果グラフ - {rec.competence_name || rec.skill_name}
-                          </h2>
-
-                          <div className="mb-4 p-4 bg-blue-50 rounded-lg space-y-3">
-                            <div>
-                              <p className="text-sm text-blue-800 mb-2">
-                                <strong>グラフの見方:</strong>
-                                ノード（丸）がスキルを表し、エッジ（矢印）が因果関係を表します。
-                                矢印の太さは因果効果の強さを示します。
-                              </p>
+                        {/* Causal Graph */}
+                        {loadingGraph && (
+                          <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+                            <div className="flex items-center justify-center">
+                              <Loader2 size={32} className="animate-spin text-[#00A968]" />
+                              <span className="ml-3 text-gray-600">グラフを生成中...</span>
                             </div>
-                            <div>
-                              <p className="text-sm font-semibold text-blue-800 mb-2">凡例:</p>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#90EE90' }}></div>
-                                  <span className="text-blue-700">緑色 = あなたが取得済みのスキル</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#97C2FC' }}></div>
-                                  <span className="text-blue-700">青色 = 中心スキル（選択したスキル）</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#DDDDDD' }}></div>
-                                  <span className="text-blue-700">グレー = その他のスキル</span>
+                          </div>
+                        )}
+
+                        {graphHtml && !loadingGraph && (
+                          <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                              <Network size={20} className="text-[#00A968]" />
+                              因果グラフ - {rec.competence_name || rec.skill_name}
+                            </h2>
+
+                            <div className="mb-4 p-4 bg-blue-50 rounded-lg space-y-3">
+                              <div>
+                                <p className="text-sm text-blue-800 mb-2">
+                                  <strong>グラフの見方:</strong>
+                                  ノード（丸）がスキルを表し、エッジ（矢印）が因果関係を表します。
+                                  矢印の太さは因果効果の強さを示します。
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-blue-800 mb-2">凡例:</p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#90EE90' }}></div>
+                                    <span className="text-blue-700">緑色 = あなたが取得済みのスキル</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#97C2FC' }}></div>
+                                    <span className="text-blue-700">青色 = 中心スキル（選択したスキル）</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#DDDDDD' }}></div>
+                                    <span className="text-blue-700">グレー = その他のスキル</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '600px' }}>
-                            <iframe
-                              srcDoc={graphHtml}
-                              className="w-full h-full"
-                              title="Causal Graph Visualization"
-                              sandbox="allow-scripts allow-same-origin"
-                            />
+                            <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '600px' }}>
+                              <iframe
+                                srcDoc={graphHtml}
+                                className="w-full h-full"
+                                title="Causal Graph Visualization"
+                                sandbox="allow-scripts allow-same-origin"
+                              />
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     );
                   })()}
                 </div>
