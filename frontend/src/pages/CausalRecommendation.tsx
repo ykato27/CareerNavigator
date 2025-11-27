@@ -60,6 +60,7 @@ export const CausalRecommendation = () => {
   const [loadingGraph, setLoadingGraph] = useState(false);
   const [showGraph, setShowGraph] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [memberSkills, setMemberSkills] = useState<string[]>([]);
 
   // Weight optimization state
   const [showWeightOptimization, setShowWeightOptimization] = useState(false);
@@ -106,6 +107,24 @@ export const CausalRecommendation = () => {
       console.error('Failed to load members:', err);
     } finally {
       setLoadingMembers(false);
+    }
+  };
+
+  const loadMemberSkills = async (memberCode: string) => {
+    if (!sessionId) return;
+
+    try {
+      const response = await axios.post('http://localhost:8000/api/career/member-skills', {
+        session_id: sessionId,
+        member_code: memberCode
+      });
+
+      // Extract skill names from the response
+      const skillNames = response.data.current_skills.map((skill: any) => skill.skill_name);
+      setMemberSkills(skillNames);
+    } catch (err: any) {
+      console.error('Failed to load member skills:', err);
+      setMemberSkills([]);
     }
   };
 
@@ -192,6 +211,10 @@ export const CausalRecommendation = () => {
     setGraphHtml(null);
 
     try {
+      // Load member skills first
+      await loadMemberSkills(selectedMember);
+
+      // Then get recommendations
       const response = await axios.post<RecommendationResponse>(
         'http://localhost:8000/api/recommend',
         {
@@ -222,7 +245,7 @@ export const CausalRecommendation = () => {
         radius: graphRadius,
         threshold: graphThreshold,
         show_negative: false,
-        member_skills: []
+        member_skills: memberSkills  // Pass the member's acquired skills
       });
 
       setGraphHtml(response.data.html);
@@ -806,12 +829,31 @@ export const CausalRecommendation = () => {
                   </button>
                 </div>
 
-                <div className="mb-4 p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    <strong>グラフの見方:</strong>
-                    ノード（丸）がスキルを表し、エッジ（矢印）が因果関係を表します。
-                    矢印の太さは因果効果の強さを示します。
-                  </p>
+                <div className="mb-4 p-4 bg-blue-50 rounded-lg space-y-3">
+                  <div>
+                    <p className="text-sm text-blue-800 mb-2">
+                      <strong>グラフの見方:</strong>
+                      ノード（丸）がスキルを表し、エッジ（矢印）が因果関係を表します。
+                      矢印の太さは因果効果の強さを示します。
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800 mb-2">凡例:</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#90EE90' }}></div>
+                        <span className="text-blue-700">緑色 = あなたが取得済みのスキル</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#97C2FC' }}></div>
+                        <span className="text-blue-700">青色 = 中心スキル（選択したスキル）</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#DDDDDD' }}></div>
+                        <span className="text-blue-700">グレー = その他のスキル</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '600px' }}>
