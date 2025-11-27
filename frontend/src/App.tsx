@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutGrid, Upload, Brain, Shield, TrendingUp, Database, Settings, HelpCircle, User, FolderOpen, ChevronLeft, Zap, Network } from 'lucide-react';
+import { LayoutGrid, Upload, Brain, Shield, TrendingUp, Database, Settings, HelpCircle, User, FolderOpen, Zap, Network } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { DataUpload } from './pages/DataUpload';
 import { CausalAnalysis } from './pages/CausalAnalysis';
@@ -68,10 +68,6 @@ function App() {
               <FolderOpen size={18} className="text-gray-500" />
               <span>力量管理</span>
             </div>
-            <button className="flex items-center gap-1 text-sm text-[#00A968] hover:text-[#008F58]">
-              <ChevronLeft size={18} />
-              <span>開く</span>
-            </button>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-700">システム管理者</span>
