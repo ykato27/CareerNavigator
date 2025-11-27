@@ -62,6 +62,15 @@ export const CausalRecommendation = () => {
   const [nTrials, setNTrials] = useState(50);
   const [optimizedWeights, setOptimizedWeights] = useState<any>(null);
 
+  // Manual weight adjustment state
+  const [showManualWeights, setShowManualWeights] = useState(false);
+  const [readinessWeight, setReadinessWeight] = useState(0.6);
+  const [bayesianWeight, setBayesianWeight] = useState(0.3);
+  const [utilityWeight, setUtilityWeight] = useState(0.1);
+  const [currentWeights, setCurrentWeights] = useState<any>(null);
+  const [loadingWeights, setLoadingWeights] = useState(false);
+  const [updatingWeights, setUpdatingWeights] = useState(false);
+
   // Graph parameters
   const [graphRadius, setGraphRadius] = useState(1);
   const [graphThreshold, setGraphThreshold] = useState(0.05);
@@ -114,11 +123,58 @@ export const CausalRecommendation = () => {
         }
       );
       setOptimizedWeights(response.data.optimized_weights);
+      setCurrentWeights(response.data.optimized_weights);
       alert('重みの最適化が完了しました！最適化された重みが自動的に適用されます。');
     } catch (err: any) {
       setError(err.response?.data?.detail || '重みの最適化に失敗しました');
     } finally {
       setOptimizing(false);
+    }
+  };
+
+  const loadCurrentWeights = async () => {
+    if (!modelId) return;
+
+    setLoadingWeights(true);
+    try {
+      const response = await axios.get(`http://localhost:8000/api/weights/${modelId}`);
+      const weights = response.data.weights;
+      setCurrentWeights(weights);
+      setReadinessWeight(weights.readiness);
+      setBayesianWeight(weights.bayesian);
+      setUtilityWeight(weights.utility);
+    } catch (err: any) {
+      console.error('Failed to load weights:', err);
+    } finally {
+      setLoadingWeights(false);
+    }
+  };
+
+  const handleUpdateWeights = async () => {
+    if (!modelId) {
+      setError('モデルIDが設定されていません');
+      return;
+    }
+
+    setUpdatingWeights(true);
+    setError('');
+
+    try {
+      const response = await axios.post('http://localhost:8000/api/weights/update', {
+        model_id: modelId,
+        weights: {
+          readiness: readinessWeight,
+          bayesian: bayesianWeight,
+          utility: utilityWeight
+        }
+      });
+
+      setCurrentWeights(response.data.weights);
+      alert('重みを更新しました！推薦結果に反映されています。');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || '重みの更新に失敗しました');
+    } finally {
+      setUpdatingWeights(false);
     }
   };
 
@@ -324,6 +380,160 @@ export const CausalRecommendation = () => {
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Manual Weight Adjustment Section */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <button
+            onClick={() => {
+              setShowManualWeights(!showManualWeights);
+              if (!showManualWeights && modelId) {
+                loadCurrentWeights();
+              }
+            }}
+            className="w-full flex items-center justify-between text-left"
+            type="button"
+          >
+            <div className="flex items-center gap-2">
+              <Settings size={20} className="text-[#00A968]" />
+              <h2 className="text-lg font-semibold text-gray-800">重み手動調整（オプション）</h2>
+            </div>
+            {showManualWeights ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </button>
+
+          {showManualWeights && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-2">
+                  <Info size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-blue-800">
+                    スライダーで重みを手動調整できます。推薦スコアは「総合スコア = Readiness × w₁ + Bayesian × w₂ + Utility × w₃」で計算されます。
+                  </p>
+                </div>
+              </div>
+
+              {loadingWeights ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 size={24} className="animate-spin text-[#00A968]" />
+                </div>
+              ) : (
+                <>
+                  {/* Current Weights Display */}
+                  {currentWeights && (
+                    <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm font-medium text-gray-700 mb-2">現在の重み:</p>
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-600">Readiness: </span>
+                          <span className="font-bold text-blue-600">{(currentWeights.readiness * 100).toFixed(1)}%</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Bayesian: </span>
+                          <span className="font-bold text-purple-600">{(currentWeights.bayesian * 100).toFixed(1)}%</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Utility: </span>
+                          <span className="font-bold text-green-600">{(currentWeights.utility * 100).toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Weight Sliders */}
+                  <div className="space-y-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Readiness（準備度）: {(readinessWeight * 100).toFixed(0)}%
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={readinessWeight}
+                        onChange={(e) => setReadinessWeight(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">保有スキルから推奨スキルへの因果効果の重み</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Bayesian（確率）: {(bayesianWeight * 100).toFixed(0)}%
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={bayesianWeight}
+                        onChange={(e) => setBayesianWeight(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">同様のスキルパターンを持つ人の習得確率の重み</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Utility（将来性）: {(utilityWeight * 100).toFixed(0)}%
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={utilityWeight}
+                        onChange={(e) => setUtilityWeight(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">推奨スキルから将来のスキルへの因果効果の重み</p>
+                    </div>
+                  </div>
+
+                  {/* Weight Sum Warning */}
+                  {(() => {
+                    const total = readinessWeight + bayesianWeight + utilityWeight;
+                    if (Math.abs(total - 1.0) > 0.01) {
+                      return (
+                        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <p className="text-sm text-yellow-800">
+                            ⚠️ 重みの合計: {total.toFixed(2)} （適用時に自動的に正規化されます）
+                          </p>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <p className="text-sm text-green-800">
+                            ✅ 重みの合計: {total.toFixed(2)}
+                          </p>
+                        </div>
+                      );
+                    }
+                  })()}
+
+                  {/* Update Button */}
+                  <button
+                    onClick={handleUpdateWeights}
+                    disabled={updatingWeights || !modelId}
+                    className="w-full bg-[#00A968] text-white py-3 rounded-md font-medium hover:bg-[#008F58] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {updatingWeights ? (
+                      <>
+                        <Loader2 size={20} className="animate-spin" />
+                        更新中...
+                      </>
+                    ) : (
+                      <>
+                        <Settings size={20} />
+                        この重みを適用
+                      </>
+                    )}
+                  </button>
+                </>
               )}
             </div>
           )}
