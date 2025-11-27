@@ -34,6 +34,11 @@ export const ModelTraining = () => {
   const [summary, setSummary] = useState<TrainingSummary | null>(null);
   const [error, setError] = useState('');
 
+  // Weight optimization state
+  const [optimizing, setOptimizing] = useState(false);
+  const [nTrials, setNTrials] = useState(50);
+  const [optimizedWeights, setOptimizedWeights] = useState<any>(null);
+
   useEffect(() => {
     const sid = sessionStorage.getItem('career_session_id');
     const uploaded = sessionStorage.getItem('career_data_uploaded');
@@ -47,6 +52,48 @@ export const ModelTraining = () => {
       setTrained(true);
     }
   }, []);
+
+  const handleOptimizeWeights = async () => {
+    if (!modelId) {
+      setError('モデルが学習されていません');
+      return;
+    }
+
+    setOptimizing(true);
+    setError('');
+
+    try {
+      const response = await axios.post('http://localhost:8000/api/weights/optimize', {
+        model_id: modelId,
+        n_trials: nTrials,
+        n_jobs: -1,
+        holdout_ratio: 0.2,
+        top_k: 10
+      });
+
+      setOptimizedWeights(response.data.optimized_weights);
+
+      // Re-train with optimized weights
+      setTraining(true);
+      const trainResponse = await axios.post('http://localhost:8000/api/train', {
+        session_id: sessionId!,
+        min_members_per_skill: minMembers,
+        correlation_threshold: corrThreshold,
+        weights: response.data.optimized_weights
+      });
+
+      setModelId(trainResponse.data.model_id);
+      setSummary(trainResponse.data.summary);
+      sessionStorage.setItem('career_model_id', trainResponse.data.model_id);
+
+      alert('重みを最適化してモデルを再学習しました！');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || '重みの最適化に失敗しました');
+    } finally {
+      setOptimizing(false);
+      setTraining(false);
+    }
+  };
 
   const handleTrain = async () => {
     if (!sessionId) {
@@ -340,8 +387,27 @@ export const ModelTraining = () => {
               </div>
             </div>
 
-            <div className="mt-4 text-sm text-green-700">
-              💡 サイドバーから「因果推論」または「キャリア」ページで推薦機能を利用できます
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-green-700">
+                💡 サイドバーから「因果推論」または「キャリア」ページで推薦機能を利用できます
+              </p>
+              <button
+                onClick={handleOptimizeWeights}
+                disabled={optimizing}
+                className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {optimizing ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    最適化中...
+                  </>
+                ) : (
+                  <>
+                    <Zap size={16} />
+                    重みを最適化
+                  </>
+                )}
+              </button>
             </div>
           </div>
         )}

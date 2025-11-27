@@ -29,16 +29,6 @@ interface RecommendationResponse {
   message?: string;
 }
 
-interface OptimizationResult {
-  success: boolean;
-  optimized_weights: {
-    readiness: number;
-    bayesian: number;
-    utility: number;
-  };
-  message: string;
-}
-
 export const CausalRecommendation = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [dataUploaded, setDataUploaded] = useState(false);
@@ -55,18 +45,10 @@ export const CausalRecommendation = () => {
   const [results, setResults] = useState<RecommendationResponse | null>(null);
 
   // Graph visualization state
-  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  const [selectedRecommendationIndex, setSelectedRecommendationIndex] = useState<number>(-1);
   const [graphHtml, setGraphHtml] = useState<string | null>(null);
   const [loadingGraph, setLoadingGraph] = useState(false);
-  const [showGraph, setShowGraph] = useState(false);
-  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [memberSkills, setMemberSkills] = useState<string[]>([]);
-
-  // Weight optimization state
-  const [showWeightOptimization, setShowWeightOptimization] = useState(false);
-  const [optimizing, setOptimizing] = useState(false);
-  const [nTrials, setNTrials] = useState(50);
-  const [optimizedWeights, setOptimizedWeights] = useState<any>(null);
 
   // Manual weight adjustment state
   const [showManualWeights, setShowManualWeights] = useState(false);
@@ -128,34 +110,6 @@ export const CausalRecommendation = () => {
     }
   };
 
-  const handleOptimizeWeights = async () => {
-    if (!modelId) {
-      setError('モデルIDが設定されていません');
-      return;
-    }
-    setOptimizing(true);
-    setError('');
-    try {
-      const response = await axios.post<OptimizationResult>(
-        'http://localhost:8000/api/weights/optimize',
-        {
-          model_id: modelId,
-          n_trials: nTrials,
-          n_jobs: -1,
-          holdout_ratio: 0.2,
-          top_k: 10
-        }
-      );
-      setOptimizedWeights(response.data.optimized_weights);
-      setCurrentWeights(response.data.optimized_weights);
-      alert('重みの最適化が完了しました！最適化された重みが自動的に適用されます。');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || '重みの最適化に失敗しました');
-    } finally {
-      setOptimizing(false);
-    }
-  };
-
   const loadCurrentWeights = async () => {
     if (!modelId) return;
 
@@ -207,8 +161,8 @@ export const CausalRecommendation = () => {
     setLoading(true);
     setError('');
     setResults(null);
-    setShowGraph(false);
     setGraphHtml(null);
+    setSelectedRecommendationIndex(-1);
 
     try {
       // Load member skills first
@@ -236,7 +190,6 @@ export const CausalRecommendation = () => {
 
     setLoadingGraph(true);
     setError('');
-    setSelectedSkill(skillName);
 
     try {
       const response = await axios.post('http://localhost:8000/api/graph/ego', {
@@ -249,7 +202,6 @@ export const CausalRecommendation = () => {
       });
 
       setGraphHtml(response.data.html);
-      setShowGraph(true);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'グラフの生成に失敗しました');
     } finally {
@@ -257,8 +209,14 @@ export const CausalRecommendation = () => {
     }
   };
 
-  const toggleExpanded = (index: number) => {
-    setExpandedIndex(expandedIndex === index ? null : index);
+  const handleRecommendationChange = (index: number) => {
+    setSelectedRecommendationIndex(index);
+    if (index >= 0 && results && results.recommendations[index]) {
+      const rec = results.recommendations[index];
+      loadEgoGraph(rec.competence_name || rec.skill_name, rec.skill_code);
+    } else {
+      setGraphHtml(null);
+    }
   };
 
   if (!dataUploaded) {
@@ -314,103 +272,6 @@ export const CausalRecommendation = () => {
               </ul>
             </div>
           </div>
-        </div>
-
-        {/* Weight Optimization Section */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <button
-            onClick={() => setShowWeightOptimization(!showWeightOptimization)}
-            className="w-full flex items-center justify-between text-left"
-            type="button"
-          >
-            <div className="flex items-center gap-2">
-              <Settings size={20} className="text-[#00A968]" />
-              <h2 className="text-lg font-semibold text-gray-800">重み最適化（オプション）</h2>
-            </div>
-            {showWeightOptimization ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-          </button>
-
-          {showWeightOptimization && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <div className="flex items-start gap-2">
-                  <Info size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-blue-800">
-                    ベイズ最適化により、推薦精度を最大化する重み（Readiness・Bayesian・Utility）を自動で探索します。
-                    計算には数分かかる場合があります。
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    試行回数 (n_trials)
-                  </label>
-                  <input
-                    type="number"
-                    value={nTrials}
-                    onChange={(e) => setNTrials(parseInt(e.target.value))}
-                    min="10"
-                    max="200"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">多いほど精度が高いが時間がかかる（推奨: 50-100）</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    モデルID
-                  </label>
-                  <input
-                    type="text"
-                    value={modelId}
-                    onChange={(e) => setModelId(e.target.value)}
-                    placeholder="例: model_001"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">最適化対象のモデルID</p>
-                </div>
-              </div>
-
-              <button
-                onClick={handleOptimizeWeights}
-                disabled={optimizing || !modelId}
-                className="w-full bg-purple-600 text-white py-3 rounded-md font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {optimizing ? (
-                  <>
-                    <Loader2 size={20} className="animate-spin" />
-                    最適化中...
-                  </>
-                ) : (
-                  <>
-                    <Zap size={20} />
-                    重みを最適化
-                  </>
-                )}
-              </button>
-
-              {optimizedWeights && (
-                <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <h3 className="font-semibold text-green-800 mb-2">最適化された重み</h3>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <p className="text-gray-600">Readiness</p>
-                      <p className="font-bold text-green-700">{(optimizedWeights.readiness * 100).toFixed(1)}%</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Bayesian</p>
-                      <p className="font-bold text-green-700">{(optimizedWeights.bayesian * 100).toFixed(1)}%</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Utility</p>
-                      <p className="font-bold text-green-700">{(optimizedWeights.utility * 100).toFixed(1)}%</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Manual Weight Adjustment Section */}
@@ -667,102 +528,103 @@ export const CausalRecommendation = () => {
               )}
 
               {results.recommendations && results.recommendations.length > 0 ? (
-                <div className="space-y-4">
-                  {results.recommendations.map((rec, index) => (
-                    <div
-                      key={index}
-                      className="border border-gray-200 rounded-lg overflow-hidden hover:border-[#00A968] transition-colors"
+                <div>
+                  {/* Skill Selector */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      推薦スキルを選択
+                    </label>
+                    <select
+                      value={selectedRecommendationIndex}
+                      onChange={(e) => handleRecommendationChange(parseInt(e.target.value))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968] text-base"
                     >
-                      {/* Recommendation Header */}
-                      <div className="p-5 bg-gradient-to-r from-white to-gray-50">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-2xl font-bold text-gray-400">#{index + 1}</span>
-                              <h3 className="font-bold text-gray-800 text-xl">
-                                {rec.competence_name || rec.skill_name}
-                              </h3>
+                      <option value={-1}>スキルを選択してください</option>
+                      {results.recommendations.map((rec, index) => (
+                        <option key={index} value={index}>
+                          #{index + 1} - {rec.competence_name || rec.skill_name} ({(rec.score * 100).toFixed(1)}%)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Selected Skill Details */}
+                  {selectedRecommendationIndex >= 0 && results.recommendations[selectedRecommendationIndex] && (() => {
+                    const rec = results.recommendations[selectedRecommendationIndex];
+                    return (
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        {/* Skill Header */}
+                        <div className="p-5 bg-gradient-to-r from-white to-gray-50">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-2xl font-bold text-gray-400">#{selectedRecommendationIndex + 1}</span>
+                                <h3 className="font-bold text-gray-800 text-xl">
+                                  {rec.competence_name || rec.skill_name}
+                                </h3>
+                              </div>
+                              {rec.explanation && (
+                                <p className="text-sm text-gray-600">{rec.explanation}</p>
+                              )}
                             </div>
-                            {rec.explanation && (
-                              <p className="text-sm text-gray-600">{rec.explanation}</p>
-                            )}
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
                             <div className="bg-[#00A968] text-white px-4 py-2 rounded-full text-lg font-bold">
                               {(rec.score * 100).toFixed(1)}%
                             </div>
-                            <button
-                              onClick={() => loadEgoGraph(rec.competence_name || rec.skill_name, rec.skill_code)}
-                              disabled={loadingGraph}
-                              className="text-sm text-[#00A968] hover:text-[#008F58] font-medium flex items-center gap-1 disabled:opacity-50"
-                            >
-                              <Network size={16} />
-                              因果グラフを表示
-                            </button>
+                          </div>
+
+                          {/* 3-Axis Scores */}
+                          <div className="grid grid-cols-3 gap-4">
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <p className="text-xs font-medium text-gray-600">Readiness（準備度）</p>
+                                <p className="text-sm font-bold text-blue-600">
+                                  {((rec.details?.readiness_score_normalized || 0) * 100).toFixed(0)}%
+                                </p>
+                              </div>
+                              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-blue-500 transition-all"
+                                  style={{ width: `${(rec.details?.readiness_score_normalized || 0) * 100}%` }}
+                                />
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">保有スキルからの習得しやすさ</p>
+                            </div>
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <p className="text-xs font-medium text-gray-600">Bayesian（確率）</p>
+                                <p className="text-sm font-bold text-purple-600">
+                                  {((rec.details?.bayesian_score_normalized || 0) * 100).toFixed(0)}%
+                                </p>
+                              </div>
+                              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-purple-500 transition-all"
+                                  style={{ width: `${(rec.details?.bayesian_score_normalized || 0) * 100}%` }}
+                                />
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">同様パターンでの習得確率</p>
+                            </div>
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <p className="text-xs font-medium text-gray-600">Utility（将来性）</p>
+                                <p className="text-sm font-bold text-green-600">
+                                  {((rec.details?.utility_score_normalized || 0) * 100).toFixed(0)}%
+                                </p>
+                              </div>
+                              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-green-500 transition-all"
+                                  style={{ width: `${(rec.details?.utility_score_normalized || 0) * 100}%` }}
+                                />
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">習得後の将来的な価値</p>
+                            </div>
                           </div>
                         </div>
 
-                        {/* 3-Axis Scores */}
-                        <div className="grid grid-cols-3 gap-4">
-                          <div>
-                            <div className="flex justify-between items-center mb-2">
-                              <p className="text-xs font-medium text-gray-600">Readiness（準備度）</p>
-                              <p className="text-sm font-bold text-blue-600">
-                                {((rec.details?.readiness_score_normalized || 0) * 100).toFixed(0)}%
-                              </p>
-                            </div>
-                            <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-blue-500 transition-all"
-                                style={{ width: `${(rec.details?.readiness_score_normalized || 0) * 100}%` }}
-                              />
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">保有スキルからの習得しやすさ</p>
-                          </div>
-                          <div>
-                            <div className="flex justify-between items-center mb-2">
-                              <p className="text-xs font-medium text-gray-600">Bayesian（確率）</p>
-                              <p className="text-sm font-bold text-purple-600">
-                                {((rec.details?.bayesian_score_normalized || 0) * 100).toFixed(0)}%
-                              </p>
-                            </div>
-                            <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-purple-500 transition-all"
-                                style={{ width: `${(rec.details?.bayesian_score_normalized || 0) * 100}%` }}
-                              />
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">同様パターンでの習得確率</p>
-                          </div>
-                          <div>
-                            <div className="flex justify-between items-center mb-2">
-                              <p className="text-xs font-medium text-gray-600">Utility（将来性）</p>
-                              <p className="text-sm font-bold text-green-600">
-                                {((rec.details?.utility_score_normalized || 0) * 100).toFixed(0)}%
-                              </p>
-                            </div>
-                            <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-green-500 transition-all"
-                                style={{ width: `${(rec.details?.utility_score_normalized || 0) * 100}%` }}
-                              />
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">習得後の将来的な価値</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Expandable Details */}
-                      <button
-                        onClick={() => toggleExpanded(index)}
-                        className="w-full px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between text-sm font-medium text-gray-700"
-                      >
-                        <span>詳細な推薦理由を表示</span>
-                        {expandedIndex === index ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                      </button>
-
-                      {expandedIndex === index && (
+                        {/* Detailed Reasons */}
                         <div className="p-5 bg-gray-50 border-t border-gray-200">
+                          <h3 className="font-semibold text-gray-800 mb-4">詳細な推薦理由</h3>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="bg-blue-50 rounded-lg p-4">
                               <h4 className="font-semibold text-blue-800 mb-2 text-sm">準備度の根拠</h4>
@@ -804,77 +666,69 @@ export const CausalRecommendation = () => {
                             </div>
                           </div>
                         </div>
+                      </div>
+
+                      {/* Causal Graph */}
+                      {loadingGraph && (
+                        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+                          <div className="flex items-center justify-center">
+                            <Loader2 size={32} className="animate-spin text-[#00A968]" />
+                            <span className="ml-3 text-gray-600">グラフを生成中...</span>
+                          </div>
+                        </div>
                       )}
-                    </div>
-                  ))}
+
+                      {graphHtml && !loadingGraph && (
+                        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                            <Network size={20} className="text-[#00A968]" />
+                            因果グラフ - {rec.competence_name || rec.skill_name}
+                          </h2>
+
+                          <div className="mb-4 p-4 bg-blue-50 rounded-lg space-y-3">
+                            <div>
+                              <p className="text-sm text-blue-800 mb-2">
+                                <strong>グラフの見方:</strong>
+                                ノード（丸）がスキルを表し、エッジ（矢印）が因果関係を表します。
+                                矢印の太さは因果効果の強さを示します。
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-blue-800 mb-2">凡例:</p>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#90EE90' }}></div>
+                                  <span className="text-blue-700">緑色 = あなたが取得済みのスキル</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#97C2FC' }}></div>
+                                  <span className="text-blue-700">青色 = 中心スキル（選択したスキル）</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#DDDDDD' }}></div>
+                                  <span className="text-blue-700">グレー = その他のスキル</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '600px' }}>
+                            <iframe
+                              srcDoc={graphHtml}
+                              className="w-full h-full"
+                              title="Causal Graph Visualization"
+                              sandbox="allow-scripts allow-same-origin"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    );
+                  })()}
                 </div>
               ) : (
                 <p className="text-gray-500 text-center py-8">推薦結果がありません</p>
               )}
             </div>
-
-            {/* Graph Visualization */}
-            {showGraph && graphHtml && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                    <Network size={20} className="text-[#00A968]" />
-                    因果グラフ - {selectedSkill}
-                  </h2>
-                  <button
-                    onClick={() => setShowGraph(false)}
-                    className="text-sm text-gray-600 hover:text-gray-800"
-                  >
-                    閉じる
-                  </button>
-                </div>
-
-                <div className="mb-4 p-4 bg-blue-50 rounded-lg space-y-3">
-                  <div>
-                    <p className="text-sm text-blue-800 mb-2">
-                      <strong>グラフの見方:</strong>
-                      ノード（丸）がスキルを表し、エッジ（矢印）が因果関係を表します。
-                      矢印の太さは因果効果の強さを示します。
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-blue-800 mb-2">凡例:</p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#90EE90' }}></div>
-                        <span className="text-blue-700">緑色 = あなたが取得済みのスキル</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#97C2FC' }}></div>
-                        <span className="text-blue-700">青色 = 中心スキル（選択したスキル）</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#DDDDDD' }}></div>
-                        <span className="text-blue-700">グレー = その他のスキル</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '600px' }}>
-                  <iframe
-                    srcDoc={graphHtml}
-                    className="w-full h-full"
-                    title="Causal Graph Visualization"
-                    sandbox="allow-scripts allow-same-origin"
-                  />
-                </div>
-              </div>
-            )}
-
-            {loadingGraph && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 size={32} className="animate-spin text-[#00A968]" />
-                  <span className="ml-3 text-gray-600">グラフを生成中...</span>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
