@@ -7,7 +7,7 @@ from typing import List, Dict, Optional, Any
 import logging
 import pandas as pd
 
-from backend.utils import session_manager, load_csv_files, clean_dataframe_columns
+from backend.utils import session_manager, load_csv_files, load_and_transform_session_data, clean_dataframe_columns
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -143,8 +143,8 @@ async def get_available_members(session_id: str):
         List of members with code, name, role, and skill count
     """
     try:
-        data = load_csv_files(session_id)
-        members_df = clean_dataframe_columns(data['members'])
+        data = load_and_transform_session_data(session_id)
+        members_df = data['members_clean']
         member_competence_df = data['member_competence']
 
         members_list = []
@@ -192,8 +192,8 @@ async def get_available_roles(session_id: str):
         List of roles with member counts
     """
     try:
-        data = load_csv_files(session_id)
-        members_df = clean_dataframe_columns(data['members'])
+        data = load_and_transform_session_data(session_id)
+        members_df = data['members_clean']
 
         if '役職' not in members_df.columns:
             return {
@@ -241,8 +241,8 @@ async def get_member_current_skills(request: MemberSkillsRequest):
         Member info and list of current skills
     """
     try:
-        data = load_csv_files(request.session_id)
-        members_df = clean_dataframe_columns(data['members'])
+        data = load_and_transform_session_data(request.session_id)
+        members_df = data['members_clean']
         member_competence_df = data['member_competence']
         competence_master_df = data['competence_master']
 
@@ -281,8 +281,8 @@ async def analyze_career_gap(request: GapAnalysisRequest):
     """
     try:
         # Load data
-        data = load_csv_files(request.session_id)
-        members_df = clean_dataframe_columns(data['members'])
+        data = load_and_transform_session_data(request.session_id)
+        members_df = data['members_clean']
         member_competence_df = data['member_competence']
         competence_master_df = data['competence_master']
 
@@ -359,7 +359,7 @@ async def generate_career_path(request: CareerPathRequest):
             )
 
         # Load data
-        data = load_csv_files(request.session_id)
+        data = load_and_transform_session_data(request.session_id)
         member_competence_df = data['member_competence']
         competence_master_df = data['competence_master']
 
