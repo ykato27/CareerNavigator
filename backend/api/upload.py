@@ -1,8 +1,15 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from typing import Dict
 import time
+import pandas as pd
 
-from backend.utils import PROJECT_ROOT, get_upload_dir, session_manager
+from backend.utils import (
+    PROJECT_ROOT,
+    get_upload_dir,
+    session_manager,
+    load_csv_files,
+    clean_dataframe_columns
+)
 
 router = APIRouter()
 
@@ -161,3 +168,55 @@ async def cleanup_old_sessions(max_age_hours: int = 24):
         "models_removed": models_removed,
         "max_age_hours": max_age_hours
     }
+
+
+@router.get("/session/{session_id}/members")
+async def get_session_members(session_id: str):
+    """
+    Get list of members from uploaded data.
+
+    Args:
+        session_id: The session identifier
+
+    Returns:
+        dict: List of members with their codes and names
+
+    Raises:
+        HTTPException: If session not found
+    """
+    try:
+        # Load CSV files
+        data = load_csv_files(session_id)
+
+        # Get members data and clean column names
+        members_df = clean_dataframe_columns(data['members'])
+
+        # Extract member information
+        members_list = []
+        for idx, row in members_df.iterrows():
+            member_code = str(row.get('メンバーコード', ''))
+            member_name = str(row.get('メンバー名', ''))
+
+            if member_code and member_name:
+                members_list.append({
+                    "member_code": member_code,
+                    "member_name": member_name,
+                    "display_name": f"{member_code} - {member_name}"
+                })
+
+        # Sort by member code
+        members_list.sort(key=lambda x: x['member_code'])
+
+        return {
+            "success": True,
+            "members": members_list,
+            "total_count": len(members_list)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get members list: {str(e)}"
+        )

@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Brain, TrendingUp, AlertCircle, Loader2, Network, Info, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import { Brain, TrendingUp, AlertCircle, Loader2, Network, Info, ChevronDown, ChevronUp, Zap, Settings } from 'lucide-react';
+
+interface Member {
+  member_code: string;
+  member_name: string;
+  display_name: string;
+}
 
 interface Recommendation {
   skill_name: string;
@@ -18,11 +24,26 @@ interface RecommendationResponse {
   message?: string;
 }
 
+interface OptimizationResult {
+  success: boolean;
+  optimized_weights: {
+    readiness: number;
+    bayesian: number;
+    utility: number;
+  };
+  message: string;
+}
+
 export const CausalRecommendation = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [dataUploaded, setDataUploaded] = useState(false);
   const [modelId, setModelId] = useState('');
-  const [memberId, setMemberId] = useState('');
+
+  // Member selection
+  const [members, setMembers] = useState<Member[]>([]);
+  const [selectedMember, setSelectedMember] = useState('');
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
   const [topN, setTopN] = useState(10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -34,6 +55,12 @@ export const CausalRecommendation = () => {
   const [loadingGraph, setLoadingGraph] = useState(false);
   const [showGraph, setShowGraph] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+
+  // Weight optimization state
+  const [showWeightOptimization, setShowWeightOptimization] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [nTrials, setNTrials] = useState(50);
+  const [optimizedWeights, setOptimizedWeights] = useState<any>(null);
 
   // Graph parameters
   const [graphRadius, setGraphRadius] = useState(1);
@@ -49,7 +76,51 @@ export const CausalRecommendation = () => {
     if (savedModelId) {
       setModelId(savedModelId);
     }
+
+    // Load members list if session exists
+    if (sid && uploaded === 'true') {
+      loadMembers(sid);
+    }
   }, []);
+
+  const loadMembers = async (sid: string) => {
+    setLoadingMembers(true);
+    try {
+      const response = await axios.get(`http://localhost:8000/api/session/${sid}/members`);
+      setMembers(response.data.members);
+    } catch (err: any) {
+      console.error('Failed to load members:', err);
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const handleOptimizeWeights = async () => {
+    if (!modelId) {
+      setError('モデルIDが設定されていません');
+      return;
+    }
+    setOptimizing(true);
+    setError('');
+    try {
+      const response = await axios.post<OptimizationResult>(
+        'http://localhost:8000/api/weights/optimize',
+        {
+          model_id: modelId,
+          n_trials: nTrials,
+          n_jobs: -1,
+          holdout_ratio: 0.2,
+          top_k: 10
+        }
+      );
+      setOptimizedWeights(response.data.optimized_weights);
+      alert('重みの最適化が完了しました！最適化された重みが自動的に適用されます。');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || '重みの最適化に失敗しました');
+    } finally {
+      setOptimizing(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,7 +135,7 @@ export const CausalRecommendation = () => {
         'http://localhost:8000/api/recommend',
         {
           model_id: modelId,
-          member_id: memberId,
+          member_id: selectedMember,
           top_n: topN,
         }
       );
@@ -161,6 +232,103 @@ export const CausalRecommendation = () => {
           </div>
         </div>
 
+        {/* Weight Optimization Section */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <button
+            onClick={() => setShowWeightOptimization(!showWeightOptimization)}
+            className="w-full flex items-center justify-between text-left"
+            type="button"
+          >
+            <div className="flex items-center gap-2">
+              <Settings size={20} className="text-[#00A968]" />
+              <h2 className="text-lg font-semibold text-gray-800">重み最適化（オプション）</h2>
+            </div>
+            {showWeightOptimization ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </button>
+
+          {showWeightOptimization && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-2">
+                  <Info size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-blue-800">
+                    ベイズ最適化により、推薦精度を最大化する重み（Readiness・Bayesian・Utility）を自動で探索します。
+                    計算には数分かかる場合があります。
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    試行回数 (n_trials)
+                  </label>
+                  <input
+                    type="number"
+                    value={nTrials}
+                    onChange={(e) => setNTrials(parseInt(e.target.value))}
+                    min="10"
+                    max="200"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">多いほど精度が高いが時間がかかる（推奨: 50-100）</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    モデルID
+                  </label>
+                  <input
+                    type="text"
+                    value={modelId}
+                    onChange={(e) => setModelId(e.target.value)}
+                    placeholder="例: model_001"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">最適化対象のモデルID</p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleOptimizeWeights}
+                disabled={optimizing || !modelId}
+                className="w-full bg-purple-600 text-white py-3 rounded-md font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {optimizing ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    最適化中...
+                  </>
+                ) : (
+                  <>
+                    <Zap size={20} />
+                    重みを最適化
+                  </>
+                )}
+              </button>
+
+              {optimizedWeights && (
+                <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <h3 className="font-semibold text-green-800 mb-2">最適化された重み</h3>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-600">Readiness</p>
+                      <p className="font-bold text-green-700">{(optimizedWeights.readiness * 100).toFixed(1)}%</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Bayesian</p>
+                      <p className="font-bold text-green-700">{(optimizedWeights.bayesian * 100).toFixed(1)}%</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Utility</p>
+                      <p className="font-bold text-green-700">{(optimizedWeights.utility * 100).toFixed(1)}%</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Input Form */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">推薦パラメータ</h2>
@@ -182,17 +350,25 @@ export const CausalRecommendation = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  メンバーID
+                  対象メンバー
                 </label>
-                <input
-                  type="text"
-                  value={memberId}
-                  onChange={(e) => setMemberId(e.target.value)}
-                  placeholder="例: M001"
+                <select
+                  value={selectedMember}
+                  onChange={(e) => setSelectedMember(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
                   required
-                />
-                <p className="text-xs text-gray-500 mt-1">推薦対象のメンバーコード</p>
+                  disabled={loadingMembers}
+                >
+                  <option value="">メンバーを選択してください</option>
+                  {members.map((member) => (
+                    <option key={member.member_code} value={member.member_code}>
+                      {member.display_name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {loadingMembers ? '読み込み中...' : 'アップロードしたCSVから選択'}
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
