@@ -115,6 +115,14 @@ export const EmployeeCareerDashboard = () => {
   const [error, setError] = useState('');
   const [expandedSkillIndex, setExpandedSkillIndex] = useState<number | null>(null);
 
+  // Graph visualization state
+  const [graphHtml, setGraphHtml] = useState<string | null>(null);
+  const [loadingGraph, setLoadingGraph] = useState(false);
+  const [graphRadius, setGraphRadius] = useState(1);
+  const [graphThreshold, setGraphThreshold] = useState(0.05);
+  const [showGraphSettings, setShowGraphSettings] = useState(false);
+  const [memberSkills, setMemberSkills] = useState<string[]>([]);
+
   // =========================================================
   // Initialize session from sessionStorage
   // =========================================================
@@ -196,11 +204,59 @@ export const EmployeeCareerDashboard = () => {
   };
 
   // =========================================================
+  // Load member skills for graph highlighting
+  // =========================================================
+  const loadMemberSkillsForGraph = async (memberCode: string) => {
+    if (!sessionId) return;
+
+    try {
+      const response = await axios.post('http://localhost:8000/api/career/member-skills', {
+        session_id: sessionId,
+        member_code: memberCode
+      });
+
+      // Extract skill names from the response
+      const skillNames = response.data.current_skills.map((skill: any) => skill.skill_name);
+      setMemberSkills(skillNames);
+    } catch (err: any) {
+      console.error('Failed to load member skills for graph:', err);
+      setMemberSkills([]);
+    }
+  };
+
+  // =========================================================
+  // Load ego graph for a specific skill
+  // =========================================================
+  const loadEgoGraph = async (skillName: string, skillCode?: string) => {
+    if (!modelId) return;
+
+    setLoadingGraph(true);
+
+    try {
+      const response = await axios.post('http://localhost:8000/api/graph/ego', {
+        model_id: modelId,
+        center_node: skillCode || skillName,
+        radius: graphRadius,
+        threshold: graphThreshold,
+        show_negative: false,
+        member_skills: memberSkills
+      });
+
+      setGraphHtml(response.data.html);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'グラフの生成に失敗しました');
+    } finally {
+      setLoadingGraph(false);
+    }
+  };
+
+  // =========================================================
   // Handle member selection
   // =========================================================
   useEffect(() => {
     if (selectedMember) {
       loadMemberSkills(selectedMember);
+      loadMemberSkillsForGraph(selectedMember);
     }
   }, [selectedMember]);
 
@@ -841,6 +897,116 @@ export const EmployeeCareerDashboard = () => {
                             </div>
                           </div>
                         )}
+
+                        {/* Causal Graph Visualization */}
+                        <div className="mt-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h5 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
+                              <Network size={16} />
+                              因果グラフ
+                            </h5>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setShowGraphSettings(!showGraphSettings)}
+                                className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded transition-colors"
+                              >
+                                <Settings size={14} />
+                                {showGraphSettings ? '閉じる' : '設定'}
+                              </button>
+                              <button
+                                onClick={() => loadEgoGraph(skill.competence_name, skill.competence_code)}
+                                disabled={loadingGraph}
+                                className="px-3 py-1 text-xs bg-[#00A968] text-white rounded hover:bg-[#008f5a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {loadingGraph ? '生成中...' : 'グラフを表示'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Graph Settings Panel */}
+                          {showGraphSettings && (
+                            <div className="mb-3 p-3 bg-white rounded-lg border border-gray-200">
+                              <h6 className="text-xs font-semibold text-gray-800 mb-2">グラフ描画パラメータ</h6>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs text-gray-700 mb-1">
+                                    表示範囲（Radius）: {graphRadius}
+                                  </label>
+                                  <input
+                                    type="range"
+                                    min="1"
+                                    max="3"
+                                    step="1"
+                                    value={graphRadius}
+                                    onChange={(e) => setGraphRadius(parseInt(e.target.value))}
+                                    className="w-full"
+                                  />
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    中心ノードから何ホップ先まで表示するか
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-700 mb-1">
+                                    因果効果の閾値: {graphThreshold.toFixed(3)}
+                                  </label>
+                                  <input
+                                    type="range"
+                                    min="0.01"
+                                    max="0.2"
+                                    step="0.01"
+                                    value={graphThreshold}
+                                    onChange={(e) => setGraphThreshold(parseFloat(e.target.value))}
+                                    className="w-full"
+                                  />
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    この値以下の因果効果は非表示
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Loading State */}
+                          {loadingGraph && (
+                            <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                              <Loader2 size={24} className="animate-spin text-[#00A968] mx-auto" />
+                              <p className="text-sm text-gray-600 mt-2">グラフを生成中...</p>
+                            </div>
+                          )}
+
+                          {/* Graph Display */}
+                          {graphHtml && !loadingGraph && (
+                            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                              <div className="p-3 bg-blue-50 text-xs text-blue-800">
+                                <p className="mb-2">
+                                  <strong>グラフの見方:</strong> ノード（丸）がスキルを表し、エッジ（矢印）が因果関係を表します。
+                                </p>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div className="flex items-center gap-1">
+                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#90EE90' }}></div>
+                                    <span>取得済み</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#97C2FC' }}></div>
+                                    <span>中心スキル</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#DDDDDD' }}></div>
+                                    <span>その他</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="border-t border-gray-200" style={{ height: '500px' }}>
+                                <iframe
+                                  srcDoc={graphHtml}
+                                  className="w-full h-full"
+                                  title="Causal Graph Visualization"
+                                  sandbox="allow-scripts allow-same-origin"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
