@@ -1,7 +1,8 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from typing import Dict
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from typing import Dict, List
 import time
 import pandas as pd
+import io
 
 from backend.utils import (
     PROJECT_ROOT,
@@ -14,22 +15,93 @@ from backend.utils import (
 router = APIRouter()
 
 
-@router.post("/upload")
-async def upload_files(
-    members: UploadFile = File(...),
-    skills: UploadFile = File(...),
-    education: UploadFile = File(...),
-    license: UploadFile = File(...),
-    categories: UploadFile = File(...),
-    acquired: UploadFile = File(...)
-):
+def merge_csv_files(files: List[UploadFile], category_name: str) -> tuple[pd.DataFrame, List[str]]:
     """
-    Upload 6 CSV files for career analysis.
+    Merge multiple CSV files and check for duplicate rows.
+
+    Args:
+        files: List of uploaded CSV files
+        category_name: Name of the category (for error messages)
+
+    Returns:
+        tuple: (merged DataFrame, list of duplicate row descriptions)
+
+    Raises:
+        ValueError: If duplicate rows found
+    """
+    dfs = []
+    duplicate_errors = []
+
+    for idx, file in enumerate(files):
+        df = pd.read_csv(io.BytesIO(file), encoding='utf-8-sig')
+        df['_source_file'] = file.filename or f"file_{idx}"
+        df['_source_row'] = range(2, len(df) + 2)  # Row numbers starting from 2 (after header)
+        dfs.append(df)
+
+    if not dfs:
+        raise ValueError(f"No files provided for {category_name}")
+
+    # Concatenate all dataframes
+    merged = pd.concat(dfs, ignore_index=True)
+
+    # Check for duplicate rows (excluding metadata columns)
+    data_columns = [col for col in merged.columns if not col.startswith('_')]
+    duplicates = merged[merged.duplicated(subset=data_columns, keep=False)]
+
+    if not duplicates.empty:
+        # Group duplicates and create error messages
+        for _, group in duplicates.groupby(data_columns):
+            if len(group) > 1:
+                file_info = []
+                for _, row in group.iterrows():
+                    file_info.append(f"{row['_source_file']}の{row['_source_row']}行目")
+                duplicate_errors.append(f"重複データ: {', '.join(file_info)}")
+
+    # Remove metadata columns before returning
+    merged = merged[data_columns]
+
+    return merged, duplicate_errors
+
+
+@router.post("/upload")
+async def upload_files(request: Request):
+    """
+    Upload multiple CSV files per category for career analysis.
+    Supports multiple files per category which will be merged.
 
     Returns:
         dict: Contains session_id, message, and list of uploaded files
     """
     try:
+        # Parse multipart form data
+        form = await request.form()
+
+        # Organize files by category
+        files_by_category = {
+            "members": [],
+            "skills": [],
+            "education": [],
+            "license": [],
+            "categories": [],
+            "acquired": []
+        }
+
+        # Group files by category
+        for key, value in form.items():
+            # Extract category name (e.g., "members[0]" -> "members")
+            if '[' in key:
+                category = key.split('[')[0]
+                if category in files_by_category and hasattr(value, 'read'):
+                    files_by_category[category].append(value)
+
+        # Validate all categories have at least one file
+        missing_categories = [cat for cat, files in files_by_category.items() if len(files) == 0]
+        if missing_categories:
+            raise HTTPException(
+                status_code=400,
+                detail=f"以下のカテゴリにファイルがありません: {', '.join(missing_categories)}"
+            )
+
         # Create session ID with timestamp
         session_id = f"session_{int(time.time())}"
 
@@ -37,35 +109,62 @@ async def upload_files(
         upload_dir = get_upload_dir(session_id)
         upload_dir.mkdir(parents=True, exist_ok=True)
 
-        # Define file mapping
-        files_map = {
-            "members": members,
-            "skills": skills,
-            "education": education,
-            "license": license,
-            "categories": categories,
-            "acquired": acquired
-        }
+        all_duplicate_errors = []
 
-        # Save all files
-        for key, file in files_map.items():
-            file_path = upload_dir / f"{key}.csv"
-            content = await file.read()
-            with open(file_path, "wb") as f:
-                f.write(content)
+        # Process and merge files for each category
+        for category, file_list in files_by_category.items():
+            if len(file_list) == 1:
+                # Single file - just save it
+                file_path = upload_dir / f"{category}.csv"
+                content = await file_list[0].read()
+                with open(file_path, "wb") as f:
+                    f.write(content)
+            else:
+                # Multiple files - merge them
+                file_contents = []
+                for file in file_list:
+                    content = await file.read()
+                    file_contents.append(content)
+                    await file.seek(0)  # Reset for potential re-read
+
+                # Create temporary file objects with content
+                temp_files = []
+                for content, file in zip(file_contents, file_list):
+                    temp_file = io.BytesIO(content)
+                    temp_file.filename = file.filename
+                    temp_files.append(temp_file)
+
+                # Merge and check for duplicates
+                merged_df, duplicate_errors = merge_csv_files(temp_files, category)
+
+                if duplicate_errors:
+                    all_duplicate_errors.extend([f"[{category}] {err}" for err in duplicate_errors])
+
+                # Save merged file
+                file_path = upload_dir / f"{category}.csv"
+                merged_df.to_csv(file_path, index=False, encoding='utf-8-sig')
+
+        # If there are duplicate errors, raise exception
+        if all_duplicate_errors:
+            raise HTTPException(
+                status_code=400,
+                detail=f"重複行が検出されました:\n" + "\n".join(all_duplicate_errors)
+            )
 
         # Register session in session manager
         session_manager.add_session(session_id, {
             "dir": str(upload_dir),
-            "files": list(files_map.keys())
+            "files": list(files_by_category.keys())
         })
 
         return {
             "session_id": session_id,
-            "message": "Files uploaded successfully",
-            "files": list(files_map.keys())
+            "message": "Files uploaded and merged successfully",
+            "files": list(files_by_category.keys())
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,

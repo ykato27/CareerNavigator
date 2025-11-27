@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutGrid, Upload, Brain, Shield, TrendingUp, Database, Settings, HelpCircle, User, FolderOpen, Zap, Network } from 'lucide-react';
+import { LayoutGrid, Brain, Database, Settings, HelpCircle, User, FolderOpen, Zap, Network } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { DataUpload } from './pages/DataUpload';
 import { CausalAnalysis } from './pages/CausalAnalysis';
@@ -23,24 +23,50 @@ const NavItem = ({ to, icon: Icon, label }: { to: string; icon: any; label: stri
         }
       `}
     >
-      <Icon size={20} strokeWidth={2} />
-      <span className="text-xs font-medium whitespace-nowrap">{label}</span>
+      <Icon size={22} strokeWidth={2} />
+      <span className="text-sm font-medium whitespace-nowrap">{label}</span>
     </Link>
   );
 };
 
 function App() {
+  const location = useLocation();
+
+  // Get page title based on current route
+  const getPageTitle = () => {
+    switch (location.pathname) {
+      case '/':
+        return '力量管理';
+      case '/data-upload':
+        return 'データ管理';
+      case '/model-training':
+        return 'モデル学習';
+      case '/causal-recommendation':
+        return '因果推論';
+      case '/career-dashboard':
+        return 'キャリア';
+      case '/skill-map':
+        return 'スキルマップ';
+      case '/settings':
+        return '設定';
+      case '/help':
+        return 'ガイド';
+      default:
+        return '力量管理';
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-[#F5F7F9]">
       {/* Sidebar */}
-      <aside className="w-[90px] bg-[#00A968] flex flex-col">
+      <aside className="w-[160px] bg-[#00A968] flex flex-col">
         {/* Logo */}
-        <div className="h-14 flex items-center justify-center px-3 py-3">
-          <div className="flex items-center gap-1">
-            <div className="w-6 h-6 bg-white rounded flex items-center justify-center flex-shrink-0">
-              <LayoutGrid size={14} className="text-[#00A968]" />
+        <div className="h-14 flex items-center justify-center px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-white rounded flex items-center justify-center flex-shrink-0">
+              <LayoutGrid size={18} className="text-[#00A968]" />
             </div>
-            <span className="text-white text-xs font-bold">Skillnote</span>
+            <span className="text-white text-sm font-bold">Skillnote</span>
           </div>
         </div>
 
@@ -66,7 +92,7 @@ function App() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm text-gray-700">
               <FolderOpen size={18} className="text-gray-500" />
-              <span>力量管理</span>
+              <span>{getPageTitle()}</span>
             </div>
           </div>
           <div className="flex items-center gap-4">

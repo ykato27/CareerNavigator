@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Brain, TrendingUp, AlertCircle, Loader2, Network, Info, ChevronDown, ChevronUp, Zap, Settings } from 'lucide-react';
+import { Brain, TrendingUp, AlertCircle, Loader2, Network, Info, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 
 interface Member {
   member_code: string;
@@ -62,6 +62,7 @@ export const CausalRecommendation = () => {
   // Graph parameters
   const [graphRadius, setGraphRadius] = useState(1);
   const [graphThreshold, setGraphThreshold] = useState(0.05);
+  const [showGraphSettings, setShowGraphSettings] = useState(false);
 
   useEffect(() => {
     const sid = sessionStorage.getItem('career_session_id');
@@ -679,10 +680,74 @@ export const CausalRecommendation = () => {
 
                         {graphHtml && !loadingGraph && (
                           <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                              <Network size={20} className="text-[#00A968]" />
-                              因果グラフ - {rec.competence_name || rec.skill_name}
-                            </h2>
+                            <div className="flex items-center justify-between mb-4">
+                              <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                <Network size={20} className="text-[#00A968]" />
+                                因果グラフ - {rec.competence_name || rec.skill_name}
+                              </h2>
+                              <button
+                                onClick={() => setShowGraphSettings(!showGraphSettings)}
+                                className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
+                              >
+                                <Settings size={16} />
+                                {showGraphSettings ? '設定を閉じる' : 'グラフ設定'}
+                              </button>
+                            </div>
+
+                            {/* Graph Settings Panel */}
+                            {showGraphSettings && (
+                              <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <h3 className="text-sm font-semibold text-gray-800 mb-3">グラフ描画パラメータ</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="block text-sm text-gray-700 mb-2">
+                                      表示範囲（Radius）: {graphRadius}
+                                    </label>
+                                    <input
+                                      type="range"
+                                      min="1"
+                                      max="3"
+                                      step="1"
+                                      value={graphRadius}
+                                      onChange={(e) => setGraphRadius(parseInt(e.target.value))}
+                                      className="w-full"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      中心ノードから何ホップ先まで表示するか（1〜3）
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm text-gray-700 mb-2">
+                                      因果効果の閾値: {graphThreshold.toFixed(3)}
+                                    </label>
+                                    <input
+                                      type="range"
+                                      min="0.01"
+                                      max="0.2"
+                                      step="0.01"
+                                      value={graphThreshold}
+                                      onChange={(e) => setGraphThreshold(parseFloat(e.target.value))}
+                                      className="w-full"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      この値以下の因果効果は表示されません（0.01〜0.2）
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    if (selectedRecommendationIndex >= 0 && results && results.recommendations[selectedRecommendationIndex]) {
+                                      const rec = results.recommendations[selectedRecommendationIndex];
+                                      loadEgoGraph(rec.competence_name || rec.skill_name, rec.skill_code);
+                                    }
+                                  }}
+                                  disabled={loadingGraph}
+                                  className="mt-3 px-4 py-2 bg-[#00A968] text-white rounded-md hover:bg-[#008f5a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                                >
+                                  {loadingGraph ? 'グラフ更新中...' : 'グラフを更新'}
+                                </button>
+                              </div>
+                            )}
 
                             <div className="mb-4 p-4 bg-blue-50 rounded-lg space-y-3">
                               <div>

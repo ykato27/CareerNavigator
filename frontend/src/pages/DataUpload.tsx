@@ -1,57 +1,76 @@
 import { useState } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { FileText, CheckCircle, AlertCircle, X, Plus } from 'lucide-react';
 import axios from 'axios';
 import { clsx } from 'clsx';
 
 const FileUploadCard = ({
     label,
     fileKey,
-    file,
-    onFileSelect
+    files,
+    onFileSelect,
+    onFileDelete
 }: {
     label: string,
     fileKey: string,
-    file: File | null,
-    onFileSelect: (key: string, file: File) => void
+    files: File[],
+    onFileSelect: (key: string, file: File) => void,
+    onFileDelete: (key: string, index: number) => void
 }) => {
     return (
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:border-green-500 transition-colors">
             <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-gray-700">{label}</h3>
-                {file ? (
+                {files.length > 0 ? (
                     <CheckCircle className="text-green-500" size={20} />
                 ) : (
                     <div className="w-5 h-5 rounded-full border-2 border-gray-300"></div>
                 )}
             </div>
 
+            {/* Uploaded files list */}
+            {files.length > 0 && (
+                <div className="mb-3 space-y-2 max-h-32 overflow-y-auto">
+                    {files.map((file, index) => (
+                        <div key={index} className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg p-2">
+                            <FileText className="text-green-600 flex-shrink-0" size={16} />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs text-gray-700 font-medium truncate">{file.name}</p>
+                                <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                            </div>
+                            <button
+                                onClick={() => onFileDelete(fileKey, index)}
+                                className="text-red-500 hover:text-red-700 flex-shrink-0"
+                                title="削除"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Upload area */}
             <div className="relative">
                 <input
                     type="file"
                     accept=".csv"
+                    multiple
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                            onFileSelect(fileKey, e.target.files[0]);
+                        if (e.target.files) {
+                            Array.from(e.target.files).forEach(file => {
+                                onFileSelect(fileKey, file);
+                            });
+                            e.target.value = ''; // Reset input to allow re-selecting same file
                         }
                     }}
                 />
                 <div className={clsx(
-                    "border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center text-center h-32 transition-colors",
-                    file ? "border-green-200 bg-green-50" : "border-gray-300 hover:bg-gray-50"
+                    "border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center text-center h-24 transition-colors",
+                    files.length > 0 ? "border-green-200 bg-green-50" : "border-gray-300 hover:bg-gray-50"
                 )}>
-                    {file ? (
-                        <>
-                            <FileText className="text-green-600 mb-2" size={24} />
-                            <p className="text-sm text-gray-700 font-medium truncate w-full px-2">{file.name}</p>
-                            <p className="text-xs text-gray-500 mt-1">{(file.size / 1024).toFixed(1)} KB</p>
-                        </>
-                    ) : (
-                        <>
-                            <Upload className="text-gray-400 mb-2" size={24} />
-                            <p className="text-sm text-gray-500">クリックしてCSVを選択</p>
-                        </>
-                    )}
+                    <Plus className="text-gray-400 mb-1" size={20} />
+                    <p className="text-xs text-gray-500">CSVファイルを追加</p>
                 </div>
             </div>
         </div>
@@ -59,13 +78,13 @@ const FileUploadCard = ({
 };
 
 export const DataUpload = () => {
-    const [files, setFiles] = useState<Record<string, File | null>>({
-        members: null,
-        skills: null,
-        education: null,
-        license: null,
-        categories: null,
-        acquired: null
+    const [files, setFiles] = useState<Record<string, File[]>>({
+        members: [],
+        skills: [],
+        education: [],
+        license: [],
+        categories: [],
+        acquired: []
     });
 
     const [uploading, setUploading] = useState(false);
@@ -73,15 +92,26 @@ export const DataUpload = () => {
     const [success, setSuccess] = useState(false);
 
     const handleFileSelect = (key: string, file: File) => {
-        setFiles(prev => ({ ...prev, [key]: file }));
+        setFiles(prev => ({
+            ...prev,
+            [key]: [...prev[key], file]
+        }));
+        setError(null);
+    };
+
+    const handleFileDelete = (key: string, index: number) => {
+        setFiles(prev => ({
+            ...prev,
+            [key]: prev[key].filter((_, i) => i !== index)
+        }));
         setError(null);
     };
 
     const handleUpload = async () => {
-        // Check if all files are selected
-        const missingFiles = Object.entries(files).filter(([_, f]) => !f).map(([k]) => k);
+        // Check if all categories have at least one file
+        const missingFiles = Object.entries(files).filter(([_, fileList]) => fileList.length === 0).map(([k]) => k);
         if (missingFiles.length > 0) {
-            setError(`全てのファイルを選択してください (${missingFiles.length}個未選択)`);
+            setError(`全てのカテゴリにファイルを選択してください (${missingFiles.length}個未選択)`);
             return;
         }
 
@@ -89,8 +119,11 @@ export const DataUpload = () => {
         setError(null);
 
         const formData = new FormData();
-        Object.entries(files).forEach(([key, file]) => {
-            if (file) formData.append(key, file);
+        Object.entries(files).forEach(([key, fileList]) => {
+            fileList.forEach((file, index) => {
+                // Append multiple files with indexed names
+                formData.append(`${key}[${index}]`, file);
+            });
         });
 
         try {
@@ -107,8 +140,9 @@ export const DataUpload = () => {
 
             console.log("Upload success:", response.data);
 
-        } catch (err) {
-            setError("アップロードに失敗しました。サーバーの状態を確認してください。");
+        } catch (err: any) {
+            const errorMsg = err.response?.data?.detail || "アップロードに失敗しました。サーバーの状態を確認してください。";
+            setError(errorMsg);
             console.error(err);
         } finally {
             setUploading(false);
@@ -151,12 +185,12 @@ export const DataUpload = () => {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <FileUploadCard label="1. メンバーマスタ" fileKey="members" file={files.members} onFileSelect={handleFileSelect} />
-                <FileUploadCard label="2. 力量（スキル）マスタ" fileKey="skills" file={files.skills} onFileSelect={handleFileSelect} />
-                <FileUploadCard label="3. 力量（教育）マスタ" fileKey="education" file={files.education} onFileSelect={handleFileSelect} />
-                <FileUploadCard label="4. 力量（資格）マスタ" fileKey="license" file={files.license} onFileSelect={handleFileSelect} />
-                <FileUploadCard label="5. 力量カテゴリーマスタ" fileKey="categories" file={files.categories} onFileSelect={handleFileSelect} />
-                <FileUploadCard label="6. 保有力量データ" fileKey="acquired" file={files.acquired} onFileSelect={handleFileSelect} />
+                <FileUploadCard label="1. メンバーマスタ" fileKey="members" files={files.members} onFileSelect={handleFileSelect} onFileDelete={handleFileDelete} />
+                <FileUploadCard label="2. 力量（スキル）マスタ" fileKey="skills" files={files.skills} onFileSelect={handleFileSelect} onFileDelete={handleFileDelete} />
+                <FileUploadCard label="3. 力量（教育）マスタ" fileKey="education" files={files.education} onFileSelect={handleFileSelect} onFileDelete={handleFileDelete} />
+                <FileUploadCard label="4. 力量（資格）マスタ" fileKey="license" files={files.license} onFileSelect={handleFileSelect} onFileDelete={handleFileDelete} />
+                <FileUploadCard label="5. 力量カテゴリーマスタ" fileKey="categories" files={files.categories} onFileSelect={handleFileSelect} onFileDelete={handleFileDelete} />
+                <FileUploadCard label="6. 保有力量データ" fileKey="acquired" files={files.acquired} onFileSelect={handleFileSelect} onFileDelete={handleFileDelete} />
             </div>
         </div>
     );
