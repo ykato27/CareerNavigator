@@ -9,15 +9,24 @@
     --color-primary-hover: #00965E;
     --color-secondary: #333333;
     --color-background: #F5F7F9;
+    --color-text-main: #333333;
+    --color-text-sub: #666666;
   }
 
   body {
-    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+    font-family: "Inter", "Noto Sans JP", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     line-height: 1.5;
     font-weight: 400;
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
-    background-color: #F5F7F9;
+    background-color: var(--color-background);
+    color: var(--color-text-main);
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-[#00A968] text-white hover:bg-[#00965E] transition-colors duration-200;
   }
 }
