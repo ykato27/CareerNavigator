@@ -1,20 +1,3 @@
-# CareerNavigator PlantUML ドキュメント
-
-このディレクトリには、CareerNavigator システムの実装内容を視覚化した PlantUML 図が含まれています。
-
-## 📋 目次
-
-| # | ファイル名 | 図の種類 | 説明 |
-|---|-----------|---------|------|
-| 01 | [01_system_architecture.puml](01_system_architecture.puml) | システムアーキテクチャ図 | レイヤー構造（プレゼンテーション/アプリケーション/ドメイン/インフラストラクチャ）を示します |
-| 02 | [02_module_structure.puml](02_module_structure.puml) | モジュール構成図 | Core/ML/Graph/Utils モジュール間の依存関係を示します |
-| 03 | [03_class_diagram.puml](03_class_diagram.puml) | クラス図 | 主要なデータモデル、推薦エンジン、アルゴリズムのクラス設計を示します |
-| 04 | [04_sequence_diagram.puml](04_sequence_diagram.puml) | シーケンス図 | 推薦プロセスの実行フロー（データ読み込み→学習→推薦→評価）を示します |
-| 05 | [05_usecase_diagram.puml](05_usecase_diagram.puml) | ユースケース図 | 4種類のユーザー（従業員/人事/管理者/データサイエンティスト）とシステム機能を示します |
-| 06 | [06_component_diagram.puml](06_component_diagram.puml) | コンポーネント図 | 技術スタック（Streamlit/scikit-learn/NetworkX等）との関係を示します |
-| 07 | [07_algorithm_flow.puml](07_algorithm_flow.puml) | アルゴリズムフロー図 | ハイブリッド推薦の処理フロー（RWR/NMF/多様性再ランキング）を示します |
-
----
 
 ## 🎨 図の詳細説明
 

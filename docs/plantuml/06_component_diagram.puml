@@ -7,205 +7,98 @@ skinparam databaseBackgroundColor #FFEBEE
 skinparam arrowColor #4A90E2
 skinparam defaultFontName "Noto Sans CJK JP, IPAGothic, MS Gothic, sans-serif"
 
-title CareerNavigator コンポーネント図（技術スタック）
+title CareerNavigator コンポーネント図（技術スタック） v3.0.0
 
 package "フロントエンド" #E3F2FD {
-  [Streamlit\n(Webアプリケーションフレームワーク)] as Streamlit #BBDEFB
-  [Plotly\n(インタラクティブ可視化)] as Plotly #BBDEFB
-  [Streamlit Pages\n(マルチページアプリ)] as Pages #BBDEFB
-
-  Streamlit --> Pages
-  Streamlit --> Plotly
+  package "Streamlit App" {
+    [Streamlit\n(Webフレームワーク)] as Streamlit #BBDEFB
+    [Plotly\n(可視化)] as Plotly #BBDEFB
+    [Pyvis\n(ネットワーク可視化)] as Pyvis #BBDEFB
+  }
+  
+  package "WebUI (React)" {
+    [React\n(UIライブラリ)] as React #BBDEFB
+    [Vite\n(ビルドツール)] as Vite #BBDEFB
+    [Recharts\n(チャート)] as Recharts #BBDEFB
+  }
 }
 
-package "アプリケーション層" #E8F5E9 {
-  [streamlit_app.py\n(メインエントリポイント)] as MainApp #C8E6C9
-  [pages/\n(各種ページ)] as AppPages #C8E6C9
-  [utils/\n(UIユーティリティ)] as UIUtils #C8E6C9
-
-  MainApp --> AppPages
-  MainApp --> UIUtils
+package "バックエンド API" #E8F5E9 {
+  [FastAPI\n(Web API)] as FastAPI #C8E6C9
+  [Uvicorn\n(ASGIサーバー)] as Uvicorn #C8E6C9
+  [Pydantic\n(データ検証)] as Pydantic #C8E6C9
 }
 
 package "ビジネスロジック層" #FFF3E0 {
 
-  package "Core Module" {
-    [Data Loader] as DataLoader #FFE0B2
-    [Data Transformer] as DataTransformer #FFE0B2
-    [Evaluator] as Evaluator #FFE0B2
-    [Reference Person Finder] as RefFinder #FFE0B2
-    [Models\n(Domain Models)] as DomainModels #FFE0B2
+  package "Causal Module" {
+    [Causal Recommender] as CausalRec #FFE0B2
+    [LiNGAM Model] as LiNGAM #FFE0B2
+    [Dependency Analyzer] as DepAnalyzer #FFE0B2
   }
 
   package "ML Module" {
     [ML Recommender] as MLRec #FFE0B2
-    [Matrix Factorization\n(NMF)] as NMF #FFE0B2
+    [Matrix Factorization] as NMF #FFE0B2
     [Diversity Strategies] as Diversity #FFE0B2
-    [Feature Engineering] as FeatureEng #FFE0B2
-    [Hyperparameter Tuning] as HPTuning #FFE0B2
   }
 
   package "Graph Module" {
     [Hybrid Recommender] as HybridRec #FFE0B2
     [Knowledge Graph] as KGraph #FFE0B2
-    [Random Walk] as RWR #FFE0B2
-    [Career Path Analyzer] as CareerPath #FFE0B2
+  }
+  
+  package "Core Module" {
+    [Data Loader] as DataLoader #FFE0B2
+    [Evaluator] as Evaluator #FFE0B2
   }
 }
 
-package "機械学習ライブラリ" #F3E5F5 {
-  [scikit-learn\n(ML Algorithms)] as SkLearn #E1BEE7
-  [NumPy\n(数値計算)] as NumPy #E1BEE7
+package "分析ライブラリ" #F3E5F5 {
+  [lingam\n(因果推論)] as LingamLib #E1BEE7
+  [scikit-learn\n(ML)] as SkLearn #E1BEE7
   [pandas\n(データ操作)] as Pandas #E1BEE7
-  [Optuna\n(ハイパーパラメータ最適化)] as Optuna #E1BEE7
-}
-
-package "グラフ処理ライブラリ" #FCE4EC {
-  [NetworkX\n(グラフアルゴリズム)] as NetworkX #F8BBD0
-  [node2vec\n(グラフ埋め込み)] as Node2Vec #F8BBD0
-  [gensim\n(埋め込みモデル)] as Gensim #F8BBD0
+  [networkx\n(グラフ)] as NetworkX #E1BEE7
 }
 
 package "データ永続化層" #ECEFF1 {
-  [Repository\n(リポジトリパターン)] as Repository #CFD8DC
-  [SQLAlchemy\n(ORM)] as SQLAlchemy #CFD8DC
-  database "SQLite\nDatabase" as SQLite #B0BEC5
   database "CSV Files\n(data/)" as CSV #B0BEC5
-  database "Trained Models\n(joblib)" as Models #B0BEC5
+  database "Models\n(joblib)" as Models #B0BEC5
 }
 
-package "共通インフラストラクチャ" #FFF9C4 {
-  [Config Manager\n(設定管理)] as Config #FFF59D
-  [structlog\n(構造化ログ)] as StructLog #FFF59D
-  [Error Handlers\n(エラー処理)] as ErrorHandler #FFF59D
-  [pydantic\n(データ検証)] as Pydantic #FFF59D
-  [tenacity\n(リトライ機能)] as Tenacity #FFF59D
-}
+' 依存関係
+Streamlit --> CausalRec
+Streamlit --> MLRec
+React --> FastAPI
+FastAPI --> CausalRec
+FastAPI --> MLRec
 
-package "開発ツール" #E0F2F1 {
-  [pytest\n(テストフレームワーク)] as Pytest #B2DFDB
-  [black\n(コードフォーマッタ)] as Black #B2DFDB
-  [mypy\n(型チェック)] as Mypy #B2DFDB
-  [flake8\n(リンター)] as Flake8 #B2DFDB
-  [uv\n(パッケージマネージャ)] as UV #B2DFDB
-}
+CausalRec --> LingamLib
+CausalRec --> NetworkX
+MLRec --> SkLearn
+MLRec --> Pandas
 
-' フロントエンド → アプリケーション層
-Streamlit --> MainApp : "実行"
-Pages --> MainApp : "統合"
+DataLoader --> CSV
+CausalRec --> Models
 
-' アプリケーション層 → ビジネスロジック層
-MainApp --> DataLoader : "データ読み込み"
-AppPages --> MLRec : "ML推薦"
-AppPages --> HybridRec : "ハイブリッド推薦"
-AppPages --> Evaluator : "評価"
-UIUtils --> DomainModels : "モデル表示"
-
-' ビジネスロジック内部
-DataTransformer --> DataLoader : "使用"
-MLRec --> NMF : "使用"
-MLRec --> Diversity : "使用"
-MLRec --> FeatureEng : "使用"
-NMF --> HPTuning : "最適化"
-
-HybridRec --> RWR : "使用"
-HybridRec --> NMF : "使用"
-RWR --> KGraph : "使用"
-CareerPath --> KGraph : "使用"
-
-Evaluator --> MLRec : "評価"
-Evaluator --> HybridRec : "評価"
-RefFinder --> DataTransformer : "データ取得"
-
-' ML/Graphモジュール → ライブラリ
-NMF --> SkLearn : "NMF実装"
-NMF --> NumPy : "行列演算"
-DataTransformer --> Pandas : "DataFrame操作"
-HPTuning --> Optuna : "最適化"
-FeatureEng --> SkLearn : "特徴量抽出"
-
-KGraph --> NetworkX : "グラフ構築"
-RWR --> NetworkX : "アルゴリズム"
-Node2Vec --> NetworkX : "埋め込み"
-Node2Vec --> Gensim : "学習"
-
-' データ永続化
-DataLoader --> CSV : "読み込み"
-MLRec --> Models : "保存/読込"
-HybridRec --> Models : "保存/読込"
-Repository --> SQLAlchemy : "ORM使用"
-SQLAlchemy --> SQLite : "接続"
-
-' 共通インフラ利用
-MLRec --> Config : "設定取得"
-HybridRec --> Config : "設定取得"
-MLRec --> StructLog : "ログ記録"
-HybridRec --> StructLog : "ログ記録"
-MLRec --> ErrorHandler : "エラー処理"
-HybridRec --> ErrorHandler : "エラー処理"
-DomainModels --> Pydantic : "バリデーション"
-DataLoader --> Tenacity : "リトライ"
-
-' 開発ツール（点線で表示）
-Pytest .> MLRec : "テスト"
-Pytest .> HybridRec : "テスト"
-Black .> MainApp : "フォーマット"
-Mypy .> MainApp : "型チェック"
-Flake8 .> MainApp : "リント"
-UV .> MainApp : "パッケージ管理"
-
-note top of Streamlit
-  Webフレームワーク
-  ・Python 3.11+
-  ・リアクティブUI
-  ・データキャッシング
+note top of React
+  モダンフロントエンド
+  ・TypeScript
+  ・SPAアーキテクチャ
 end note
 
-note top of SkLearn
-  機械学習
-  ・NMF (協調フィルタリング)
-  ・評価指標 (Precision, Recall, NDCG)
-  ・前処理・正規化
-end note
-
-note top of NetworkX
-  グラフ処理
-  ・有向グラフ (DiGraph)
-  ・ランダムウォーク
-  ・パス探索
-  ・中心性計算
-end note
-
-note top of SQLite
-  データストレージ
-  ・評価結果保存
-  ・モデルメタデータ
-  ・ログデータ
-end note
-
-note top of Config
-  設定管理
-  ・環境別設定 (dev/staging/prod)
-  ・モデルパラメータ
-  ・ログ設定
-end note
-
-note bottom of UV
-  モダンなPythonパッケージマネージャ
-  ・高速インストール
-  ・依存関係解決
-  ・ロックファイル管理
+note top of LingamLib
+  因果探索ライブラリ
+  ・DirectLiNGAM
+  ・Bootstrap信頼性評価
 end note
 
 legend right
-  |<#E3F2FD> フロントエンド |Streamlit |
-  |<#E8F5E9> アプリケーション |ビジネスロジック |
-  |<#FFF3E0> ドメイン |推薦エンジン |
-  |<#F3E5F5> MLライブラリ |scikit-learn, Optuna |
-  |<#FCE4EC> グラフライブラリ |NetworkX, node2vec |
-  |<#ECEFF1> 永続化 |DB, ファイル |
-  |<#FFF9C4> インフラ |ログ, 設定, エラー処理 |
-  |<#E0F2F1> 開発ツール |テスト, 品質管理 |
+  |<#E3F2FD> フロントエンド |Streamlit / React |
+  |<#E8F5E9> バックエンド |FastAPI |
+  |<#FFF3E0> ロジック |因果推論 / ML |
+  |<#F3E5F5> ライブラリ |分析 / 計算 |
+  |<#ECEFF1> 永続化 |ファイル / モデル |
 endlegend
 
 @enduml
