@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.api import upload, recommendation, train, weights, graph, organizational, career_dashboard
+from backend.api import upload, recommendation, train, weights, graph, organizational, career_dashboard, role_based_dashboard
 
 app = FastAPI()
 
@@ -21,6 +21,7 @@ app.include_router(weights.router, prefix="/api", tags=["weights"])
 app.include_router(graph.router, prefix="/api", tags=["graph"])
 app.include_router(organizational.router, prefix="/api", tags=["organizational"])
 app.include_router(career_dashboard.router, prefix="/api/career", tags=["career-dashboard"])
+app.include_router(role_based_dashboard.router, prefix="/api/career/role", tags=["role-based-career"])
 
 @app.get("/")
 async def root():

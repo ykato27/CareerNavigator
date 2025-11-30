@@ -195,6 +195,7 @@ if target_selection_mode == "ロールモデルから選ぶ":
                     "label": f"{get_member_name(target_member)}"
                 })
 
+
 else:  # 職種・役職から選ぶ
     st.markdown("#### 目指す職種・役職")
     
@@ -207,8 +208,82 @@ else:  # 職種・役職から選ぶ
             num_targets = 2
             st.info("💡 比較モードでは2つの目標を設定します")
         else:
-            num_targets = 1
+            num_targets =1
         
+        # スキル保有率の閾値設定（UI上で調整可能）
+        st.markdown("---")
+        st.markdown("#### ⚙️ スキル保有率の閾値設定")
+        st.caption("役職内でどの程度のメンバーが保有しているスキルを目標に含めるかを設定します")
+        
+        col_freq1, col_freq2 = st.columns([2, 1])
+        
+        with col_freq1:
+            min_skill_frequency = st.slider(
+                "最小スキル保有率",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.1,
+                step=0.05,
+                format="%.0f%%",
+                help="この値以上の保有率のスキルのみを目標スキルセットに含めます",
+                key="min_skill_frequency_role"
+            )
+        
+        # 優先度分類の閾値設定
+        st.markdown("#### 🎯 優先度分類の閾値")
+        st.caption("スキル保有率に基づいて優先度を分類する基準を設定します")
+        
+        col_p1, col_p2, col_p3 = st.columns(3)
+        
+        with col_p1:
+            priority_high_threshold = st.slider(
+                "🔴 必須スキル（高）",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.5,
+                step=0.05,
+                format="%.0f%%",
+                help="この値以上の保有率を「必須スキル」とします",
+                key="priority_high_threshold"
+            )
+        
+        with col_p2:
+            priority_medium_threshold = st.slider(
+                "🟡 推奨スキル（中）",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.3,
+                step=0.05,
+                format="%.0f%%",
+                help="この値以上の保有率を「推奨スキル」とします",
+                key="priority_medium_threshold"
+            )
+        
+        with col_p3:
+            # オプショナルは最小保有率以上、推奨未満
+            st.metric(
+                "🟢 オプショナル（低）",
+                f"{min_skill_frequency*100:.0f}% - {priority_medium_threshold*100:.0f}%",
+                help="最小保有率以上、推奨スキル未満を「オプショナルスキル」とします"
+            )
+        
+        # 閾値の妥当性チェック
+        if priority_medium_threshold >= priority_high_threshold:
+            st.warning("⚠️ 推奨スキルの閾値は必須スキルの閾値より低く設定してください")
+        if min_skill_frequency >= priority_medium_threshold:
+            st.warning("⚠️ 最小スキル保有率は推奨スキルの閾値より低く設定してください")
+        
+        # 保有率による優先度の表示
+        st.caption(f"""
+        **現在の設定**:
+        - 🔴 必須スキル: {priority_high_threshold*100:.0f}%以上のメンバーが保有
+        - 🟡 推奨スキル: {priority_medium_threshold*100:.0f}% - {priority_high_threshold*100:.0f}%のメンバーが保有
+        - 🟢 オプショナルスキル: {min_skill_frequency*100:.0f}% - {priority_medium_threshold*100:.0f}%のメンバーが保有
+        - ⚪ 除外: {min_skill_frequency*100:.0f}%未満
+        """)
+
+        
+        st.markdown("---")
         
         for i in range(int(num_targets)):
             with st.expander(f"目標 {i+1}", expanded=(i == 0)):
@@ -219,37 +294,59 @@ else:  # 職種・役職から選ぶ
                 )
                 
                 if target_role:
-                    # その役職の代表メンバーを選択（スキル数が多い人）
-                    role_members = members_clean[members_clean['役職'] == target_role]['メンバーコード'].tolist()
+                    # その役職のメンバー全員のスキルを集計
+                    role_members = members_clean[members_clean['役職'] == target_role]
+                    total_members = len(role_members)
+                    role_member_codes = role_members['メンバーコード'].tolist()
                     
-                    # 各メンバーのスキル数をカウント
-                    skill_counts = {}
-                    for rm in role_members:
-                        if rm != selected_member:
-                            skill_count = len(member_competence[
-                                member_competence["メンバーコード"] == rm
-                            ])
-                            skill_counts[rm] = skill_count
+                    # スキルごとの保有率を計算
+                    skill_frequency = {}
+                    for skill_code in competence_master['力量コード'].unique():
+                        count = len(member_competence[
+                            (member_competence['メンバーコード'].isin(role_member_codes)) &
+                            (member_competence['力量コード'] == skill_code)
+                        ])
+                        
+                        if count > 0:
+                            frequency = count / total_members
+                            if frequency >= min_skill_frequency:
+                                skill_frequency[skill_code] = frequency
                     
-                    if skill_counts:
-                        # スキル数が多い順にソート
-                        top_member = max(skill_counts, key=skill_counts.get)
+                    # 統計情報を表示
+                    st.success(
+                        f"**分析対象**: {total_members}人のメンバー\n\n"
+                        f"**目標スキル数**: {len(skill_frequency)}件（保有率{min_skill_frequency*100:.0f}%以上）"
+                    )
+                    
+                    # スキル保有率の分布を表示
+                    if skill_frequency:
+                        priority_counts = {
+                            "必須": sum(1 for f in skill_frequency.values() if f >= priority_high_threshold),
+                            "推奨": sum(1 for f in skill_frequency.values() if priority_medium_threshold <= f < priority_high_threshold),
+                            "オプショナル": sum(1 for f in skill_frequency.values() if f < priority_medium_threshold)
+                        }
                         
-                        st.info(
-                            f"**代表メンバー**: {get_member_name(top_member)} "
-                            f"({skill_counts[top_member]}スキル保有)"
-                        )
-                        
-                        target_configs.append({
-                            "mode": "role",
-                            "target_member": top_member,
-                            "target_role": target_role,
-                            "label": f"{target_role}（代表: {get_member_name(top_member)}）"
-                        })
-                    else:
-                        st.warning(f"⚠️ 役職「{target_role}」に該当する他のメンバーが見つかりません")
+                        col_p1, col_p2, col_p3 = st.columns(3)
+                        with col_p1:
+                            st.metric("🔴 必須スキル", f"{priority_counts['必須']}件")
+                        with col_p2:
+                            st.metric("🟡 推奨スキル", f"{priority_counts['推奨']}件")
+                        with col_p3:
+                            st.metric("🟢 オプショナル", f"{priority_counts['オプショナル']}件")
+                    
+                    # 仮想的な役職プロファイルを target_configs に追加
+                    target_configs.append({
+                        "mode": "role",
+                        "target_role": target_role,
+                        "target_member": None,  # 役職ベースなので個人は指定しない
+                        "min_frequency": min_skill_frequency,
+                        "priority_high_threshold": priority_high_threshold,
+                        "priority_medium_threshold": priority_medium_threshold,
+                        "label": f"{target_role}（{total_members}人の統合プロファイル）"
+                    })
     else:
         st.error("❌ メンバーマスタに「役職」列が存在しません")
+
 
 
 # =========================================================
@@ -351,7 +448,7 @@ if target_configs and selected_member:
     st.markdown("---")
     st.subheader("🗺️ Causal統合キャリアロードマップ")
     
-    # 分析器を初期化
+    # 分析器を初期化（ロールモデル用）
     gap_analyzer = CareerGapAnalyzer(
         knowledge_graph=knowledge_graph,
         member_competence_df=member_competence,
@@ -368,8 +465,6 @@ if target_configs and selected_member:
     
     for idx, (tab, config) in enumerate(zip(tabs, target_configs)):
         with tab:
-            target_member = config["target_member"]
-            
             # Causal統合の分析器を初期化（ループ内で毎回作成して最新の値を使用）
             causal_path_generator = CausalFilteredLearningPath(
                 causal_recommender=causal_recommender,
@@ -384,11 +479,53 @@ if target_configs and selected_member:
             
             with st.spinner(f"キャリアパス分析中... ({config['label']})"):
                 try:
-                    # ギャップ分析
-                    gap_result = gap_analyzer.analyze_gap(
-                        source_member_code=selected_member,
-                        target_member_code=target_member
-                    )
+                    # ギャップ分析（モードにより処理を分岐）
+                    if config["mode"] == "member":
+                        # ロールモデルアプローチ
+                        target_member = config["target_member"]
+                        gap_result = gap_analyzer.analyze_gap(
+                            source_member_code=selected_member,
+                            target_member_code=target_member
+                        )
+                    else:
+                        # 役職ベースアプローチ
+                        target_role = config["target_role"]
+                        min_frequency = config["min_frequency"]
+                        
+                        # 役職のメンバー全員のスキルを集計
+                        role_members = members_clean[members_clean['役職'] == target_role]
+                        total_members = len(role_members)
+                        role_member_codes = role_members['メンバーコード'].tolist()
+                        
+                        # スキルごとの保有率を計算
+                        target_skill_codes = []
+                        for skill_code in competence_master['力量コード'].unique():
+                            count = len(member_competence[
+                                (member_competence['メンバーコード'].isin(role_member_codes)) &
+                                (member_competence['力量コード'] == skill_code)
+                            ])
+                            
+                            if count > 0:
+                                frequency = count / total_members
+                                if frequency >= min_frequency:
+                                    target_skill_codes.append(skill_code)
+                        
+                        # 現在の保有スキル
+                        source_skill_codes = member_competence[
+                            member_competence["メンバーコード"] == selected_member
+                        ]["力量コード"].tolist()
+                        
+                        # ギャップ計算
+                        gap_skill_codes = list(set(target_skill_codes) - set(source_skill_codes))
+                        
+                        # gap_resultを手動で作成
+                        gap_result = {
+                            "source_member": selected_member,
+                            "target_member": f"役職:{target_role}",
+                            "missing_competences": gap_skill_codes,
+                            "source_competences": source_skill_codes,
+                            "target_competences": target_skill_codes
+                        }
                     
                     # Causalフィルタリング
                     recommended_skills = causal_path_generator.generate_filtered_path(
