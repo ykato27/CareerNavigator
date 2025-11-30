@@ -1,6 +1,31 @@
-# スキルノート推薦システム
+# CareerNavigator - スキルノート推薦システム
 
-スキルノートのデータを基に、因果推論（Causal Inference）を活用して技術者向けの最適なキャリアパスを提案するシステムです。
+スキルノートのデータを基に、因果推論（Causal Inference）と機械学習を活用して技術者向けの最適なキャリアパスを提案する統合システムです。
+
+## メインアプリケーション
+
+本システムは2つのメインアプリケーションを提供します：
+
+### 🎯 Streamlitアプリ（対話型Webアプリ）
+
+ブラウザベースの対話的なWebアプリケーション。以下の機能を提供：
+
+- **データ読み込み**: CSVファイルのドラッグ&ドロップアップロード、データ変換、品質チェック
+- **因果推論ベース推薦**: 因果グラフによるスキル依存関係の可視化、3軸スコアリング（準備完了度・確率・有用性）
+- **従業員キャリアダッシュボード**: ロールモデル/役職ベース目標設定、スマートキャリアロードマップ、ギャップ分析
+- **組織スキルマップ**: 組織全体のスキル分布可視化、後継者計画、スキルギャップ分析
+
+→ [Streamlitアプリ詳細](docs/STREAMLIT_APPS.md)
+
+### 🌐 WebUI（モダンWebアプリ）
+
+React + FastAPIによるモダンなWebアプリケーション：
+
+- **フロントエンド**: React + TypeScript + Vite
+- **バックエンド**: FastAPI + Pydantic
+- **機能**: 従業員キャリアダッシュボード、リアルタイムデータ可視化、RESTful API
+
+→ [WebUIガイド](docs/WEBUI_GUIDE.md)
 
 ## 主な機能
 
@@ -8,6 +33,7 @@
 2. **スマートキャリアロードマップ**: 依存関係を考慮したガントチャート形式の学習計画を自動生成します。
 3. **キャリアパス比較**: 複数のキャリア目標（ロールモデルや職種）を並列で比較検討できます。
 4. **3軸スコアリング**: 準備完了度 (Readiness)、習得確率 (Probability)、将来性 (Utility) の3つの観点からスキルを評価します。
+5. **組織スキル分析**: 組織全体のスキル分布を可視化し、スキルギャップや後継者計画を支援します。
 
 ## プロジェクト構成
 
@@ -31,9 +57,25 @@ CareerNavigator/
 │   ├── skill_matrix.csv
 │   └── competence_similarity.csv
 │
+├── streamlit_app.py               # Streamlitメインページ
 ├── pages/                         # Streamlitページ
-│   ├── 1_Causal_Recommendation.py      # 因果推論推薦ダッシュボード
-│   └── 2_Employee_Career_Dashboard.py  # 従業員向けキャリアダッシュボード
+│   ├── 1_Causal_Recommendation.py           # 因果推論推薦
+│   ├── 2_Employee_Career_Dashboard.py       # 従業員キャリアダッシュボード
+│   └── 3_Organizational_Skill_Map.py        # 組織スキルマップ
+│
+├── frontend/                      # WebUI フロントエンド
+│   ├── src/                       # Reactアプリケーション
+│   │   ├── pages/                 # ページコンポーネント
+│   │   ├── components/            # 再利用可能コンポーネント
+│   │   └── App.tsx                # メインアプリ
+│   └── package.json               # Node.js依存関係
+│
+├── backend/                       # WebUI バックエンドAPI
+│   ├── api/                       # APIエンドポイント
+│   │   ├── career_dashboard.py    # キャリアダッシュボードAPI
+│   │   └── role_based_dashboard.py # 役職ベース分析API
+│   ├── utils/                     # ユーティリティ
+│   └── main.py                    # FastAPIアプリ
 │
 ├── pages_disabled/                # アーカイブされたページ（旧バージョン）
 │

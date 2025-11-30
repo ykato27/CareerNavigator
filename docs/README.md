@@ -33,6 +33,20 @@
 
 ### 機能別ドキュメント
 
+#### メインアプリケーション
+
+- **[STREAMLIT_APPS.md](STREAMLIT_APPS.md)** - Streamlitアプリケーション完全ガイド
+  - データ読み込み、因果推論推薦、従業員キャリアダッシュボード、組織スキルマップの詳細
+- **[WEBUI_GUIDE.md](WEBUI_GUIDE.md)** - WebUI完全ガイド
+  - React + FastAPI構成、セットアップ、APIリファレンス、開発ワークフロー
+
+#### 技術詳細・参考実装
+
+- **[CAUSAL_RECOMMENDATION.md](CAUSAL_RECOMMENDATION.md)** - 因果推論ベース推薦の技術詳細
+  - LiNGAMアルゴリズム、3軸スコアリング、Causalフィルタリング、スマートロードマップ
+- **[ML_MODELS_REFERENCE.md](ML_MODELS_REFERENCE.md)** - 機械学習/統計モデル参考資料
+  - Matrix Factorization、グラフベース推薦、ベイジアンネットワーク、SEM、ハイブリッド推薦
+
 #### SEM（構造方程式モデリング）
 
 - **[SEM_IMPLEMENTATION_SUMMARY.md](SEM_IMPLEMENTATION_SUMMARY.md)** - SEM実装サマリー
