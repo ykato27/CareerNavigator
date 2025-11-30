@@ -236,28 +236,30 @@ else:  # 職種・役職から選ぶ
         col_p1, col_p2, col_p3 = st.columns(3)
         
         with col_p1:
-            priority_high_threshold = st.slider(
+            priority_high_threshold_pct = st.slider(
                 "🔴 必須スキル（高）",
-                min_value=0.0,
-                max_value=1.0,
-                value=0.5,
-                step=0.05,
-                format="%.0f%%",
+                min_value=0,
+                max_value=100,
+                value=50,
+                step=5,
+                format="%d%%",
                 help="この値以上の保有率を「必須スキル」とします",
                 key="priority_high_threshold"
             )
+            priority_high_threshold = priority_high_threshold_pct / 100.0
         
         with col_p2:
-            priority_medium_threshold = st.slider(
+            priority_medium_threshold_pct = st.slider(
                 "🟡 推奨スキル（中）",
-                min_value=0.0,
-                max_value=1.0,
-                value=0.3,
-                step=0.05,
-                format="%.0f%%",
+                min_value=0,
+                max_value=100,
+                value=30,
+                step=5,
+                format="%d%%",
                 help="この値以上の保有率を「推奨スキル」とします",
                 key="priority_medium_threshold"
             )
+            priority_medium_threshold = priority_medium_threshold_pct / 100.0
         
         with col_p3:
             # オプショナルは最小保有率以上、推奨未満
@@ -518,11 +520,24 @@ if target_configs and selected_member:
                         # ギャップ計算
                         gap_skill_codes = list(set(target_skill_codes) - set(source_skill_codes))
                         
+                        # missing_competencesを辞書形式に変換（Causalパスジェネレーター用）
+                        gap_skill_dicts = []
+                        for skill_code in gap_skill_codes:
+                            skill_info = competence_master[competence_master['力量コード'] == skill_code]
+                            if not skill_info.empty:
+                                skill_row = skill_info.iloc[0]
+                                gap_skill_dicts.append({
+                                    "competence_code": skill_code,
+                                    "competence_name": skill_row.get('力量名', skill_code),
+                                    "category": skill_row.get('カテゴリー', 'その他'),
+                                    "competence_type": skill_row.get('力量タイプ', '')
+                                })
+                        
                         # gap_resultを手動で作成
                         gap_result = {
                             "source_member": selected_member,
                             "target_member": f"役職:{target_role}",
-                            "missing_competences": gap_skill_codes,
+                            "missing_competences": gap_skill_dicts,
                             "source_competences": source_skill_codes,
                             "target_competences": target_skill_codes
                         }
