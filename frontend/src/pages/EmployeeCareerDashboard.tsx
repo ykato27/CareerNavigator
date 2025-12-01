@@ -917,7 +917,6 @@ export const EmployeeCareerDashboard = () => {
           )
         }
 
-<<<<<<< HEAD
         {/* Career Path Results */}
         {
           careerPath && careerPath.recommended_skills && careerPath.recommended_skills.length > 0 && (
@@ -928,30 +927,6 @@ export const EmployeeCareerDashboard = () => {
                   <Briefcase size={20} className="text-[#00A968]" />
                   Causal学習ロードマップ
                 </h2>
-=======
-            {/* Career Roadmap Gantt Chart */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <Calendar size={20} className="text-[#00A968]" />
-                キャリアロードマップ（ガントチャート）
-              </h2>
-              <div className="mb-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-blue-800 mb-2">🧠 Causal統合の特徴</h3>
-                  <ul className="text-sm text-blue-700 space-y-1">
-                    <li>• 因果グラフに基づくスキル推薦</li>
-                    <li>• 依存関係を考慮した直列・並列配置</li>
-                    <li>• 準備完了度と有用性を両面から評価</li>
-                  </ul>
-                </div>
-              </div>
-              <CareerRoadmapGantt ganttChart={ganttChart} loading={loadingGantt} />
-            </div>
-
-            {/* Recommended Skills List */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">推薦スキル詳細（Causalスコア順）</h3>
->>>>>>> b81ac92c2576c4362af102e001501d3f6aca230d
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="bg-blue-50 rounded-lg p-4 text-center">
