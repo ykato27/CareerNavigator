@@ -512,6 +512,29 @@ uv run skillnote-convert
 
 **対処法**: 他のメンバーコードで試すか、フィルタを変更してください。
 
+### エラー: Windows/OneDrive環境での同期エラー
+
+```
+error: Failed to install: ... (os error 396)
+Caused by: failed to hardlink file ...
+```
+
+**原因**: OneDriveフォルダ内では、`uv` がデフォルトで使用するハードリンク作成機能が制限される場合があります。
+
+**対処法**:
+1. `pyproject.toml` に以下の設定を追加します（本プロジェクトでは設定済み）:
+   ```toml
+   [tool.uv]
+   link-mode = "copy"
+   ```
+
+2. 仮想環境が破損している場合は、再作成します:
+   ```bash
+   # 既存の環境をクリアして再作成
+   uv venv --clear
+   uv sync
+   ```
+
 ## 実行例
 
 ### データ変換
