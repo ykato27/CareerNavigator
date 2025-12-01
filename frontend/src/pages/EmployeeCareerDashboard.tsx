@@ -130,7 +130,7 @@ export const EmployeeCareerDashboard = () => {
   const [loadingPath, setLoadingPath] = useState(false);
 
   // Filtering settings
-  const [minTotalScore, setMinTotalScore] = useState(0.3);
+  const [minTotalScore, setMinTotalScore] = useState(0.0);
   const [minReadinessScore, setMinReadinessScore] = useState(0.0);
   const [minEffectThreshold, setMinEffectThreshold] = useState(0.03);
   const [showFilterSettings, setShowFilterSettings] = useState(false);
