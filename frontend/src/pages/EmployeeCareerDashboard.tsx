@@ -384,6 +384,12 @@ export const EmployeeCareerDashboard = () => {
   // Generate career roadmap (Gantt chart)
   // =========================================================
   const generateCareerRoadmap = async () => {
+    // Skip for role mode as it's not supported yet
+    if (targetSelectionMode === 'role') {
+      setGanttChart(null);
+      return;
+    }
+
     if (!sessionId || !modelId || !selectedMember || !targetMember) {
       setError('必要な情報が入力されていません');
       return;
@@ -843,7 +849,13 @@ export const EmployeeCareerDashboard = () => {
         < div className="mb-6" >
           <button
             onClick={handleAnalyze}
-            disabled={!selectedMember || !targetMember || !modelId || loadingGap || loadingPath}
+            disabled={
+              !selectedMember ||
+              !modelId ||
+              (targetSelectionMode === 'role_model' ? !targetMember : !selectedRole) ||
+              loadingGap ||
+              loadingPath
+            }
             className="w-full bg-[#00A968] text-white py-4 rounded-md font-medium hover:bg-[#008F58] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
           >
             {loadingGap || loadingPath ? (
