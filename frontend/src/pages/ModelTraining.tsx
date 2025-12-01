@@ -412,12 +412,11 @@ export const ModelTraining = () => {
         {/* Train Button */}
         <button
           onClick={handleTrain}
-          disabled={training || trained}
-          className={`w-full py-4 rounded-lg font-semibold text-white transition-all flex items-center justify-center gap-2 ${
-            training ? 'bg-gray-400 cursor-not-allowed' :
-            trained ? 'bg-green-600' :
-            'bg-[#00A968] hover:bg-[#008F58]'
-          }`}
+          disabled={training}
+          className={`w-full py-4 rounded-lg font-semibold text-white transition-all flex items-center justify-center gap-2 ${training ? 'bg-gray-400 cursor-not-allowed' :
+              trained ? 'bg-blue-600 hover:bg-blue-700' :
+                'bg-[#00A968] hover:bg-[#008F58]'
+            }`}
         >
           {training ? (
             <>
@@ -426,8 +425,8 @@ export const ModelTraining = () => {
             </>
           ) : trained ? (
             <>
-              <CheckCircle size={20} />
-              学習済み
+              <Zap size={20} />
+              モデルを再学習する
             </>
           ) : (
             <>

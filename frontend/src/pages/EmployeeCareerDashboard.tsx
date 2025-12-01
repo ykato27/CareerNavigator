@@ -383,15 +383,22 @@ export const EmployeeCareerDashboard = () => {
   // =========================================================
   // Generate career roadmap (Gantt chart)
   // =========================================================
+  // =========================================================
+  // Generate career roadmap (Gantt chart)
+  // =========================================================
   const generateCareerRoadmap = async () => {
-    // Skip for role mode as it's not supported yet
-    if (targetSelectionMode === 'role') {
-      setGanttChart(null);
+    if (!sessionId || !modelId || !selectedMember) {
+      setError('必要な情報が入力されていません');
       return;
     }
 
-    if (!sessionId || !modelId || !selectedMember || !targetMember) {
-      setError('必要な情報が入力されていません');
+    if (targetSelectionMode === 'role_model' && !targetMember) {
+      setError('目標メンバーを選択してください');
+      return;
+    }
+
+    if (targetSelectionMode === 'role' && !selectedRole) {
+      setError('目標役職を選択してください');
       return;
     }
 
@@ -400,20 +407,30 @@ export const EmployeeCareerDashboard = () => {
     setGanttChart(null);
 
     try {
-      // Get target member name
-      const targetMemberInfo = availableMembers.find(m => m.member_code === targetMember);
-      const targetMemberName = targetMemberInfo?.display_name || targetMember;
-
-      const response = await axios.post(`http://localhost:8000/api/career/career-roadmap`, {
+      let endpoint = `http://localhost:8000/api/career/career-roadmap`;
+      let payload: any = {
         session_id: sessionId,
         model_id: modelId,
         source_member_code: selectedMember,
-        target_member_code: targetMember,
-        target_member_name: targetMemberName,
         min_total_score: minTotalScore,
         min_readiness_score: minReadinessScore,
         min_effect_threshold: minEffectThreshold
-      });
+      };
+
+      if (targetSelectionMode === 'role') {
+        endpoint = `http://localhost:8000/api/career/role/career-roadmap`;
+        payload.target_role = selectedRole;
+        payload.min_frequency = minRoleFrequency;
+      } else {
+        // Get target member name
+        const targetMemberInfo = availableMembers.find(m => m.member_code === targetMember);
+        const targetMemberName = targetMemberInfo?.display_name || targetMember;
+
+        payload.target_member_code = targetMember;
+        payload.target_member_name = targetMemberName;
+      }
+
+      const response = await axios.post(endpoint, payload);
 
       setGanttChart(response.data.gantt_chart);
     } catch (err: any) {

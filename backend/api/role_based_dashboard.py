@@ -11,6 +11,7 @@ import logging
 import pandas as pd
 
 from backend.utils import session_manager, load_and_transform_session_data
+from backend.api.career_dashboard import create_gantt_chart
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -55,6 +56,18 @@ class RoleCareerPathRequest(BaseModel):
     source_member_code: str
     target_role: str
     min_frequency: float = 0.1  # Minimum skill frequency threshold
+    min_total_score: float = 0.3
+    min_readiness_score: float = 0.0
+    min_effect_threshold: float = 0.03
+
+
+class RoleRoadmapRequest(BaseModel):
+    """Request for generating role-based career roadmap (Gantt chart)"""
+    session_id: str
+    model_id: str
+    source_member_code: str
+    target_role: str
+    min_frequency: float = 0.1
     min_total_score: float = 0.3
     min_readiness_score: float = 0.0
     min_effect_threshold: float = 0.03
@@ -499,6 +512,165 @@ async def generate_role_career_path(request: RoleCareerPathRequest):
         raise
     except Exception as e:
         logger.error(f"[ROLE_DASHBOARD] Error generating career path: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/career-roadmap")
+async def generate_role_career_roadmap(request: RoleRoadmapRequest):
+    """
+    Generate role-based career roadmap Gantt chart.
+
+    Args:
+        request: Contains session info, source member, target role, and filtering parameters
+
+    Returns:
+        Plotly Gantt chart as JSON
+    """
+    try:
+        # Get the trained model
+        recommender = session_manager.get_model(request.model_id)
+        if not recommender:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model '{request.model_id}' not found"
+            )
+
+        # Load data
+        data = load_and_transform_session_data(request.session_id)
+        members_df = data['members_clean']
+        member_competence_df = data['member_competence']
+        competence_master_df = data['competence_master']
+
+        # Get source skills
+        source_skills_codes = get_member_skills_codes(
+            member_competence_df,
+            request.source_member_code
+        )
+
+        # Calculate role skill frequency
+        role_data = calculate_role_skill_frequency(
+            members_df,
+            member_competence_df,
+            competence_master_df,
+            request.target_role,
+            request.min_frequency
+        )
+
+        if role_data["total_members"] == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"役職「{request.target_role}」のメンバーが見つかりません"
+            )
+
+        target_skills_codes = role_data["skill_codes"]
+
+        # Calculate gap
+        gap_codes = calculate_gap_skills(source_skills_codes, target_skills_codes)
+
+        # Get causal recommendations for the source member
+        all_recommendations = recommender.recommend(
+            request.source_member_code,
+            top_n=100  # Get many to filter later
+        )
+
+        if not all_recommendations:
+            return {
+                "success": True,
+                "gantt_chart": {},
+                "message": "推薦スキルが見つかりませんでした"
+            }
+
+        # Filter recommendations to only include gap skills with good scores
+        filtered_recommendations = []
+        for rec in all_recommendations:
+            # Get skill code from name
+            skill_info = competence_master_df[
+                competence_master_df['力量名'] == rec['competence_name']
+            ]
+
+            if len(skill_info) == 0:
+                continue
+
+            skill_code = skill_info.iloc[0]['力量コード']
+
+            # Only include if it's in the gap
+            if skill_code not in gap_codes:
+                continue
+
+            # Apply score filters
+            if rec['score'] < request.min_total_score:
+                continue
+
+            details = rec.get('details', {})
+            readiness = details.get('readiness_score_normalized', 0)
+
+            if readiness < request.min_readiness_score:
+                continue
+
+            filtered_recommendations.append({
+                "competence_code": skill_code,
+                "competence_name": rec['competence_name'],
+                "category": skill_info.iloc[0].get('カテゴリー', '未分類'),
+                "total_score": rec['score'],
+                "readiness_score": readiness,
+                "bayesian_score": details.get('bayesian_score_normalized', 0),
+                "utility_score": details.get('utility_score_normalized', 0),
+            })
+
+        # Calculate dependencies using causal adjacency matrix
+        adj_matrix = recommender.learner.get_adjacency_matrix()
+
+        # Build dependencies dict
+        dependencies = {}
+        
+        for skill in filtered_recommendations:
+            skill_name = skill['competence_name']
+            skill_code = skill['competence_code']
+
+            prerequisites = []
+            enables = []
+
+            if skill_name in adj_matrix.index and skill_name in adj_matrix.columns:
+                # Prerequisites
+                incoming = adj_matrix[skill_name]
+                for other_skill, effect in incoming.items():
+                    if abs(effect) >= request.min_effect_threshold and effect > 0:
+                        if any(s['competence_name'] == other_skill for s in filtered_recommendations):
+                            prerequisites.append({
+                                "skill_name": other_skill,
+                                "effect": float(effect)
+                            })
+
+                # Enables
+                outgoing = adj_matrix.loc[skill_name]
+                for other_skill, effect in outgoing.items():
+                    if abs(effect) >= request.min_effect_threshold and effect > 0:
+                        if any(s['competence_name'] == other_skill for s in filtered_recommendations):
+                            enables.append({
+                                "skill_name": other_skill,
+                                "effect": float(effect)
+                            })
+
+            dependencies[skill_code] = {
+                "prerequisites": prerequisites,
+                "enables": enables
+            }
+
+        # Create Gantt chart
+        target_name = f"役職: {request.target_role}"
+        fig_dict = create_gantt_chart(filtered_recommendations, dependencies, target_name)
+
+        return {
+            "success": True,
+            "gantt_chart": fig_dict,
+            "message": "ロードマップを生成しました"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ROLE_DASHBOARD] Error generating career roadmap: {e}")
         import traceback
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
