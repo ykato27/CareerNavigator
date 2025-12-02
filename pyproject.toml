@@ -84,3 +84,8 @@ python_files = "test_*.py"
 
 [tool.uv]
 link-mode = "copy"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+]
