@@ -1,4 +1,5 @@
 """Response schemas initialization."""
+
 from backend.schemas.response.common import (
     ErrorDetail,
     ErrorResponse,

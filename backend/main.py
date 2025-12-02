@@ -1,6 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.api import upload, recommendation, train, weights, graph, organizational, career_dashboard, role_based_dashboard
+from backend.api import (
+    upload,
+    recommendation,
+    train,
+    weights,
+    graph,
+    organizational,
+    career_dashboard,
+    role_based_dashboard,
+)
 from backend.middleware import error_handler_middleware, logging_middleware
 from backend.core.logging import configure_logging
 
@@ -12,7 +21,7 @@ app = FastAPI(
     description="AI-powered career recommendation system with causal inference",
     version="1.0.0",
     docs_url="/api/docs",
-    redoc_url="/api/redoc"
+    redoc_url="/api/redoc",
 )
 
 # Middleware registration order matters!
@@ -42,16 +51,17 @@ app.include_router(weights.router, prefix="/api", tags=["weights"])
 app.include_router(graph.router, prefix="/api", tags=["graph"])
 app.include_router(organizational.router, prefix="/api", tags=["organizational"])
 app.include_router(career_dashboard.router, prefix="/api/career", tags=["career-dashboard"])
-app.include_router(role_based_dashboard.router, prefix="/api/career/role", tags=["role-based-career"])
+app.include_router(
+    role_based_dashboard.router, prefix="/api/career/role", tags=["role-based-career"]
+)
+
 
 @app.get("/")
 async def root():
     return {"message": "Welcome to CareerNavigator API", "version": "1.0.0"}
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint for monitoring."""
-    return {
-        "status": "healthy",
-        "version": "1.0.0"
-    }
+    return {"status": "healthy", "version": "1.0.0"}

@@ -1,4 +1,5 @@
 """Core module initialization."""
+
 from backend.core.exceptions import (
     AppException,
     SessionNotFoundException,
