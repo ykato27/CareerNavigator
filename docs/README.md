@@ -1,97 +1,119 @@
 # CareerNavigator ドキュメント
 
-このディレクトリには、CareerNavigatorプロジェクトのすべての技術ドキュメントが含まれています。
+CareerNavigatorの包括的なドキュメントへようこそ。このガイドは、初心者からエキスパート開発者まで、すべてのユーザーをサポートします。
 
-## 📚 ドキュメント一覧
+## 📚 ドキュメント構成
 
-### アーキテクチャ・設計
+### [01-getting-started/](01-getting-started/) - 最初に読む
+初心者向けのガイドとクイックスタート
 
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - システムアーキテクチャの概要
-- **[API_REFERENCE.md](API_REFERENCE.md)** - APIリファレンス
-- **[CODE_STRUCTURE.md](CODE_STRUCTURE.md)** - コード構造ガイド
-- **[plantuml/](plantuml/)** - PlantUML図（アーキテクチャ/モジュール/クラス/シーケンス図等）
+- **[BEGINNER_GUIDE.md](01-getting-started/BEGINNER_GUIDE.md)** - 初心者向けコード理解ガイド
+- **[QUICKSTART.md](01-getting-started/QUICKSTART.md)** - クイックスタートガイド
+- **[data_model_specification.md](01-getting-started/data_model_specification.md)** - データモデル仕様
 
-### 開発ガイド
+### [02-user-guides/](02-user-guides/) - ユーザーガイド（Streamlit）
+Streamlitアプリケーションの使い方
 
-- **[WEBUI_INTRODUCTION_FOR_TEAM.md](WEBUI_INTRODUCTION_FOR_TEAM.md)** ⭐ **社内共有に最適！** - 非技術者向け紹介ガイド
-  - 取り組みの背景と解決したい課題、因果推論の説明、実際の使い方
-- **[QUICKSTART.md](QUICKSTART.md)** - クイックスタートガイド
-- **[BEGINNER_GUIDE.md](BEGINNER_GUIDE.md)** - 初心者向けガイド
-- **[REFACTORING_GUIDE.md](REFACTORING_GUIDE.md)** - リファクタリングガイド
-- **[STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md)** - Streamlit UI 開発ガイド
-- **[STREAMLIT_CLOUD_SETUP.md](STREAMLIT_CLOUD_SETUP.md)** - Streamlit Cloud セットアップ
+- **[STREAMLIT_GUIDE.md](02-user-guides/STREAMLIT_GUIDE.md)** - Streamlitアプリ完全ガイド
+- **[STREAMLIT_APPS.md](02-user-guides/STREAMLIT_APPS.md)** - Streamlitアプリ概要
+- **[STREAMLIT_CLOUD_SETUP.md](02-user-guides/STREAMLIT_CLOUD_SETUP.md)** - Streamlit Cloudデプロイガイド
 
-### 技術詳細
+### [03-webui/](03-webui/) - WebUIガイド
+React + FastAPI WebUIの使い方
 
-- **[ML_TECHNICAL_DETAILS.md](ML_TECHNICAL_DETAILS.md)** - 機械学習の技術詳細
-- **[MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md)** - モデル技術ガイド
-- **[HYBRID_RECOMMENDATION_SYSTEM.md](HYBRID_RECOMMENDATION_SYSTEM.md)** - ハイブリッド推薦システム
-- **[EVALUATION.md](EVALUATION.md)** - モデル評価ガイド
+- **[WEBUI_GUIDE.md](03-webui/WEBUI_GUIDE.md)** - WebUI開発者ガイド
+- **[WEBUI_INTRODUCTION_FOR_TEAM.md](03-webui/WEBUI_INTRODUCTION_FOR_TEAM.md)** - WebUI社内共有用ガイド ⭐
 
-### テスト
+### [04-technical/](04-technical/) - 技術詳細
+アルゴリズムと実装の技術解説
 
-- **[TESTING_QUICKSTART.md](TESTING_QUICKSTART.md)** - テストクイックスタート
-- **[TEST_DESIGN.md](TEST_DESIGN.md)** - テスト設計書
+#### [algorithms/](04-technical/algorithms/) - 推薦アルゴリズム
+- **[CAUSAL_RECOMMENDATION.md](04-technical/algorithms/CAUSAL_RECOMMENDATION.md)** - 因果推論ベース推薦
+- **[CAUSAL_RECOMMENDATION_THREE_STAGES.md](04-technical/algorithms/CAUSAL_RECOMMENDATION_THREE_STAGES.md)** - 3段階因果推論
+- **[CAUSAL_RECOMMENDATION_AUTO_OPTIMIZATION.md](04-technical/algorithms/CAUSAL_RECOMMENDATION_AUTO_OPTIMIZATION.md)** - 自動最適化
+- **[HYBRID_RECOMMENDATION_SYSTEM.md](04-technical/algorithms/HYBRID_RECOMMENDATION_SYSTEM.md)** - ハイブリッド推薦
+- **[ML_TECHNICAL_DETAILS.md](04-technical/algorithms/ML_TECHNICAL_DETAILS.md)** - ML技術詳細
+- **[ML_MODELS_REFERENCE.md](04-technical/algorithms/ML_MODELS_REFERENCE.md)** - MLモデルリファレンス
+- **[MODELS_TECHNICAL_GUIDE.md](04-technical/algorithms/MODELS_TECHNICAL_GUIDE.md)** - モデル技術ガイド
 
-### 機能別ドキュメント
+#### [sem/](04-technical/sem/) - 構造方程式モデリング
+- **[CAREER_PATH_SEM_MODEL.md](04-technical/sem/CAREER_PATH_SEM_MODEL.md)** - キャリアパスSEMモデル
+- **[NEW_SEM_FEATURES.md](04-technical/sem/NEW_SEM_FEATURES.md)** - SEM新機能
+- **[SEM_IMPLEMENTATION_SUMMARY.md](04-technical/sem/SEM_IMPLEMENTATION_SUMMARY.md)** - SEM実装まとめ
+- **[SEM_SCALABILITY_ANALYSIS.md](04-technical/sem/SEM_SCALABILITY_ANALYSIS.md)** - SEMスケーラビリティ分析
 
-#### メインアプリケーション
+#### その他
+- **[EVALUATION.md](04-technical/EVALUATION.md)** - 推薦システム評価ガイド
+- **[Recommendation_Algorithms_Explanation.pptx](04-technical/Recommendation_Algorithms_Explanation.pptx)** - アルゴリズム説明プレゼン
 
-- **[STREAMLIT_APPS.md](STREAMLIT_APPS.md)** - Streamlitアプリケーション完全ガイド
-  - データ読み込み、因果推論推薦、従業員キャリアダッシュボード、組織スキルマップの詳細
-- **[WEBUI_GUIDE.md](WEBUI_GUIDE.md)** - WebUI完全ガイド
-  - React + FastAPI構成、セットアップ、APIリファレンス、開発ワークフロー
+### [05-architecture/](05-architecture/) - アーキテクチャ・設計
+システム設計とコード構造
 
-#### 技術詳細・参考実装
+- **[ARCHITECTURE.md](05-architecture/ARCHITECTURE.md)** - システムアーキテクチャ
+- **[CODE_STRUCTURE.md](05-architecture/CODE_STRUCTURE.md)** - コード構造ガイド
+- **[REFACTORING_GUIDE.md](05-architecture/REFACTORING_GUIDE.md)** - リファクタリングガイド
+- **[API_REFERENCE.md](05-architecture/API_REFERENCE.md)** - APIリファレンス
+- **[plantuml/](05-architecture/plantuml/)** - PlantUML図（視覚的理解に最適）
 
-- **[CAUSAL_RECOMMENDATION.md](CAUSAL_RECOMMENDATION.md)** - 因果推論ベース推薦の技術詳細
-  - LiNGAMアルゴリズム、3軸スコアリング、Causalフィルタリング、スマートロードマップ
-- **[ML_MODELS_REFERENCE.md](ML_MODELS_REFERENCE.md)** - 機械学習/統計モデル参考資料
-  - Matrix Factorization、グラフベース推薦、ベイジアンネットワーク、SEM、ハイブリッド推薦
+### [06-testing/](06-testing/) - テスト
+テスト設計と実装ガイド
 
-#### SEM（構造方程式モデリング）
+- **[TESTING_QUICKSTART.md](06-testing/TESTING_QUICKSTART.md)** - テスト実装クイックスタート
+- **[TEST_DESIGN.md](06-testing/TEST_DESIGN.md)** - テスト設計書
 
-- **[SEM_IMPLEMENTATION_SUMMARY.md](SEM_IMPLEMENTATION_SUMMARY.md)** - SEM実装サマリー
-- **[CAREER_PATH_SEM_MODEL.md](CAREER_PATH_SEM_MODEL.md)** - キャリアパスSEMモデル
-- **[SEM_SCALABILITY_ANALYSIS.md](SEM_SCALABILITY_ANALYSIS.md)** - SEMスケーラビリティ分析
-- **[NEW_SEM_FEATURES.md](NEW_SEM_FEATURES.md)** - 新SEM機能紹介
+## 🎯 目的別ガイド
 
-## 🚀 推奨読書順序
+### プロジェクトを始める
+1. [BEGINNER_GUIDE.md](01-getting-started/BEGINNER_GUIDE.md) でプロジェクト構造を理解
+2. [QUICKSTART.md](01-getting-started/QUICKSTART.md) でセットアップ
+3. [data_model_specification.md](01-getting-started/data_model_specification.md) でデータ構造を確認
 
-### 初めての方
+### Streamlitアプリを使う
+1. [STREAMLIT_GUIDE.md](02-user-guides/STREAMLIT_GUIDE.md) で使い方を学ぶ
+2. [STREAMLIT_APPS.md](02-user-guides/STREAMLIT_APPS.md) で機能を確認
+3. [STREAMLIT_CLOUD_SETUP.md](02-user-guides/STREAMLIT_CLOUD_SETUP.md) でデプロイ（オプション）
 
-1. [WEBUI_INTRODUCTION_FOR_TEAM.md](WEBUI_INTRODUCTION_FOR_TEAM.md) ⭐ **まずはここから！** - システムの全体像と使い方
-2. [QUICKSTART.md](QUICKSTART.md) - プロジェクトの立ち上げ
-3. [BEGINNER_GUIDE.md](BEGINNER_GUIDE.md) - 基本概念の理解
-4. [plantuml/](plantuml/) - **視覚的理解**: システム図でアーキテクチャを把握
-5. [ARCHITECTURE.md](ARCHITECTURE.md) - システム全体像の詳細
-6. [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md) - UI操作方法
+### WebUIを使う・開発する
+1. [WEBUI_INTRODUCTION_FOR_TEAM.md](03-webui/WEBUI_INTRODUCTION_FOR_TEAM.md) で概要を理解 ⭐
+2. [WEBUI_GUIDE.md](03-webui/WEBUI_GUIDE.md) で開発方法を学ぶ
 
-### 開発者向け
+### アルゴリズムを理解する
+1. [MODELS_TECHNICAL_GUIDE.md](04-technical/algorithms/MODELS_TECHNICAL_GUIDE.md) で基礎を学ぶ
+2. [CAUSAL_RECOMMENDATION.md](04-technical/algorithms/CAUSAL_RECOMMENDATION.md) で因果推論を理解
+3. [ML_TECHNICAL_DETAILS.md](04-technical/algorithms/ML_TECHNICAL_DETAILS.md) でML詳細を確認
 
-1. [plantuml/](plantuml/) - **推奨開始点**: クラス図・シーケンス図でコード構造を視覚的に理解
-2. [CODE_STRUCTURE.md](CODE_STRUCTURE.md) - コード構造の詳細
-3. [REFACTORING_GUIDE.md](REFACTORING_GUIDE.md) - リファクタリング方針
-4. [TESTING_QUICKSTART.md](TESTING_QUICKSTART.md) - テストの書き方
-5. [API_REFERENCE.md](API_REFERENCE.md) - API仕様
+### システムを開発する
+1. [ARCHITECTURE.md](05-architecture/ARCHITECTURE.md) でアーキテクチャを理解
+2. [CODE_STRUCTURE.md](05-architecture/CODE_STRUCTURE.md) でコード構造を確認
+3. [API_REFERENCE.md](05-architecture/API_REFERENCE.md) でAPIを学ぶ
 
-### ML/データサイエンティスト向け
+### テストを書く
+1. [TESTING_QUICKSTART.md](06-testing/TESTING_QUICKSTART.md) でテスト実装を開始
+2. [TEST_DESIGN.md](06-testing/TEST_DESIGN.md) でテスト設計を確認
 
-1. [plantuml/](plantuml/) - **アルゴリズムフロー図**: 推薦アルゴリズムの処理フローを理解
-2. [ML_TECHNICAL_DETAILS.md](ML_TECHNICAL_DETAILS.md) - ML技術詳細
-3. [MODELS_TECHNICAL_GUIDE.md](MODELS_TECHNICAL_GUIDE.md) - モデルの詳細
-4. [HYBRID_RECOMMENDATION_SYSTEM.md](HYBRID_RECOMMENDATION_SYSTEM.md) - ハイブリッドアプローチ
-5. [SEM_IMPLEMENTATION_SUMMARY.md](SEM_IMPLEMENTATION_SUMMARY.md) - SEM実装の詳細
-6. [EVALUATION.md](EVALUATION.md) - 評価手法とメトリクス
+## 💡 おすすめドキュメント
 
-## 📝 ドキュメント更新
+### 🌟 初めての方に
+- **[BEGINNER_GUIDE.md](01-getting-started/BEGINNER_GUIDE.md)** - どのファイルから読むべきかわかりやすく説明
+- **[WEBUI_INTRODUCTION_FOR_TEAM.md](03-webui/WEBUI_INTRODUCTION_FOR_TEAM.md)** - 社内共有に最適な非技術者向けガイド
 
-新しいドキュメントを追加した場合は、このREADME.mdも更新してください。
+### 🔬 技術者向け
+- **[MODELS_TECHNICAL_GUIDE.md](04-technical/algorithms/MODELS_TECHNICAL_GUIDE.md)** - 推薦モデルの選び方と使い方
+- **[ARCHITECTURE.md](05-architecture/ARCHITECTURE.md)** - システム全体の設計思想
 
-### ドキュメント配置ルール
+### 📊 視覚的に理解したい方
+- **[plantuml/](05-architecture/plantuml/)** - PlantUML図でアーキテクチャを可視化
 
-- **ルート直下** (`/CareerNavigator/`): `README.md` と `CONTRIBUTING.md` のみ
-- **docs/** (`/CareerNavigator/docs/`): すべての技術ドキュメント
-- **モジュール内** (`skillnote_recommendation/*/`): 各モジュールの `README.md`
+## 🔗 関連リンク
 
-詳細は [../.claude/claude.md](../.claude/claude.md) の「フォルダ構成とファイル配置規約」を参照してください。
+- [プロジェクトREADME](../README.md)
+- [コントリビューションガイド](../CONTRIBUTING.md)
+- [GitHub Repository](https://github.com/ykato27/CareerNavigator)
+
+## 📝 ドキュメントの更新
+
+ドキュメントに誤りや改善点を見つけた場合は、GitHubでIssueまたはPull Requestを作成してください。
+
+---
+
+**最終更新:** 2025-12-02

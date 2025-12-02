@@ -1,0 +1,149 @@
+@startuml システムアーキテクチャ
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam rectangleBorderColor #333333
+skinparam rectangleBackgroundColor #E8F4F8
+skinparam arrowColor #4A90E2
+skinparam defaultFontName "Noto Sans CJK JP, IPAGothic, MS Gothic, sans-serif"
+
+title CareerNavigator システムアーキテクチャ（レイヤー構造） v4.0.0
+
+package "プレゼンテーション層 (Presentation Layer)" #E3F2FD {
+  package "WebUI Frontend (React + TypeScript)" #BBDEFB {
+    [力量管理ダッシュボード] as Dashboard
+    [データアップロード] as DataUpload
+    [モデル学習] as ModelTraining
+    [因果推論分析] as CausalAnalysis
+    [因果推論推薦] as CausalRec
+    [キャリアダッシュボード] as CareerDashboard
+    [組織スキルマップ] as SkillMap
+  }
+
+  package "Backend API (FastAPI)" #C8E6C9 {
+    [データアップロードAPI] as UploadAPI
+    [モデル学習API] as TrainAPI
+    [推薦API] as RecommendAPI
+    [重み調整API] as WeightAPI
+    [グラフ可視化API] as GraphAPI
+    [組織分析API] as OrgAPI
+    [キャリアAPI] as CareerAPI
+  }
+
+  Dashboard --> RecommendAPI
+  DataUpload --> UploadAPI
+  ModelTraining --> TrainAPI
+  ModelTraining --> WeightAPI
+  CausalAnalysis --> RecommendAPI
+  CausalRec --> RecommendAPI
+  CausalRec --> GraphAPI
+  CareerDashboard --> CareerAPI
+  SkillMap --> OrgAPI
+}
+
+package "アプリケーション層 (Application Layer)" #E8F5E9 {
+  [ビジネスロジック] as BusinessLogic #C8E6C9
+  [推薦オーケストレーター] as Orchestrator
+  [評価システム] as Evaluation
+  [ロールモデル検索] as RoleModel
+  [データ品質監視] as DataQuality
+
+  BusinessLogic -down-> Orchestrator
+  BusinessLogic -down-> Evaluation
+  BusinessLogic -down-> RoleModel
+  BusinessLogic -down-> DataQuality
+}
+
+package "ドメイン層 (Domain Layer)" #FFF3E0 {
+  package "因果推論モジュール (Causal)" #FFCCBC {
+    [因果グラフ推薦器] as CausalRecommender
+    [因果グラフ構築 (LiNGAM)] as CausalGraph
+    [3軸スコアリング] as Scoring
+    [依存関係分析] as DependencyAnalyzer
+  }
+
+  package "グラフモジュール (Graph)" #FFE0B2 {
+    [知識グラフ構築] as KnowledgeGraph
+    [因果キャリアパス生成] as CareerPath
+  }
+
+  package "コアモジュール (Core)" #F3E5F5 {
+    [データモデル] as Models
+    [データローダー] as DataLoader
+    [データ変換器] as DataTransformer
+  }
+
+  CausalRecommender --> CausalGraph
+  CausalRecommender --> Scoring
+  CausalRecommender --> DependencyAnalyzer
+
+  CareerPath --> KnowledgeGraph
+  CareerPath --> CausalGraph
+
+  CausalRecommender --> Models
+  CareerPath --> Models
+}
+
+package "インフラストラクチャ層 (Infrastructure Layer)" #ECEFF1 {
+  package "永続化層" #B0BEC5 {
+    database "CSV Files" as CSV
+    database "Trained Models" as Models_Storage
+  }
+
+  package "共通基盤" #90A4AE {
+    [設定管理] as Config
+    [ロギング] as Logging
+    [エラーハンドラー] as ErrorHandler
+  }
+
+  DataLoader --> CSV
+  DataTransformer --> DataLoader
+}
+
+' レイヤー間の依存関係
+UploadAPI --> DataLoader
+TrainAPI --> CausalRecommender
+TrainAPI --> Models_Storage
+RecommendAPI --> CausalRecommender
+WeightAPI --> CausalRecommender
+GraphAPI --> KnowledgeGraph
+CareerAPI --> CareerPath
+OrgAPI --> DataTransformer
+
+Orchestrator --> CausalRecommender
+Orchestrator --> CareerPath
+
+note right of Dashboard
+  モダンWeb UI
+  ・React 18 + TypeScript
+  ・Vite (ビルドツール)
+  ・Tailwind CSS v4
+  ・Recharts (可視化)
+end note
+
+note right of CausalGraph
+  因果推論エンジン
+  ・LiNGAMアルゴリズム
+  ・スキル依存関係抽出
+  ・3軸スコアリング
+  　- Readiness (準備完了度)
+  　- Probability (習得確率)
+  　- Utility (有用性)
+end note
+
+note right of UploadAPI
+  FastAPI REST API
+  ・データアップロード
+  ・モデル学習 (LiNGAM)
+  ・推薦生成
+  ・重み調整 (手動/自動)
+  ・グラフ可視化
+end note
+
+legend right
+  |<#E3F2FD> プレゼンテーション層 |
+  |<#E8F5E9> アプリケーション層 |
+  |<#FFF3E0> ドメイン層 |
+  |<#ECEFF1> インフラストラクチャ層 |
+endlegend
+
+@enduml
