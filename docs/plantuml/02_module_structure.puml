@@ -7,22 +7,60 @@ skinparam componentBackgroundColor #BBDEFB
 skinparam arrowColor #4A90E2
 skinparam defaultFontName "Noto Sans CJK JP, IPAGothic, MS Gothic, sans-serif"
 
-title CareerNavigator モジュール構成図 v3.0.0
+title CareerNavigator モジュール構成図 v4.0.0
 
-package "Frontend (React)" #E3F2FD {
+package "Frontend (React + TypeScript)" #E3F2FD {
   component "App.tsx" as App
-  component "pages/EmployeeCareerDashboard.tsx" as DashboardUI
-  component "components/*" as Components
-  
-  App --> DashboardUI
-  DashboardUI --> Components
+
+  package "pages" {
+    component "Dashboard.tsx" as DashboardPage
+    component "DataUpload.tsx" as DataUploadPage
+    component "ModelTraining.tsx" as TrainingPage
+    component "CausalRecommendation.tsx" as CausalRecPage
+    component "EmployeeCareerDashboard.tsx" as CareerPage
+    component "OrganizationalSkillMap.tsx" as SkillMapPage
+    component "CausalAnalysis.tsx" as AnalysisPage
+  }
+
+  package "components" {
+    component "UI Components" as Components
+    component "Chart Components" as Charts
+  }
+
+  App --> DashboardPage
+  App --> DataUploadPage
+  App --> TrainingPage
+  App --> CausalRecPage
+  App --> CareerPage
+  App --> SkillMapPage
+  App --> AnalysisPage
+
+  DashboardPage --> Components
+  CareerPage --> Components
+  CareerPage --> Charts
+  SkillMapPage --> Charts
 }
 
 package "Backend (FastAPI)" #E8F5E9 {
   component "main.py" as Main
-  component "api/career_dashboard.py" as CareerAPI
-  component "api/role_based_dashboard.py" as RoleAPI
-  
+
+  package "api" {
+    component "upload.py" as UploadAPI
+    component "train.py" as TrainAPI
+    component "recommendation.py" as RecAPI
+    component "weights.py" as WeightsAPI
+    component "graph.py" as GraphAPI
+    component "organizational.py" as OrgAPI
+    component "career_dashboard.py" as CareerAPI
+    component "role_based_dashboard.py" as RoleAPI
+  }
+
+  Main --> UploadAPI
+  Main --> TrainAPI
+  Main --> RecAPI
+  Main --> WeightsAPI
+  Main --> GraphAPI
+  Main --> OrgAPI
   Main --> CareerAPI
   Main --> RoleAPI
 }
@@ -33,30 +71,20 @@ package "skillnote_recommendation" {
     component "models.py\n[データモデル]" as Models #C8E6C9
     component "data_loader.py\n[データ読み込み]" as DataLoader #C8E6C9
     component "data_transformer.py\n[データ変換]" as DataTransformer #C8E6C9
-    component "evaluator.py\n[推薦評価]" as Evaluator #C8E6C9
-    component "reference_persons.py\n[ロールモデル検索]" as RefPersons #C8E6C9
-  }
-
-  package "ml (機械学習モジュール)" #FFF3E0 {
-    component "ml_recommender.py\n[ML推薦エンジン]" as MLRecommender #FFE0B2
-    component "matrix_factorization.py\n[NMF実装]" as MatrixFactorization #FFE0B2
-    component "diversity.py\n[多様性再ランキング]" as Diversity #FFE0B2
   }
 
   package "graph (グラフモジュール)" #E3F2FD {
     component "knowledge_graph.py\n[知識グラフ構築]" as KnowledgeGraph #BBDEFB
-    component "hybrid_recommender.py\n[ハイブリッド推薦]" as HybridRecommender #BBDEFB
-    component "career_path.py\n[キャリアパス分析]" as CareerPath #BBDEFB
-    
+
     package "causal (因果推論)" #E1BEE7 {
-      component "causal_graph_recommender.py\n[因果グラフ推薦]" as CausalRec #F3E5F5
-      component "causal_career_path.py\n[因果パス生成]" as CausalPath #F3E5F5
+      component "causal_graph_recommender.py\n[因果グラフ推薦器]" as CausalRec #F3E5F5
+      component "causal_career_path.py\n[因果キャリアパス]" as CausalPath #F3E5F5
       component "dependency_analyzer.py\n[依存関係分析]" as DepAnalyzer #F3E5F5
     }
   }
 
   package "utils (ユーティリティ)" #F3E5F5 {
-    component "visualization.py" as Visualization #E1BEE7
+    component "visualization.py\n[可視化]" as Visualization #E1BEE7
   }
 }
 
@@ -67,29 +95,55 @@ RoleAPI --> CausalPath : "使用"
 CausalRec --> DepAnalyzer
 CausalRec --> Models
 CausalPath --> CausalRec
+CausalPath --> KnowledgeGraph
 
-MLRecommender --> MatrixFactorization
-MLRecommender --> Diversity
+' Frontend から Backend への依存関係
+DataUploadPage --> UploadAPI
+TrainingPage --> TrainAPI
+TrainingPage --> WeightsAPI
+CausalRecPage --> RecAPI
+CausalRecPage --> GraphAPI
+CareerPage --> CareerAPI
+SkillMapPage --> OrgAPI
 
-HybridRecommender --> KnowledgeGraph
-HybridRecommender --> MatrixFactorization
+' Backend から Domain への依存関係
+UploadAPI --> DataLoader
+TrainAPI --> CausalRec
+RecAPI --> CausalRec
+WeightsAPI --> CausalRec
+GraphAPI --> KnowledgeGraph
+OrgAPI --> DataTransformer
 
 ' 外部からの利用
 note top of Main
   FastAPI エントリーポイント
+  ・CORS設定
+  ・ルーティング
+  ・エラーハンドリング
 end note
 
 note top of CausalRec
   因果推論エンジン
-  ・LiNGAM
+  ・LiNGAM (DirectLiNGAM)
   ・3軸スコアリング
+  　- Readiness (準備完了度)
+  　- Probability (習得確率)
+  　- Utility (有用性)
+  ・ベイズ最適化 (Optuna)
+end note
+
+note top of App
+  React アプリケーション
+  ・React Router
+  ・ナビゲーション
+  ・レイアウト管理
 end note
 
 legend right
-  |<#E3F2FD> Frontend |Reactアプリ |
-  |<#E8F5E9> Backend |FastAPIアプリ |
-  |<#FFF3E0> ML |機械学習 |
+  |<#E3F2FD> Frontend |React + TypeScript |
+  |<#E8F5E9> Backend API |FastAPI |
   |<#E3F2FD> Graph |グラフ/因果推論 |
+  |<#F3E5F5> Utils |可視化/ユーティリティ |
 endlegend
 
 @enduml
