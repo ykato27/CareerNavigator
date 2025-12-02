@@ -18,6 +18,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { CareerRoadmapGantt } from '../components/CareerRoadmapGantt';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
 
 // =========================================================
 // Type Definitions
@@ -177,7 +178,7 @@ export const EmployeeCareerDashboard = () => {
   const loadAvailableMembers = async (sid: string) => {
     setLoadingMembers(true);
     try {
-      const response = await axios.get(`http://localhost:8000/api/career/members`, {
+      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.CAREER_MEMBERS}`, {
         params: { session_id: sid }
       });
       setAvailableMembers(response.data.members);
@@ -194,7 +195,7 @@ export const EmployeeCareerDashboard = () => {
   // =========================================================
   const loadAvailableRoles = async (sid: string) => {
     try {
-      const response = await axios.get(`http://localhost:8000/api/career/roles`, {
+      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.CAREER_ROLES}`, {
         params: { session_id: sid }
       });
       if (response.data.success) {
@@ -215,7 +216,7 @@ export const EmployeeCareerDashboard = () => {
     setError('');
 
     try {
-      const response = await axios.post(`http://localhost:8000/api/career/member-skills`, {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.CAREER_MEMBER_SKILLS}`, {
         session_id: sessionId,
         member_code: memberCode
       });
@@ -238,7 +239,7 @@ export const EmployeeCareerDashboard = () => {
     if (!sessionId) return;
 
     try {
-      const response = await axios.post('http://localhost:8000/api/career/member-skills', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.CAREER_MEMBER_SKILLS}`, {
         session_id: sessionId,
         member_code: memberCode
       });
@@ -261,7 +262,7 @@ export const EmployeeCareerDashboard = () => {
     setLoadingGraph(true);
 
     try {
-      const response = await axios.post('http://localhost:8000/api/graph/ego', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.GRAPH_EGO}`, {
         model_id: modelId,
         center_node: skillName,
         radius: graphRadius,
@@ -313,7 +314,7 @@ export const EmployeeCareerDashboard = () => {
     setCareerPath(null);
 
     try {
-      let endpoint = `http://localhost:8000/api/career/gap-analysis`;
+      let endpoint = `${API_BASE_URL}${API_ENDPOINTS.CAREER_GAP_ANALYSIS}`;
       let payload: any = {
         session_id: sessionId,
         model_id: modelId,
@@ -323,7 +324,7 @@ export const EmployeeCareerDashboard = () => {
       };
 
       if (targetSelectionMode === 'role') {
-        endpoint = `http://localhost:8000/api/career/role/gap-analysis`;
+        endpoint = `${API_BASE_URL}${API_ENDPOINTS.CAREER_ROLE_GAP_ANALYSIS}`;
         payload.target_role = selectedRole;
         payload.min_frequency = minRoleFrequency;
       } else {
@@ -352,7 +353,7 @@ export const EmployeeCareerDashboard = () => {
     setCareerPath(null);
 
     try {
-      let endpoint = `http://localhost:8000/api/career/career-path`;
+      let endpoint = `${API_BASE_URL}${API_ENDPOINTS.CAREER_PATH}`;
       let payload: any = {
         session_id: sessionId,
         model_id: modelId,
@@ -363,7 +364,7 @@ export const EmployeeCareerDashboard = () => {
       };
 
       if (targetSelectionMode === 'role') {
-        endpoint = `http://localhost:8000/api/career/role/career-path`;
+        endpoint = `${API_BASE_URL}${API_ENDPOINTS.CAREER_ROLE_PATH}`;
         payload.target_role = selectedRole;
         payload.min_frequency = minRoleFrequency;
       } else {
@@ -407,7 +408,7 @@ export const EmployeeCareerDashboard = () => {
     setGanttChart(null);
 
     try {
-      let endpoint = `http://localhost:8000/api/career/career-roadmap`;
+      let endpoint = `${API_BASE_URL}${API_ENDPOINTS.CAREER_ROADMAP}`;
       let payload: any = {
         session_id: sessionId,
         model_id: modelId,
@@ -418,7 +419,7 @@ export const EmployeeCareerDashboard = () => {
       };
 
       if (targetSelectionMode === 'role') {
-        endpoint = `http://localhost:8000/api/career/role/career-roadmap`;
+        endpoint = `${API_BASE_URL}${API_ENDPOINTS.CAREER_ROLE_ROADMAP}`;
         payload.target_role = selectedRole;
         payload.min_frequency = minRoleFrequency;
       } else {
@@ -457,7 +458,7 @@ export const EmployeeCareerDashboard = () => {
       if (targetSelectionMode === 'role' && selectedRole && sessionId) {
         setLoadingRoleStats(true);
         try {
-          const response = await axios.post('http://localhost:8000/api/career/role/role-skills', {
+          const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.CAREER_ROLE_SKILLS}`, {
             session_id: sessionId,
             role_name: selectedRole,
             min_frequency: minRoleFrequency

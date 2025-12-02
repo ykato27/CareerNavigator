@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Brain, Sliders, TrendingUp, Zap, Loader2, AlertCircle, CheckCircle, Info } from 'lucide-react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
 
 interface TrainingSummary {
   num_members: number;
@@ -62,7 +63,7 @@ export const ModelTraining = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8000/api/weights/optimize', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.WEIGHTS_OPTIMIZE}`, {
         model_id: modelId,
         n_trials: nTrials,
         n_jobs: -1,
@@ -72,7 +73,7 @@ export const ModelTraining = () => {
 
       // Re-train with optimized weights
       setTraining(true);
-      const trainResponse = await axios.post('http://localhost:8000/api/train', {
+      const trainResponse = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.TRAIN}`, {
         session_id: sessionId!,
         min_members_per_skill: minMembers,
         correlation_threshold: corrThreshold,
@@ -108,7 +109,7 @@ export const ModelTraining = () => {
         utility: utilityWeight
       };
 
-      const response = await axios.post('http://localhost:8000/api/train', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.TRAIN}`, {
         session_id: sessionId,
         min_members_per_skill: minMembers,
         correlation_threshold: corrThreshold,

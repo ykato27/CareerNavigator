@@ -46,8 +46,33 @@ uv run uvicorn backend.main:app --reload --port 8000
 ```bash
 cd frontend
 npm install
+
+# 環境変数の設定（初回のみ）
+# .env.example をコピーして .env.local を作成
+cp .env.example .env.local
+
+# 必要に応じて .env.local の VITE_API_BASE_URL を編集
+# デフォルトは http://localhost:8000
+
 npm run dev
 ```
+
+### 環境変数の設定
+
+フロントエンドはViteの環境変数を使用してAPIのURLを管理します。
+
+#### ローカル開発
+- `frontend/.env.local` ファイルで設定
+- デフォルト値: `VITE_API_BASE_URL=http://localhost:8000`
+
+#### 本番環境
+- `frontend/.env.production` ファイルで設定
+- 本番APIのURLに変更してください
+- 例: `VITE_API_BASE_URL=https://your-api-domain.com`
+
+#### デプロイメント設定
+- **Vercel**: `frontend/vercel.json` を使用し、環境変数は Vercel ダッシュボードで設定
+- **Netlify**: `netlify.toml` を使用し、環境変数は Netlify ダッシュボードで設定
 
 ### アクセス
 - **フロントエンド**: http://localhost:5173
@@ -77,6 +102,35 @@ npm run dev
 - **Frontend**: React 18, TypeScript, Vite, Tailwind CSS v4, Axios
 - **Backend**: FastAPI, LiNGAM, Pyvis, NetworkX, Optuna
 - **ML**: 因果推論（LiNGAM）、ベイジアンネットワーク、ベイズ最適化
+
+## デプロイメント
+
+### Vercel へのデプロイ
+
+1. Vercel プロジェクトを作成
+2. リポジトリを接続
+3. `frontend` ディレクトリをルートディレクトリとして設定
+4. 環境変数を設定:
+   - `VITE_API_BASE_URL`: 本番APIのURL
+5. デプロイ実行
+
+### Netlify へのデプロイ
+
+1. Netlify プロジェクトを作成
+2. リポジトリを接続
+3. `netlify.toml` の設定を使用
+4. 環境変数を設定:
+   - `VITE_API_BASE_URL`: 本番APIのURL
+5. デプロイ実行
+
+### バックエンドのデプロイ
+
+バックエンドは以下のプラットフォームでデプロイ可能:
+- **Railway**: FastAPI対応
+- **Render**: 無料プランあり
+- **AWS/GCP/Azure**: コンテナまたはサーバーレス
+
+環境変数やCORSの設定を適切に行ってください。
 
 ## 旧Streamlit版との互換性
 

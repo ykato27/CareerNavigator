@@ -2,6 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { Brain, Settings, Play, CheckCircle2, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
 
 interface ModelTrainingProps {
   sessionId?: string;
@@ -30,7 +31,7 @@ export const ModelTraining = ({ sessionId: _sessionId, onTrainingComplete }: Mod
         return;
       }
 
-      const response = await axios.post('http://localhost:8000/api/train', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.TRAIN}`, {
         session_id: sessionId,
         min_members: minMembers,
         correlation_threshold: correlationThreshold,

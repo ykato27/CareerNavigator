@@ -5,6 +5,7 @@ import {
   AlertCircle, Info, Loader2, BarChart3,
   Target, Award, Clock
 } from 'lucide-react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
 
 interface OrganizationalMetrics {
   total_members: number;
@@ -81,7 +82,7 @@ export const OrganizationalSkillMap = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8000/api/organizational/metrics', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.ORG_METRICS}`, {
         session_id: sessionId
       });
 
@@ -101,7 +102,7 @@ export const OrganizationalSkillMap = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8000/api/organizational/skill-gap', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.ORG_SKILL_GAP}`, {
         session_id: sessionId,
         percentile: percentile / 100
       });
@@ -123,7 +124,7 @@ export const OrganizationalSkillMap = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8000/api/organizational/succession', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.ORG_SUCCESSION}`, {
         session_id: sessionId,
         target_position: targetPosition,
         max_candidates: 20
