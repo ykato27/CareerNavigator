@@ -2,6 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { Network, Globe, AlertCircle, Loader } from 'lucide-react';
 import { clsx } from 'clsx';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
 
 interface GraphVisualizationProps {
   modelId: string | null;
@@ -31,12 +32,12 @@ export const GraphVisualization = ({ modelId, competenceCode, recommendations: _
           setError("力量コードが指定されていません");
           return;
         }
-        response = await axios.post('http://localhost:8000/api/graph/ego', {
+        response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.GRAPH_EGO}`, {
           model_id: modelId,
           competence_code: competenceCode
         });
       } else {
-        response = await axios.post('http://localhost:8000/api/graph/full', {
+        response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.GRAPH_FULL}`, {
           model_id: modelId
         });
       }

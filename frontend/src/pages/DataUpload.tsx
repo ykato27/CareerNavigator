@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FileText, CheckCircle, AlertCircle, X, Plus } from 'lucide-react';
 import axios from 'axios';
 import { clsx } from 'clsx';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
 
 const FileUploadCard = ({
     label,
@@ -127,7 +128,7 @@ export const DataUpload = () => {
         });
 
         try {
-            const response = await axios.post('http://localhost:8000/api/upload', formData, {
+            const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.UPLOAD}`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 

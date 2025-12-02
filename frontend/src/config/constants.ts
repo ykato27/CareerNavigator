@@ -30,8 +30,24 @@ export const API_ENDPOINTS = {
   GRAPH_FULL: `${API_PREFIX}/graph/full`,
 
   // Weights
-  WEIGHTS: `${API_PREFIX}/weights`,
+  WEIGHTS: (modelId: string) => `${API_PREFIX}/weights/${modelId}`,
+  WEIGHTS_UPDATE: `${API_PREFIX}/weights/update`,
   WEIGHTS_OPTIMIZE: `${API_PREFIX}/weights/optimize`,
+
+  // Session
+  SESSION_MEMBERS: (sessionId: string) => `${API_PREFIX}/session/${sessionId}/members`,
+
+  // Career
+  CAREER_MEMBERS: `${API_PREFIX}/career/members`,
+  CAREER_ROLES: `${API_PREFIX}/career/roles`,
+  CAREER_MEMBER_SKILLS: `${API_PREFIX}/career/member-skills`,
+  CAREER_GAP_ANALYSIS: `${API_PREFIX}/career/gap-analysis`,
+  CAREER_ROLE_GAP_ANALYSIS: `${API_PREFIX}/career/role/gap-analysis`,
+  CAREER_PATH: `${API_PREFIX}/career/career-path`,
+  CAREER_ROLE_PATH: `${API_PREFIX}/career/role/career-path`,
+  CAREER_ROADMAP: `${API_PREFIX}/career/career-roadmap`,
+  CAREER_ROLE_ROADMAP: `${API_PREFIX}/career/role/career-roadmap`,
+  CAREER_ROLE_SKILLS: `${API_PREFIX}/career/role/role-skills`,
 
   // Organizational
   ORG_METRICS: `${API_PREFIX}/organizational/metrics`,

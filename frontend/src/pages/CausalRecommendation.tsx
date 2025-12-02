@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Brain, TrendingUp, AlertCircle, Loader2, Network, Info, ChevronDown, ChevronUp, Settings } from 'lucide-react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
 
 interface Member {
   member_code: string;
@@ -84,7 +85,7 @@ export const CausalRecommendation = () => {
   const loadMembers = async (sid: string) => {
     setLoadingMembers(true);
     try {
-      const response = await axios.get(`http://localhost:8000/api/session/${sid}/members`);
+      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.SESSION_MEMBERS(sid)}`);
       setMembers(response.data.members);
     } catch (err: any) {
       console.error('Failed to load members:', err);
@@ -97,7 +98,7 @@ export const CausalRecommendation = () => {
     if (!sessionId) return;
 
     try {
-      const response = await axios.post('http://localhost:8000/api/career/member-skills', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.CAREER_MEMBER_SKILLS}`, {
         session_id: sessionId,
         member_code: memberCode
       });
@@ -116,7 +117,7 @@ export const CausalRecommendation = () => {
 
     setLoadingWeights(true);
     try {
-      const response = await axios.get(`http://localhost:8000/api/weights/${modelId}`);
+      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.WEIGHTS(modelId)}`);
       const weights = response.data.weights;
       setCurrentWeights(weights);
       setReadinessWeight(weights.readiness);
@@ -139,7 +140,7 @@ export const CausalRecommendation = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8000/api/weights/update', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.WEIGHTS_UPDATE}`, {
         model_id: modelId,
         weights: {
           readiness: readinessWeight,
@@ -171,7 +172,7 @@ export const CausalRecommendation = () => {
 
       // Then get recommendations
       const response = await axios.post<RecommendationResponse>(
-        'http://localhost:8000/api/recommend',
+        `${API_BASE_URL}${API_ENDPOINTS.RECOMMEND}`,
         {
           model_id: modelId,
           member_id: selectedMember,
@@ -193,7 +194,7 @@ export const CausalRecommendation = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8000/api/graph/ego', {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.GRAPH_EGO}`, {
         model_id: modelId,
         center_node: skillCode || skillName,
         radius: graphRadius,

@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { useNavigate } from 'react-router-dom';
 import { ModelTraining } from '../components/ModelTraining';
 import { GraphVisualization } from '../components/GraphVisualization';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
 
 interface Recommendation {
     rank: number;
@@ -63,7 +64,7 @@ export const CausalAnalysis = () => {
         setError(null);
 
         try {
-            const response = await axios.post('http://localhost:8000/api/recommend', {
+            const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.RECOMMEND}`, {
                 model_id: modelId,
                 member_id: memberId,
                 top_n: 10
