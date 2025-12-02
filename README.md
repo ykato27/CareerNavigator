@@ -623,7 +623,14 @@ uv pip install -e .
 
 ### 🎓 初心者向けドキュメント
 
-- **[初心者向けコード理解ガイド (docs/BEGINNER_GUIDE.md)](docs/BEGINNER_GUIDE.md)** ⭐ **まずはここから！**
+- **[WebUI社内共有用ガイド (docs/WEBUI_INTRODUCTION_FOR_TEAM.md)](docs/WEBUI_INTRODUCTION_FOR_TEAM.md)** ⭐ **社内共有に最適！**
+  - 取り組みの背景と解決したい課題
+  - 因果推論ベース推薦システムの説明（初学者向け）
+  - WebUIで提供している機能の詳細
+  - 実際の使い方（シナリオ別）
+  - よくある質問と回答
+
+- **[初心者向けコード理解ガイド (docs/BEGINNER_GUIDE.md)](docs/BEGINNER_GUIDE.md)** ⭐ **開発者向け！**
   - どのファイルが実行ファイルで、どのファイルがライブラリコードか
   - 各ファイルの役割を分かりやすく説明
   - コードの読み方・学習の進め方

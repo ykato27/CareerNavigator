@@ -13,6 +13,8 @@
 
 ### 開発ガイド
 
+- **[WEBUI_INTRODUCTION_FOR_TEAM.md](WEBUI_INTRODUCTION_FOR_TEAM.md)** ⭐ **社内共有に最適！** - 非技術者向け紹介ガイド
+  - 取り組みの背景と解決したい課題、因果推論の説明、実際の使い方
 - **[QUICKSTART.md](QUICKSTART.md)** - クイックスタートガイド
 - **[BEGINNER_GUIDE.md](BEGINNER_GUIDE.md)** - 初心者向けガイド
 - **[REFACTORING_GUIDE.md](REFACTORING_GUIDE.md)** - リファクタリングガイド
@@ -58,11 +60,12 @@
 
 ### 初めての方
 
-1. [QUICKSTART.md](QUICKSTART.md) - プロジェクトの立ち上げ
-2. [BEGINNER_GUIDE.md](BEGINNER_GUIDE.md) - 基本概念の理解
-3. [plantuml/](plantuml/) - **視覚的理解**: システム図でアーキテクチャを把握
-4. [ARCHITECTURE.md](ARCHITECTURE.md) - システム全体像の詳細
-5. [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md) - UI操作方法
+1. [WEBUI_INTRODUCTION_FOR_TEAM.md](WEBUI_INTRODUCTION_FOR_TEAM.md) ⭐ **まずはここから！** - システムの全体像と使い方
+2. [QUICKSTART.md](QUICKSTART.md) - プロジェクトの立ち上げ
+3. [BEGINNER_GUIDE.md](BEGINNER_GUIDE.md) - 基本概念の理解
+4. [plantuml/](plantuml/) - **視覚的理解**: システム図でアーキテクチャを把握
+5. [ARCHITECTURE.md](ARCHITECTURE.md) - システム全体像の詳細
+6. [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md) - UI操作方法
 
 ### 開発者向け
 
