@@ -84,3 +84,8 @@ yarn-error.log*
 
 # Backend temporary uploads
 backend/temp_uploads/
+
+# Test coverage reports
+coverage.json
+.coverage
+htmlcov/
