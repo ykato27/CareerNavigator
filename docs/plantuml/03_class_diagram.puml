@@ -6,7 +6,7 @@ skinparam classBorderColor #333333
 skinparam arrowColor #4A90E2
 skinparam defaultFontName "Noto Sans CJK JP, IPAGothic, MS Gothic, sans-serif"
 
-title CareerNavigator 主要クラス図
+title CareerNavigator 主要クラス図 v4.0.0
 
 package "データモデル (core/models.py)" {
   class Member {
@@ -28,7 +28,6 @@ package "データモデル (core/models.py)" {
     + category: str
     + description: Optional[str]
     + level: Optional[int]
-    + prerequisites: List[str]
     --
     + __post_init__()
     + validate()
@@ -45,10 +44,46 @@ package "データモデル (core/models.py)" {
     + competence_code: str
     + level: int
     + acquired_date: Optional[str]
-    + proficiency_score: Optional[float]
     --
     + __post_init__()
     + validate()
+  }
+
+  Member "1" -- "*" MemberCompetence : "取得"
+  Competence "1" -- "*" MemberCompetence : "取得者"
+  Competence -- CompetenceType : "タイプ"
+}
+
+package "因果推論エンジン (graph/causal)" {
+  class CausalGraphRecommender {
+    - lingam_model: DirectLiNGAM
+    - dependency_analyzer: DependencyAnalyzer
+    - weights: Dict[str, float]
+    --
+    + train(data: pd.DataFrame, params: TrainParams): void
+    + recommend(member_code: str, top_k: int): List[Recommendation]
+    + update_weights(weights: Dict[str, float]): void
+    + optimize_weights(objective: str): Dict[str, float]
+    + get_causal_graph(): nx.DiGraph
+  }
+
+  class DependencyAnalyzer {
+    - adjacency_matrix: np.ndarray
+    - competence_map: Dict
+    --
+    + analyze_dependencies(competence_code: str): Dict
+    + get_prerequisites(competence_code: str): List[str]
+    + get_dependents(competence_code: str): List[str]
+    + compute_causal_path(from_code: str, to_code: str): List[str]
+  }
+
+  class CausalCareerPath {
+    - causal_graph: nx.DiGraph
+    - knowledge_graph: KnowledgeGraph
+    --
+    + generate_career_path(member_code: str, target_role: str): CareerPath
+    + analyze_skill_progression(member_code: str): Dict
+    + find_optimal_path(from_skills: List, to_skills: List): List
   }
 
   class Recommendation {
@@ -56,144 +91,20 @@ package "データモデル (core/models.py)" {
     + competence_name: str
     + competence_type: CompetenceType
     + category: str
-    + priority_score: float
-    + reason: str
-    + reference_persons: List[ReferencePerson]
-    + confidence_score: Optional[float]
-    + diversity_score: Optional[float]
+    + readiness_score: float
+    + probability_score: float
+    + utility_score: float
+    + total_score: float
+    + causal_reasoning: str
     --
     + __post_init__()
     + to_dict(): Dict
   }
 
-  class ReferencePerson {
-    + member_code: str
-    + member_name: str
-    + role: Optional[str]
-    + similarity_score: float
-    + shared_competences: List[str]
-    + career_path: List[str]
-    --
-    + __post_init__()
-  }
-
-  class TransformedData {
-    + members: List[Member]
-    + competences: List[Competence]
-    + member_competences: List[MemberCompetence]
-    + member_competence_matrix: pd.DataFrame
-    + competence_features: pd.DataFrame
-    --
-    + get_member_by_code(code: str): Member
-    + get_competence_by_code(code: str): Competence
-    + get_member_competences(member_code: str): List[MemberCompetence]
-  }
-
-  Member "1" -- "*" MemberCompetence : "取得"
-  Competence "1" -- "*" MemberCompetence : "取得者"
-  Competence -- CompetenceType : "タイプ"
-  Recommendation "*" -- "*" ReferencePerson : "参照"
+  CausalGraphRecommender o-- DependencyAnalyzer
+  CausalGraphRecommender ..> Recommendation : "生成"
+  CausalCareerPath o-- CausalGraphRecommender
   Recommendation -- Competence : "推薦"
-  TransformedData "1" *-- "*" Member
-  TransformedData "1" *-- "*" Competence
-  TransformedData "1" *-- "*" MemberCompetence
-}
-
-package "推薦エンジン" {
-  abstract class BaseRecommender {
-    # config: RecommendationConfig
-    # logger: Logger
-    --
-    + {abstract} fit(data: TransformedData): void
-    + {abstract} recommend(member_code: str, top_k: int): List[Recommendation]
-    + {abstract} get_model_info(): Dict
-  }
-
-  class MLRecommender {
-    - matrix_factorization: MatrixFactorization
-    - diversity_strategy: DiversityStrategy
-    - feature_engineer: FeatureEngineer
-    --
-    + fit(data: TransformedData): void
-    + recommend(member_code: str, top_k: int): List[Recommendation]
-    + apply_diversity(recommendations: List): List[Recommendation]
-    + get_model_info(): Dict
-  }
-
-  class HybridRecommender {
-    - graph_recommender: RandomWalkRecommender
-    - collaborative_recommender: MatrixFactorization
-    - content_recommender: ContentBasedRecommender
-    - weights: Dict[str, float]
-    --
-    + fit(data: TransformedData): void
-    + recommend(member_code: str, top_k: int): List[Recommendation]
-    + combine_scores(scores_dict: Dict): List[Recommendation]
-    + get_model_info(): Dict
-  }
-
-  BaseRecommender <|-- MLRecommender
-  BaseRecommender <|-- HybridRecommender
-
-  BaseRecommender ..> TransformedData : "使用"
-  BaseRecommender ..> Recommendation : "生成"
-}
-
-package "機械学習コンポーネント" {
-  class MatrixFactorization {
-    - n_components: int
-    - max_iter: int
-    - random_state: int
-    - model: NMF
-    - W: np.ndarray
-    - H: np.ndarray
-    --
-    + fit(matrix: pd.DataFrame): void
-    + transform(matrix: pd.DataFrame): np.ndarray
-    + predict(member_idx: int): np.ndarray
-    + get_top_k(member_idx: int, k: int): List[Tuple]
-  }
-
-  interface DiversityStrategy {
-    + {abstract} rerank(recommendations: List, top_k: int): List
-  }
-
-  class MMRDiversityStrategy {
-    - lambda_param: float
-    --
-    + rerank(recommendations: List, top_k: int): List
-    - compute_similarity(rec1, rec2): float
-  }
-
-  class CategoryDiversityStrategy {
-    - category_weights: Dict
-    --
-    + rerank(recommendations: List, top_k: int): List
-    - get_category_distribution(): Dict
-  }
-
-  class TypeDiversityStrategy {
-    - type_weights: Dict
-    --
-    + rerank(recommendations: List, top_k: int): List
-    - get_type_distribution(): Dict
-  }
-
-  class HybridDiversityStrategy {
-    - strategies: List[DiversityStrategy]
-    - weights: List[float]
-    --
-    + rerank(recommendations: List, top_k: int): List
-  }
-
-  DiversityStrategy <|.. MMRDiversityStrategy
-  DiversityStrategy <|.. CategoryDiversityStrategy
-  DiversityStrategy <|.. TypeDiversityStrategy
-  DiversityStrategy <|.. HybridDiversityStrategy
-
-  MLRecommender o-- MatrixFactorization
-  MLRecommender o-- DiversityStrategy
-  HybridDiversityStrategy *-- DiversityStrategy
 }
 
 package "グラフコンポーネント" {
@@ -205,122 +116,50 @@ package "グラフコンポーネント" {
     + add_competence_node(competence: Competence): void
     + add_edge(source: str, target: str, weight: float): void
     + get_neighbors(node: str): List[str]
-    + visualize(): void
+    + visualize(): Dict
   }
 
-  class RandomWalkRecommender {
-    - graph: KnowledgeGraph
-    - restart_prob: float
-    - max_iterations: int
-    --
-    + fit(data: TransformedData): void
-    + recommend(member_code: str, top_k: int): List[Recommendation]
-    - random_walk_with_restart(start_nodes: List): Dict
-    - compute_scores(walk_scores: Dict): List
-  }
-
-  class CareerPathAnalyzer {
-    - graph: KnowledgeGraph
-    --
-    + find_paths(from_code: str, to_code: str): List[List[str]]
-    + find_shortest_path(from_code: str, to_code: str): List[str]
-    + analyze_career_progression(member_code: str): Dict
-    + visualize_path(path: List): void
-  }
-
-  RandomWalkRecommender o-- KnowledgeGraph
-  CareerPathAnalyzer o-- KnowledgeGraph
-  HybridRecommender o-- RandomWalkRecommender
+  CausalCareerPath o-- KnowledgeGraph
   KnowledgeGraph ..> Competence : "ノード"
-}
-
-package "評価・ユーティリティ" {
-  class Evaluator {
-    - metrics: List[str]
-    --
-    + evaluate(recommendations: Dict, ground_truth: Dict): EvaluationResult
-    + precision_at_k(recommended: List, actual: List, k: int): float
-    + recall_at_k(recommended: List, actual: List, k: int): float
-    + ndcg_at_k(recommended: List, actual: List, k: int): float
-    + calculate_diversity_metrics(recommendations: List): Dict
-  }
-
-  class EvaluationResult {
-    + precision: float
-    + recall: float
-    + ndcg: float
-    + hit_rate: float
-    + mrr: float
-    + diversity_metrics: Dict
-    + timestamp: str
-    --
-    + to_dict(): Dict
-    + save_to_file(path: str): void
-  }
-
-  class ReferencePersonFinder {
-    - data: TransformedData
-    - similarity_threshold: float
-    --
-    + find_reference_persons(member_code: str, target_competence: str): List[ReferencePerson]
-    - calculate_similarity(member1: str, member2: str): float
-    - get_career_path(member_code: str): List[str]
-  }
-
-  Evaluator ..> EvaluationResult : "生成"
-  Evaluator ..> Recommendation : "評価"
-  ReferencePersonFinder ..> ReferencePerson : "生成"
-  ReferencePersonFinder ..> TransformedData : "使用"
-  Recommendation o-- ReferencePerson
 }
 
 package "データ処理" {
   class DataLoader {
     - data_dir: str
     --
-    + load_members(): List[Dict]
-    + load_competences(): List[Dict]
-    + load_member_competences(): List[Dict]
-    + load_all(): Tuple
+    + load_members(): pd.DataFrame
+    + load_competences(): pd.DataFrame
+    + load_member_competences(): pd.DataFrame
+    + load_all_data(): Dict
   }
 
   class DataTransformer {
-    - data_loader: DataLoader
     --
-    + transform(raw_data: Tuple): TransformedData
-    + create_member_competence_matrix(): pd.DataFrame
-    + normalize_levels(levels: List): List
-    + validate_data(): bool
+    + create_competence_master(raw_data: Dict): pd.DataFrame
+    + create_member_competence(raw_data: Dict, competence_master: pd.DataFrame): pd.DataFrame
+    + create_skill_matrix(member_competence: pd.DataFrame): pd.DataFrame
+    + clean_members_data(raw_data: Dict): pd.DataFrame
   }
-
-  DataTransformer o-- DataLoader
-  DataTransformer ..> TransformedData : "生成"
 }
 
-package "設定・ログ" {
-  class RecommendationConfig {
-    + environment: str
-    + model_params: Dict
-    + diversity_params: Dict
-    + evaluation_params: Dict
-    + logging_params: Dict
-    --
-    + {static} load_from_file(path: str): RecommendationConfig
-    + validate(): bool
-    + get_param(key: str): Any
+package "FastAPI モデル" {
+  class TrainParams {
+    + min_members: int
+    + correlation_threshold: float
+    + weight_mode: str
+    + manual_weights: Optional[Dict]
   }
 
-  class StructuredLogger {
-    - logger: structlog.Logger
-    - context: Dict
-    --
-    + info(message: str, **kwargs): void
-    + error(message: str, error: Exception, **kwargs): void
-    + bind(**kwargs): StructuredLogger
+  class RecommendRequest {
+    + member_code: str
+    + top_k: int
   }
 
-  BaseRecommender o-- RecommendationConfig
-  BaseRecommender o-- StructuredLogger
+  class WeightUpdateRequest {
+    + weights: Dict[str, float]
+  }
+
+  CausalGraphRecommender ..> TrainParams : "使用"
 }
 
 note top of Member
@@ -333,22 +172,23 @@ note top of Competence
   コンピテンシー（スキル・資格・教育）
   ・3種類のタイプ
   ・カテゴリ階層構造
-  ・前提条件設定可能
 end note
 
-note top of BaseRecommender
-  推薦エンジンの抽象基底クラス
-  ・Strategy パターン
-  ・複数の実装をサポート
+note top of CausalGraphRecommender
+  因果推論推薦エンジン
+  ・LiNGAM (DirectLiNGAM) による因果グラフ構築
+  ・3軸スコアリング
+    - Readiness: 準備完了度
+    - Probability: 習得確率
+    - Utility: 有用性
+  ・ベイズ最適化 (Optuna) による重み調整
 end note
 
-note top of DiversityStrategy
-  多様性戦略の抽象インターフェース
-  ・4つの実装
-    - MMR
-    - カテゴリ多様性
-    - タイプ多様性
-    - ハイブリッド
+note top of DependencyAnalyzer
+  依存関係分析
+  ・因果グラフから依存関係を抽出
+  ・前提スキルの特定
+  ・因果パスの計算
 end note
 
 @enduml

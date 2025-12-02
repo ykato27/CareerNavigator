@@ -6,22 +6,38 @@ skinparam rectangleBackgroundColor #E8F4F8
 skinparam arrowColor #4A90E2
 skinparam defaultFontName "Noto Sans CJK JP, IPAGothic, MS Gothic, sans-serif"
 
-title CareerNavigator システムアーキテクチャ（レイヤー構造） v3.0.0
+title CareerNavigator システムアーキテクチャ（レイヤー構造） v4.0.0
 
 package "プレゼンテーション層 (Presentation Layer)" #E3F2FD {
-  package "Streamlit App (Main)" #BBDEFB {
-    [メインページ\n(streamlit_app.py)] as MainPage
-    [因果推論推薦\n(1_Causal_Recommendation.py)] as CausalPage
-    [キャリアダッシュボード\n(2_Employee_Career_Dashboard.py)] as DashboardPage
-    [組織スキルマップ\n(3_Organizational_Skill_Map.py)] as OrgPage
+  package "WebUI Frontend (React + TypeScript)" #BBDEFB {
+    [力量管理ダッシュボード] as Dashboard
+    [データアップロード] as DataUpload
+    [モデル学習] as ModelTraining
+    [因果推論分析] as CausalAnalysis
+    [因果推論推薦] as CausalRec
+    [キャリアダッシュボード] as CareerDashboard
+    [組織スキルマップ] as SkillMap
   }
 
-  package "WebUI (React + FastAPI)" #BBDEFB {
-    [Frontend (React)] as ReactApp
-    [Backend API (FastAPI)] as FastAPI
+  package "Backend API (FastAPI)" #C8E6C9 {
+    [データアップロードAPI] as UploadAPI
+    [モデル学習API] as TrainAPI
+    [推薦API] as RecommendAPI
+    [重み調整API] as WeightAPI
+    [グラフ可視化API] as GraphAPI
+    [組織分析API] as OrgAPI
+    [キャリアAPI] as CareerAPI
   }
 
-  ReactApp <--> FastAPI : REST API
+  Dashboard --> RecommendAPI
+  DataUpload --> UploadAPI
+  ModelTraining --> TrainAPI
+  ModelTraining --> WeightAPI
+  CausalAnalysis --> RecommendAPI
+  CausalRec --> RecommendAPI
+  CausalRec --> GraphAPI
+  CareerDashboard --> CareerAPI
+  SkillMap --> OrgAPI
 }
 
 package "アプリケーション層 (Application Layer)" #E8F5E9 {
@@ -39,59 +55,43 @@ package "アプリケーション層 (Application Layer)" #E8F5E9 {
 
 package "ドメイン層 (Domain Layer)" #FFF3E0 {
   package "因果推論モジュール (Causal)" #FFCCBC {
-    [因果グラフ構築\n(LiNGAM)] as CausalGraph
-    [3軸スコアリング\n(Readiness/Prob/Utility)] as Scoring
-    [因果パス生成] as CausalPath
+    [因果グラフ推薦器] as CausalRecommender
+    [因果グラフ構築 (LiNGAM)] as CausalGraph
+    [3軸スコアリング] as Scoring
+    [依存関係分析] as DependencyAnalyzer
   }
 
-  package "機械学習モジュール (ML)" #FFE0B2 {
-    [ML推薦器\n(ml_recommender.py)] as MLRecommender
-    [行列分解 (NMF)] as NMF
-    [多様性再ランキング] as Diversity
-  }
-
-  package "グラフモジュール (Graph)" #FFCCBC {
+  package "グラフモジュール (Graph)" #FFE0B2 {
     [知識グラフ構築] as KnowledgeGraph
-    [ランダムウォーク (RWR)] as RandomWalk
-    [ハイブリッド推薦器] as HybridRec
+    [因果キャリアパス生成] as CareerPath
   }
 
   package "コアモジュール (Core)" #F3E5F5 {
     [データモデル] as Models
-    [評価器] as Evaluator
-    [参照者検索] as RefPersons
+    [データローダー] as DataLoader
+    [データ変換器] as DataTransformer
   }
 
-  CausalGraph --> Scoring
-  Scoring --> CausalPath
-  
-  MLRecommender --> NMF
-  MLRecommender --> Diversity
+  CausalRecommender --> CausalGraph
+  CausalRecommender --> Scoring
+  CausalRecommender --> DependencyAnalyzer
 
-  HybridRec --> RandomWalk
-  HybridRec --> NMF
-  HybridRec --> KnowledgeGraph
+  CareerPath --> KnowledgeGraph
+  CareerPath --> CausalGraph
 
-  MLRecommender --> Models
-  HybridRec --> Models
-  CausalPath --> Models
+  CausalRecommender --> Models
+  CareerPath --> Models
 }
 
 package "インフラストラクチャ層 (Infrastructure Layer)" #ECEFF1 {
-  package "データ層" #CFD8DC {
-    [データローダー] as DataLoader
-    [データ変換器] as DataTransformer
-    [データ検証器] as DataValidator
-  }
-
   package "永続化層" #B0BEC5 {
     database "CSV Files" as CSV
-    database "Models" as Models_Storage
+    database "Trained Models" as Models_Storage
   }
 
   package "共通基盤" #90A4AE {
-    [設定管理 (Config)] as Config
-    [構造化ログ] as Logging
+    [設定管理] as Config
+    [ロギング] as Logging
     [エラーハンドラー] as ErrorHandler
   }
 
@@ -100,29 +100,43 @@ package "インフラストラクチャ層 (Infrastructure Layer)" #ECEFF1 {
 }
 
 ' レイヤー間の依存関係
-MainPage --> DataLoader
-CausalPage --> CausalPath
-DashboardPage --> CausalPath
-DashboardPage --> RoleModel
-OrgPage --> DataTransformer
+UploadAPI --> DataLoader
+TrainAPI --> CausalRecommender
+TrainAPI --> Models_Storage
+RecommendAPI --> CausalRecommender
+WeightAPI --> CausalRecommender
+GraphAPI --> KnowledgeGraph
+CareerAPI --> CareerPath
+OrgAPI --> DataTransformer
 
-FastAPI --> Orchestrator
-FastAPI --> RoleModel
+Orchestrator --> CausalRecommender
+Orchestrator --> CareerPath
 
-Orchestrator --> MLRecommender
-Orchestrator --> HybridRec
-Orchestrator --> CausalPath
-
-note right of ReactApp
+note right of Dashboard
   モダンWeb UI
-  ・React + TypeScript
-  ・Vite
+  ・React 18 + TypeScript
+  ・Vite (ビルドツール)
+  ・Tailwind CSS v4
+  ・Recharts (可視化)
 end note
 
 note right of CausalGraph
   因果推論エンジン
   ・LiNGAMアルゴリズム
   ・スキル依存関係抽出
+  ・3軸スコアリング
+  　- Readiness (準備完了度)
+  　- Probability (習得確率)
+  　- Utility (有用性)
+end note
+
+note right of UploadAPI
+  FastAPI REST API
+  ・データアップロード
+  ・モデル学習 (LiNGAM)
+  ・推薦生成
+  ・重み調整 (手動/自動)
+  ・グラフ可視化
 end note
 
 legend right

@@ -7,19 +7,18 @@ skinparam databaseBackgroundColor #FFEBEE
 skinparam arrowColor #4A90E2
 skinparam defaultFontName "Noto Sans CJK JP, IPAGothic, MS Gothic, sans-serif"
 
-title CareerNavigator コンポーネント図（技術スタック） v3.0.0
+title CareerNavigator コンポーネント図（技術スタック） v4.0.0
 
 package "フロントエンド" #E3F2FD {
-  package "Streamlit App" {
-    [Streamlit\n(Webフレームワーク)] as Streamlit #BBDEFB
-    [Plotly\n(可視化)] as Plotly #BBDEFB
-    [Pyvis\n(ネットワーク可視化)] as Pyvis #BBDEFB
-  }
-  
   package "WebUI (React)" {
-    [React\n(UIライブラリ)] as React #BBDEFB
+    [React 18\n(UIライブラリ)] as React #BBDEFB
+    [TypeScript\n(型システム)] as TypeScript #BBDEFB
     [Vite\n(ビルドツール)] as Vite #BBDEFB
-    [Recharts\n(チャート)] as Recharts #BBDEFB
+    [React Router\n(ルーティング)] as Router #BBDEFB
+    [Tailwind CSS v4\n(スタイリング)] as Tailwind #BBDEFB
+    [Recharts\n(チャート可視化)] as Recharts #BBDEFB
+    [Axios\n(HTTP通信)] as Axios #BBDEFB
+    [Lucide React\n(アイコン)] as Icons #BBDEFB
   }
 }
 
@@ -32,33 +31,27 @@ package "バックエンド API" #E8F5E9 {
 package "ビジネスロジック層" #FFF3E0 {
 
   package "Causal Module" {
-    [Causal Recommender] as CausalRec #FFE0B2
-    [LiNGAM Model] as LiNGAM #FFE0B2
+    [Causal Graph Recommender] as CausalRec #FFE0B2
     [Dependency Analyzer] as DepAnalyzer #FFE0B2
-  }
-
-  package "ML Module" {
-    [ML Recommender] as MLRec #FFE0B2
-    [Matrix Factorization] as NMF #FFE0B2
-    [Diversity Strategies] as Diversity #FFE0B2
+    [Causal Career Path] as CareerPath #FFE0B2
   }
 
   package "Graph Module" {
-    [Hybrid Recommender] as HybridRec #FFE0B2
     [Knowledge Graph] as KGraph #FFE0B2
   }
-  
+
   package "Core Module" {
     [Data Loader] as DataLoader #FFE0B2
-    [Evaluator] as Evaluator #FFE0B2
+    [Data Transformer] as DataTransformer #FFE0B2
   }
 }
 
 package "分析ライブラリ" #F3E5F5 {
   [lingam\n(因果推論)] as LingamLib #E1BEE7
-  [scikit-learn\n(ML)] as SkLearn #E1BEE7
+  [optuna\n(ベイズ最適化)] as Optuna #E1BEE7
   [pandas\n(データ操作)] as Pandas #E1BEE7
   [networkx\n(グラフ)] as NetworkX #E1BEE7
+  [pyvis\n(グラフ可視化)] as Pyvis #E1BEE7
 }
 
 package "データ永続化層" #ECEFF1 {
@@ -67,38 +60,61 @@ package "データ永続化層" #ECEFF1 {
 }
 
 ' 依存関係
-Streamlit --> CausalRec
-Streamlit --> MLRec
-React --> FastAPI
+React --> Axios
+Axios --> FastAPI
+
 FastAPI --> CausalRec
-FastAPI --> MLRec
+FastAPI --> CareerPath
+FastAPI --> DataLoader
+FastAPI --> DataTransformer
 
 CausalRec --> LingamLib
+CausalRec --> Optuna
 CausalRec --> NetworkX
-MLRec --> SkLearn
-MLRec --> Pandas
+CausalRec --> Pandas
+
+CareerPath --> KGraph
+KGraph --> NetworkX
+KGraph --> Pyvis
 
 DataLoader --> CSV
 CausalRec --> Models
+DataTransformer --> Pandas
 
 note top of React
   モダンフロントエンド
-  ・TypeScript
+  ・React 18 + TypeScript
+  ・Tailwind CSS v4
   ・SPAアーキテクチャ
+  ・Recharts 可視化
 end note
 
 note top of LingamLib
   因果探索ライブラリ
   ・DirectLiNGAM
-  ・Bootstrap信頼性評価
+  ・スキル間の因果関係学習
+  ・隣接行列生成
+end note
+
+note top of Optuna
+  ベイズ最適化
+  ・重みパラメータの自動調整
+  ・ハイパーパラメータ最適化
+end note
+
+note top of CausalRec
+  因果推論推薦エンジン
+  ・3軸スコアリング
+  ・因果的フィルタリング
+  ・スマートロードマップ生成
 end note
 
 legend right
-  |<#E3F2FD> フロントエンド |Streamlit / React |
+  |<#E3F2FD> フロントエンド |React + TypeScript |
   |<#E8F5E9> バックエンド |FastAPI |
-  |<#FFF3E0> ロジック |因果推論 / ML |
-  |<#F3E5F5> ライブラリ |分析 / 計算 |
-  |<#ECEFF1> 永続化 |ファイル / モデル |
+  |<#FFF3E0> ロジック |因果推論 / グラフ |
+  |<#F3E5F5> ライブラリ |分析 / 最適化 |
+  |<#ECEFF1> 永続化 |CSV / モデル |
 endlegend
 
 @enduml
