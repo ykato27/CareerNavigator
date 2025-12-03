@@ -194,6 +194,25 @@ class TestRecommendationService:
         assert call_args[1]['top_n'] == 3
         assert len(result["recommendations"]) == 3
 
+    @pytest.mark.asyncio
+    async def test_get_recommendations_exception(self, service, mock_repository, mock_recommender):
+        """Test getting recommendations when an exception occurs during generation."""
+        service.repository = mock_repository
+        mock_repository.get_model.return_value = mock_recommender
+        
+        # Mock recommend to raise exception
+        mock_recommender.recommend.side_effect = Exception("Recommendation failed")
+        
+        result = await service.get_recommendations(
+            model_id="model_123",
+            member_id="M001"
+        )
+        
+        assert result["recommendations"] == []
+        # Metadata should still be present but without error key as per implementation
+        assert "weights" in result["metadata"]
+        assert result["metadata"]["total_candidates"] == 0
+
 
 class TestRecommendationServiceSingleton:
     """Test RecommendationService singleton instance."""

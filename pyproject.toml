@@ -81,6 +81,30 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
+addopts = "--cov=backend --cov-report=term-missing --cov-report=html"
+
+[tool.coverage.run]
+source = ["backend"]
+omit = [
+    "backend/scripts/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+fail_under = 90
+show_missing = true
 
 [tool.uv]
 link-mode = "copy"

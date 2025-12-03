@@ -206,6 +206,55 @@ class TestUpdateWeightsRequest:
         
         assert "model_id" in str(exc_info.value).lower()
 
+    def test_invalid_weights_missing_key(self):
+        """Test that missing weight key raises ValidationError."""
+        data = {
+            "model_id": "model_123",
+            "weights": {
+                "readiness": 0.7,
+                "bayesian": 0.3
+                # Missing 'utility'
+            }
+        }
+        
+        with pytest.raises(ValidationError) as exc_info:
+            UpdateWeightsRequest(**data)
+        
+        assert "utility" in str(exc_info.value).lower() or "readiness" in str(exc_info.value).lower()
+
+    def test_invalid_weights_extra_key(self):
+        """Test that extra weight key raises ValidationError."""
+        data = {
+            "model_id": "model_123",
+            "weights": {
+                "readiness": 0.4,
+                "bayesian": 0.3,
+                "utility": 0.3,
+                "extra_key": 0.0  # Extra key
+            }
+        }
+        
+        with pytest.raises(ValidationError) as exc_info:
+            UpdateWeightsRequest(**data)
+        
+        assert "extra" in str(exc_info.value).lower() or "exactly" in str(exc_info.value).lower()
+
+    def test_invalid_weights_negative(self):
+        """Test that negative weights raise ValidationError."""
+        data = {
+            "model_id": "model_123",
+            "weights": {
+                "readiness": 1.2,
+                "bayesian": -0.1,  # Negative
+                "utility": -0.1   # Negative
+            }
+        }
+        
+        with pytest.raises(ValidationError) as exc_info:
+            UpdateWeightsRequest(**data)
+        
+        assert "non-negative" in str(exc_info.value).lower()
+
 
 class TestGetRecommendationsRequest:
     """Tests for GetRecommendationsRequest schema validation."""
