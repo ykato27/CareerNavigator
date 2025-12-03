@@ -1,8 +1,8 @@
-# テスト設計ドキュメント - CareerNavigator
+# テスト設計ドキュメント - CareerNavigator WebUI
 
-**バージョン**: 2.0
-**最終更新**: 2025-11-06
-**対象プロジェクト**: skillnote-recommendation（スキルノート推薦システム）
+**バージョン**: 3.0  
+**最終更新**: 2025-12-04  
+**対象プロジェクト**: CareerNavigator WebUI（React + FastAPI）
 
 ---
 
@@ -11,11 +11,10 @@
 1. [概要](#概要)
 2. [テスト戦略](#テスト戦略)
 3. [テスト構成](#テスト構成)
-4. [コンポーネント別テスト設計](#コンポーネント別テスト設計)
+4. [バックエンドテスト設計](#バックエンドテスト設計)
 5. [テストデータ戦略](#テストデータ戦略)
 6. [テスト実行環境](#テスト実行環境)
-7. [カバレッジ目標](#カバレッジ目標)
-8. [実装優先度](#実装優先度)
+7. [カバレッジ目標と現状](#カバレッジ目標と現状)
 
 ---
 
@@ -23,55 +22,37 @@
 
 ### 1.1 目的
 
-このドキュメントは、CareerNavigator（スキルノート推薦システム）の包括的なテスト設計を定義します。品質保証とリグレッション防止のため、各コンポーネントに対する詳細なテストケースを提供します。
+このドキュメントは、CareerNavigator WebUIの包括的なテスト設計を定義します。品質保証とリグレッション防止のため、バックエンドAPIに対する詳細なテストケースを提供します。
 
 ### 1.2 対象システム
 
-**システム名**: スキルノート推薦システム
+**システム名**: CareerNavigator WebUI
+
+**アーキテクチャ**:
+- フロントエンド: React + TypeScript + Vite
+- バックエンド: FastAPI + Pydantic
+- コアライブラリ: skillnote_recommendation
 
 **主要機能**:
-- 技術者のスキルプロファイル分析
-- 力量（コンピテンシー）の推薦
-- 機械学習ベース推薦（NMF）
-- グラフベース推薦（RWR）
-- ハイブリッド推薦（RWR + NMF + Content-Based）
-- 推薦理由の生成
+- モデル学習API
+- スキル推薦API
+- 推薦重み調整API
+- 従業員キャリアダッシュボード
 
-**主要コンポーネント**:
-1. **Core Module**
-   - データモデル（`models.py`）
-   - データローダー（`data_loader.py`）
-   - データ変換（`data_transformer.py`）
-   - 評価器（`evaluator.py`）
+### 1.3 現在のテスト状況（2025-12-04時点）
 
-2. **ML Module**
-   - Matrix Factorization（`matrix_factorization.py`）
-   - ML推薦エンジン（`ml_recommender.py`）
-   - 多様性再ランキング（`diversity.py`）
-   - コンテンツベース推薦（`content_based_recommender.py`）
+**Phase 2完了: バックエンドコア層 100%達成** ✅
 
-3. **Graph Module**
-   - 知識グラフ（`knowledge_graph.py`）
-   - Random Walk with Restart（`random_walk.py`）
-   - ハイブリッド推薦（`hybrid_recommender.py`）
-   - カテゴリー階層（`category_hierarchy.py`）
+**完了済みテスト**:
+- ✅ Servicesレイヤー (96-100%カバレッジ)
+- ✅ Repositoriesレイヤー (100%カバレッジ)
+- ✅ Schemasレイヤー (100%カバレッジ)
+- ✅ Middlewareレイヤー (100%カバレッジ)
 
-### 1.3 現在のテスト状況
-
-**既存テスト**:
-- `tests/test_data_loader.py`
-- `tests/test_data_transformer.py`
-- `tests/test_evaluator.py`
-- `tests/test_matrix_factorization.py`
-- `tests/test_diversity.py`
-- `tests/test_ml_recommender.py`
-
-**カバレッジ**: 約40-50%（推定）
-
+**総テスト数**: 81+  
 **課題**:
-- グラフモジュールのテストが不足
-- 統合テストが不足
-- エッジケースのテストが不足
+- API層のカバレッジ向上が必要
+- フロントエンドテストが未実装
 
 ---
 
@@ -79,26 +60,25 @@
 
 ### 2.1 テストレベル
 
-| レベル | 目的 | スコープ |
-|--------|------|----------|
-| **単体テスト** | 個別関数/メソッドの正確性検証 | 全コンポーネント（80%以上のカバレッジ目標）|
-| **統合テスト** | コンポーネント間の連携検証 | データパイプライン全体 |
-| **E2Eテスト** | エンドツーエンドシナリオ検証 | データ読込→変換→推薦→出力 |
+| レベル | 目的 | スコープ | 優先度 |
+|--------|------|----------|--------|
+| **単体テスト** | 個別関数/クラスの正確性検証 | Services, Repositories, Schemas, Middleware | 最高 |
+| **統合テスト** | APIエンドポイントの動作検証 | FastAPI routes | 高 |
+| **E2Eテスト** | ユーザーシナリオ検証 | Web UI全体 | 中 |
 
-### 2.2 テストアプローチ
+### 2.2 テストツール
 
-- **TDD（テスト駆動開発）**: 新規機能実装時に推奨
-- **リグレッションテスト**: CI/CD パイプラインで自動実行
-- **境界値分析**: 数値計算、レベル正規化等で実施
-- **等価分割**: 力量タイプ（SKILL/EDUCATION/LICENSE）ごとに検証
+**バックエンド**:
+- テストフレームワーク: pytest 7.0+
+- 非同期テスト: pytest-asyncio
+- モック/スタブ: pytest-mock, unittest.mock
+- カバレッジ: pytest-cov
+- 依存管理: uv
 
-### 2.3 テストツール
-
-- **テストフレームワーク**: pytest 7.0+
-- **モック/スタブ**: pytest-mock, unittest.mock
-- **フィクスチャ**: pytest fixtures（conftest.py）
-- **カバレッジ**: pytest-cov
-- **データ生成**: pandas, numpy（テストデータ作成用）
+**フロントエンド（将来実装予定）**:
+- テストフレームワーク: Vitest
+- コンポーネントテスト: React Testing Library  
+- E2Eテスト: Playwright
 
 ---
 
@@ -107,213 +87,152 @@
 ### 3.1 テストディレクトリ構造
 
 ```
-tests/
-├── __init__.py
-├── conftest.py                      # 共通フィクスチャ
-├── test_models.py                   # データモデルテスト
-├── test_data_loader.py              # データローダーテスト
-├── test_data_transformer.py         # データ変換テスト
-├── test_evaluator.py                # 評価器テスト
-├── test_matrix_factorization.py     # NMFモデルテスト
-├── test_ml_recommender.py           # ML推薦エンジンテスト
-├── test_diversity.py                # 多様性再ランキングテスト
-├── test_knowledge_graph.py          # 知識グラフテスト（NEW）
-├── test_random_walk.py              # RWRテスト（NEW）
-├── test_hybrid_recommender.py       # ハイブリッド推薦テスト（NEW）
-├── test_integration.py              # 統合テスト
-├── test_e2e.py                      # E2Eテスト
-└── fixtures/                        # テストデータフィクスチャ
-    ├── sample_members.csv
-    ├── sample_competences.csv
-    └── sample_acquired.csv
+tests/backend/
+├── conftest.py                         # 共通フィクスチャ
+├── test_services_training.py           # 学習サービステスト
+├── test_services_recommendation.py      # 推薦サービステスト
+├── test_services_weights.py            # 重み調整サービステスト
+├── test_repositories_session.py        # セッションリポジトリテスト
+├── test_schemas_request.py             # リクエストスキーマテスト
+├── test_schemas_response.py            # レスポンススキーマテスト
+├── test_middleware_error_handler.py    # エラーハンドラーテスト
+├── test_middleware_logging.py          # ロギングミドルウェアテスト
+├── test_api_train.py                   # 学習APIテスト
+├── test_api_recommendation.py          # 推薦APIテスト
+└── test_api_weights.py                 # 重み調整APIテスト
 ```
 
 ### 3.2 共通フィクスチャ（conftest.py）
 
 ```python
 import pytest
-import pandas as pd
-import numpy as np
-
-
-@pytest.fixture
-def sample_members():
-    """サンプルメンバーデータ"""
-    return pd.DataFrame({
-        'メンバーコード': ['M001', 'M002', 'M003'],
-        'メンバー名': ['山田太郎', '佐藤花子', '鈴木一郎'],
-        '職能等級': ['E3', 'E4', 'E3'],
-        '役職': ['エンジニア', 'シニアエンジニア', 'エンジニア']
-    })
-
+from fastapi.testclient import TestClient
+from backend.main import app
 
 @pytest.fixture
-def sample_competences():
-    """サンプル力量マスタデータ"""
-    return pd.DataFrame({
-        '力量コード': ['C001', 'C002', 'C003'],
-        '力量名': ['Python基礎', 'Django', 'データ分析'],
-        '力量タイプ': ['SKILL', 'SKILL', 'SKILL'],
-        '力量カテゴリー名': ['プログラミング', 'Webフレームワーク', 'データサイエンス']
-    })
-
+def client():
+    """FastAPI test client"""
+    return TestClient(app)
 
 @pytest.fixture
-def sample_member_competence():
-    """サンプル習得力量データ"""
-    return pd.DataFrame({
-        'メンバーコード': ['M001', 'M001', 'M002', 'M002', 'M003'],
-        '力量コード': ['C001', 'C002', 'C001', 'C003', 'C001'],
-        '正規化レベル': [0.8, 0.6, 1.0, 0.7, 0.5]
-    })
+def mock_session_data():
+    """Mock session data for testing"""
+    return {
+        "session_id": "test_session",
+        "model": MockRecommender(),
+        "metadata": {...}
+    }
 ```
 
 ---
 
-## 4. コンポーネント別テスト設計
+## 4. バックエンドテスト設計
 
-### 4.1 データローダー（`data_loader.py`）
+### 4.1 Services層テスト（100%達成）
 
-#### テストファイル: `test_data_loader.py`
-
-**テストケース**:
-1. **ディレクトリスキャン**
-   - 複数CSVファイルの自動検出
-   - サブディレクトリの処理
-   - 空ディレクトリの処理
-
-2. **CSV読み込み**
-   - エンコーディング自動判定
-   - カラム構造の検証
-   - 欠損値の処理
-
-3. **データ結合**
-   - 複数ファイルの結合
-   - カラム不一致の検出
-
-### 4.2 データ変換（`data_transformer.py`）
-
-#### テストファイル: `test_data_transformer.py`
+#### TrainingService (`test_services_training.py`)
 
 **テストケース**:
-1. **力量マスタ変換**
-   - 力量タイプの正規化
-   - カテゴリー抽出
-   - 重複除去
+- ✅ モデル学習の成功
+- ✅ カスタム重みでの学習
+- ✅ セッション未登録エラー
+- ✅ 不十分なデータエラー
+- ✅ モデルサマリー取得
+- ✅ モデル削除
+- ✅ シングルトンインスタンス検証
 
-2. **メンバー習得力量変換**
-   - レベル正規化
-   - 日付パース
-
-3. **スキルマトリックス生成**
-   - ピボットテーブル作成
-   - 欠損値の0埋め
-
-### 4.3 ML推薦エンジン（`ml_recommender.py`）
-
-#### テストファイル: `test_ml_recommender.py`
+#### RecommendationService (`test_services_recommendation.py`)
 
 **テストケース**:
-1. **推薦生成**
-   - top_nパラメータの動作
-   - 既習得力量の除外
-   - 力量タイプフィルタ
+- ✅ 推薦生成の成功
+- ✅ top_nパラメータの動作
+- ✅ 空の結果処理
+- ✅ 例外ハンドリング
+- ✅ メタデータ生成
 
-2. **多様性再ランキング**
-   - MMR戦略
-   - カテゴリー戦略
-   - ハイブリッド戦略
-
-3. **参考人物検索**
-   - 類似メンバーの発見
-   - 異なるキャリアパスの発見
-
-### 4.4 知識グラフ（`knowledge_graph.py`）
-
-#### テストファイル: `test_knowledge_graph.py`（NEW）
+#### WeightsService (`test_services_weights.py`)
 
 **テストケース**:
-1. **グラフ構築**
-   - ノード追加（メンバー、力量、カテゴリー）
-   - エッジ追加（acquired, belongs_to, similar, parent_of）
-   - カテゴリー階層の構築
+- ✅ 重み更新の成功
+- ✅ モデル未登録エラー
+- ✅ バリデーションエラー
+- ✅ 現在の重み取得
+- ✅ デフォルト重みフォールバック
 
-2. **クエリ機能**
-   - `get_neighbors()`: 隣接ノードの取得
-   - `get_node_info()`: ノード情報の取得
-   - `get_member_acquired_competences()`: 習得力量の取得
-   - `get_competence_category()`: カテゴリー取得
+### 4.2 Repositories層テスト（100%達成）
 
-3. **メンバー間類似度**
-   - コサイン類似度の計算
-   - top_kフィルタリング
-   - 閾値フィルタリング
-
-### 4.5 Random Walk with Restart（`random_walk.py`）
-
-#### テストファイル: `test_random_walk.py`（NEW）
+#### SessionRepository (`test_repositories_session.py`)
 
 **テストケース**:
-1. **RWR推薦**
-   - PageRankスコアの計算
-   - 力量候補の抽出
-   - フィルタリング
+- ✅ セッション登録・取得
+- ✅ モデル登録・取得
+- ✅ セッション削除
+- ✅ 存在確認
+- ✅ 統計情報取得
 
-2. **フォールバック処理**
-   - カテゴリーベース推薦
-   - 類似メンバーベース推薦
-   - パス生成
+### 4.3 Schemas層テスト（100%達成）
 
-3. **推薦パス抽出**
-   - k-shortest pathsアルゴリズム
-   - パス長フィルタリング
-   - 代替パス生成
-
-4. **キャッシング**
-   - PageRankキャッシュの動作
-   - キャッシュクリア
-   - キャッシュ統計
-
-### 4.6 ハイブリッド推薦（`hybrid_recommender.py`）
-
-#### テストファイル: `test_hybrid_recommender.py`（NEW）
+#### Request Schemas (`test_schemas_request.py`)
 
 **テストケース**:
-1. **スコア融合**
-   - RWR + NMF + Content-Basedの統合
-   - 重み付けの動作
-   - スコア正規化
+- ✅ TrainModelRequest検証
+- ✅ UpdateWeightsRequest検証（合計1.0、負値チェック）
+- ✅ GetRecommendationsRequest検証
+- ✅ Pydanticバリデーションエラー
 
-2. **推薦生成**
-   - Top-N選択
-   - 力量タイプフィルタ
-   - カテゴリーフィルタ
-
-3. **推薦理由生成**
-   - 複数手法からの理由統合
-   - パス情報の含有
-
-### 4.7 評価器（`evaluator.py`）
-
-#### テストファイル: `test_evaluator.py`
+#### Response Schemas (`test_schemas_response.py`)
 
 **テストケース**:
-1. **時系列分割**
-   - 訓練データと評価データの分割
-   - 日付ベース分割
-   - ユーザーベース分割
+- ✅ TrainingResponse構造検証
+- ✅ RecommendationsResponse構造検証
+- ✅ WeightsResponse構造検証
+- ✅ ErrorResponse構造検証
 
-2. **評価メトリクス**
-   - Precision@K
-   - Recall@K
-   - NDCG@K
-   - MRR
-   - MAP
+### 4.4 Middleware層テスト（100%達成）
 
-3. **多様性メトリクス**
-   - Gini Index
-   - Novelty
-   - Coverage
+#### ErrorHandler (`test_middleware_error_handler.py`)
+
+**テストケース**:
+- ✅ 成功リクエストの通過
+- ✅ AppException処理
+- ✅ 予期しない例外処理
+- ✅ trace_id生成
+
+#### Logging (`test_middleware_logging.py`)
+
+**テストケース**:  
+- ✅ リクエスト/レスポンスログ
+- ✅ 例外時のログ
+- ✅ コンテキストバインド/クリア
+
+### 4.5 API層テスト（部分実装）
+
+#### Train API (`test_api_train.py`)
+
+**既存テスト**:
+- モデル学習エンドポイント
+- モデルサマリー取得
+- モデル削除
+
+**追加必要**:
+- エラーケースの網羅的カバレッジ
+
+#### Recommendation API (`test_api_recommendation.py`)
+
+**既存テスト**:
+- 推薦生成エンドポ イント
+
+**追加必要**:
+- エラーケースの網羅的カバレッジ
+
+#### Weights API (`test_api_weights.py`)
+
+**既存テスト**:
+- 重み更新エンドポイント
+- 重み取得エンドポイント
+
+**追加必要**:
+- エラーケースの網羅的カバレッジ
 
 ---
 
@@ -321,27 +240,22 @@ def sample_member_competence():
 
 ### 5.1 テストデータの種類
 
-1. **最小データセット**: 単体テスト用（3-5行）
-2. **小規模データセット**: 統合テスト用（10-20行）
-3. **中規模データセット**: E2Eテスト用（100行程度）
+1. **Mockデータ**: 単体テスト用（Services, Repositoriesレイヤー）
+2. **Fixtureデータ**: 統合テスト用（APIレイヤー）
+3. **合成データ**: E2Eテスト用
 
-### 5.2 テストデータの配置
+### 5.2 モック戦略
 
+```python
+from unittest.mock import Mock, AsyncMock
+
+# 非同期関数のモック
+mock_recommender = Mock()
+mock_recommender.recommend = Mock(return_value=[...])
+
+# Exceptionのモック
+mock_recommender.recommend.side_effect = Exception("Test error")
 ```
-tests/fixtures/
-├── minimal/          # 最小データセット
-│   ├── members.csv
-│   ├── competences.csv
-│   └── acquired.csv
-├── small/            # 小規模データセット
-└── medium/           # 中規模データセット
-```
-
-### 5.3 データ生成戦略
-
-- **実データの匿名化**: 本番データから個人情報を除去
-- **合成データ生成**: Faker, numpy.randomを使用
-- **境界値データ**: エッジケース検証用
 
 ---
 
@@ -351,75 +265,64 @@ tests/fixtures/
 
 ```bash
 # 全テスト実行
-uv run pytest tests/
+uv run pytest tests/backend/
 
 # カバレッジ付き実行
-uv run pytest --cov=skillnote_recommendation --cov-report=html tests/
+uv run pytest tests/backend/ --cov=backend --cov-report=term-missing
+
+# HTMLレポート生成
+uv run pytest tests/backend/ --cov=backend --cov-report=html
 
 # 特定のモジュールのみ
-uv run pytest tests/test_random_walk.py -v
+uv run pytest tests/backend/test_services_training.py -v
 ```
 
-### 6.2 CI/CD環境
+### 6.2 カバレッジ設定（pyproject.toml）
 
-- **GitHub Actions**: プルリクエスト時に自動実行
-- **カバレッジ閾値**: 80%以上
-- **失敗時の動作**: マージをブロック
-
----
-
-## 7. カバレッジ目標
-
-| コンポーネント | 優先度 | カバレッジ目標 |
-|---------------|--------|--------------|
-| `models.py` | 中 | 70% |
-| `data_loader.py` | 高 | 85% |
-| `data_transformer.py` | 高 | 85% |
-| `matrix_factorization.py` | 最高 | 90% |
-| `ml_recommender.py` | 最高 | 90% |
-| `diversity.py` | 高 | 85% |
-| `knowledge_graph.py` | 最高 | 90% |
-| `random_walk.py` | 最高 | 90% |
-| `hybrid_recommender.py` | 最高 | 85% |
-| `evaluator.py` | 高 | 85% |
-
-**全体目標**: 80%以上
+```toml
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+```
 
 ---
 
-## 8. 実装優先度
+## 7. カバレッジ目標と現状
 
-### Phase 1: 基盤テスト（完了）
+### 7.1 現在のカバレッジ（Phase 2完了時点）
 
-1. ✅ **データモデルテスト** (`test_models.py`)
-2. ✅ **データローダーテスト** (`test_data_loader.py`)
-3. ✅ **データ変換テスト** (`test_data_transformer.py`)
+| レイヤー | カバレッジ | 状態 |
+|---------|-----------|------|
+| `backend/services/` | 96-100% | ✅ 完了 |
+| `backend/repositories/` | 100% | ✅ 完了 |
+| `backend/schemas/` | 100% | ✅ 完了 |
+| `backend/middleware/` | 100% | ✅ 完了 |
+| `backend/api/` | 40-60% | ⏳ 改善必要 |
+| `backend/utils/` | 50-70% | ⏳ 改善必要 |
 
-### Phase 2: ML推薦テスト（完了）
+**全体カバレッジ**: ~70%（Phase 2完了時）  
+**最終目標**: 90%以上
 
-4. ✅ **Matrix Factorizationテスト** (`test_matrix_factorization.py`)
-5. ✅ **多様性再ランキングテスト** (`test_diversity.py`)
-6. ✅ **ML推薦エンジンテスト** (`test_ml_recommender.py`)
+### 7.2 次フェーズ（Phase 3以降）
 
-### Phase 3: グラフ推薦テスト（未実装）
+**Phase 3: API層カバレッジ向上**
+- ✅ Services/Repositories/Schemasのテストインフラ確立
+- ⏳ APIエラーケースの網羅的テスト追加
+- ⏳ utils層の単体テスト追加
 
-7. ⏳ **知識グラフテスト** (`test_knowledge_graph.py`)
-8. ⏳ **Random Walkテスト** (`test_random_walk.py`)
-9. ⏳ **ハイブリッド推薦テスト** (`test_hybrid_recommender.py`)
-
-### Phase 4: 統合・E2Eテスト（未実装）
-
-10. ⏳ **統合テスト** (`test_integration.py`)
-11. ⏳ **E2Eテスト** (`test_e2e.py`)
+**Phase 4: フロントエンドテスト（将来）**
+- ⏳ Vitestセットアップ
+- ⏳ Reactコンポーネントテスト
+- ⏳ Playwrigh E2Eテスト
 
 ---
 
 ## まとめ
 
-このテスト設計に従って段階的にテストを実装することで、CareerNavigatorシステムの品質を保証し、リグレッションを防止します。
+**Phase 2完了**: バックエンドのコア層（Services, Repositories, Schemas, Middleware）で100%カバレッジを達成。81+のテストが実装され、プロジェクトの品質基盤が確立されました。
 
 **次のステップ**:
-1. Phase 3のグラフ推薦テストを実装
-2. Phase 4の統合テストを実装
-3. カバレッジ80%達成
-4. CI/CDパイプラインへの統合
+1. API層のエラーケーステストを追加してカバレッジ90%を目指す
+2. utils層の単体テストを追加
+3. GitHub Actionsでの継続的テスト実行
+4. フロントエンドテストフレームワークのセットアップ（長期）
