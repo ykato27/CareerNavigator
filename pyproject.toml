@@ -30,6 +30,11 @@ dependencies = [
     "pgmpy>=0.1.23",
     "pyvis>=0.3.2",
     "openpyxl>=3.0.0",
+    # Additional packages from requirements.txt
+    "cmaes>=0.10.0",
+    "semopy>=2.3.9",
+    "statsmodels>=0.14.0",
+    "xlrd>=2.0.0",
 ]
 
 [project.optional-dependencies]
