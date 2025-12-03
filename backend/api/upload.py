@@ -1,16 +1,10 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Request
-from typing import Dict, List
+from fastapi import APIRouter, UploadFile, HTTPException, Request
+from typing import List
 import time
 import pandas as pd
 import io
 
-from backend.utils import (
-    PROJECT_ROOT,
-    get_upload_dir,
-    session_manager,
-    load_csv_files,
-    clean_dataframe_columns
-)
+from backend.utils import get_upload_dir, session_manager, load_csv_files, clean_dataframe_columns
 
 router = APIRouter()
 
@@ -33,9 +27,9 @@ def merge_csv_files(files: List[UploadFile], category_name: str) -> tuple[pd.Dat
     duplicate_errors = []
 
     for idx, file in enumerate(files):
-        df = pd.read_csv(io.BytesIO(file), encoding='utf-8-sig')
-        df['_source_file'] = file.filename or f"file_{idx}"
-        df['_source_row'] = range(2, len(df) + 2)  # Row numbers starting from 2 (after header)
+        df = pd.read_csv(io.BytesIO(file), encoding="utf-8-sig")
+        df["_source_file"] = file.filename or f"file_{idx}"
+        df["_source_row"] = range(2, len(df) + 2)  # Row numbers starting from 2 (after header)
         dfs.append(df)
 
     if not dfs:
@@ -45,7 +39,7 @@ def merge_csv_files(files: List[UploadFile], category_name: str) -> tuple[pd.Dat
     merged = pd.concat(dfs, ignore_index=True)
 
     # Check for duplicate rows (excluding metadata columns)
-    data_columns = [col for col in merged.columns if not col.startswith('_')]
+    data_columns = [col for col in merged.columns if not col.startswith("_")]
     duplicates = merged[merged.duplicated(subset=data_columns, keep=False)]
 
     if not duplicates.empty:
@@ -83,15 +77,15 @@ async def upload_files(request: Request):
             "education": [],
             "license": [],
             "categories": [],
-            "acquired": []
+            "acquired": [],
         }
 
         # Group files by category
         for key, value in form.items():
             # Extract category name (e.g., "members[0]" -> "members")
-            if '[' in key:
-                category = key.split('[')[0]
-                if category in files_by_category and hasattr(value, 'read'):
+            if "[" in key:
+                category = key.split("[")[0]
+                if category in files_by_category and hasattr(value, "read"):
                     files_by_category[category].append(value)
 
         # Validate all categories have at least one file
@@ -99,7 +93,7 @@ async def upload_files(request: Request):
         if missing_categories:
             raise HTTPException(
                 status_code=400,
-                detail=f"以下のカテゴリにファイルがありません: {', '.join(missing_categories)}"
+                detail=f"以下のカテゴリにファイルがありません: {', '.join(missing_categories)}",
             )
 
         # Create session ID with timestamp
@@ -142,34 +136,30 @@ async def upload_files(request: Request):
 
                 # Save merged file
                 file_path = upload_dir / f"{category}.csv"
-                merged_df.to_csv(file_path, index=False, encoding='utf-8-sig')
+                merged_df.to_csv(file_path, index=False, encoding="utf-8-sig")
 
         # If there are duplicate errors, raise exception
         if all_duplicate_errors:
             raise HTTPException(
                 status_code=400,
-                detail=f"重複行が検出されました:\n" + "\n".join(all_duplicate_errors)
+                detail="重複行が検出されました:\n" + "\n".join(all_duplicate_errors),
             )
 
         # Register session in session manager
-        session_manager.add_session(session_id, {
-            "dir": str(upload_dir),
-            "files": list(files_by_category.keys())
-        })
+        session_manager.add_session(
+            session_id, {"dir": str(upload_dir), "files": list(files_by_category.keys())}
+        )
 
         return {
             "session_id": session_id,
             "message": "Files uploaded and merged successfully",
-            "files": list(files_by_category.keys())
+            "files": list(files_by_category.keys()),
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"File upload failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
 
 @router.get("/session/{session_id}/status")
@@ -186,17 +176,14 @@ async def get_session_status(session_id: str):
     session_data = session_manager.get_session(session_id)
 
     if not session_data:
-        raise HTTPException(
-            status_code=404,
-            detail="Session not found"
-        )
+        raise HTTPException(status_code=404, detail="Session not found")
 
     return {
         "session_id": session_id,
         "exists": True,
         "files": session_data.get("files", []),
         "timestamp": session_data.get("timestamp"),
-        "last_accessed": session_data.get("last_accessed")
+        "last_accessed": session_data.get("last_accessed"),
     }
 
 
@@ -217,20 +204,14 @@ async def delete_session(session_id: str):
     removed = session_manager.remove_session(session_id)
 
     if not removed:
-        raise HTTPException(
-            status_code=404,
-            detail="Session not found"
-        )
+        raise HTTPException(status_code=404, detail="Session not found")
 
     # Remove files from disk
     upload_dir = get_upload_dir(session_id)
     if upload_dir.exists():
         shutil.rmtree(upload_dir)
 
-    return {
-        "success": True,
-        "message": f"Session {session_id} deleted successfully"
-    }
+    return {"success": True, "message": f"Session {session_id} deleted successfully"}
 
 
 @router.get("/sessions/stats")
@@ -265,7 +246,7 @@ async def cleanup_old_sessions(max_age_hours: int = 24):
         "success": True,
         "sessions_removed": sessions_removed,
         "models_removed": models_removed,
-        "max_age_hours": max_age_hours
+        "max_age_hours": max_age_hours,
     }
 
 
@@ -288,34 +269,29 @@ async def get_session_members(session_id: str):
         data = load_csv_files(session_id)
 
         # Get members data and clean column names
-        members_df = clean_dataframe_columns(data['members'])
+        members_df = clean_dataframe_columns(data["members"])
 
         # Extract member information
         members_list = []
         for idx, row in members_df.iterrows():
-            member_code = str(row.get('メンバーコード', ''))
-            member_name = str(row.get('メンバー名', ''))
+            member_code = str(row.get("メンバーコード", ""))
+            member_name = str(row.get("メンバー名", ""))
 
             if member_code and member_name:
-                members_list.append({
-                    "member_code": member_code,
-                    "member_name": member_name,
-                    "display_name": f"{member_code} - {member_name}"
-                })
+                members_list.append(
+                    {
+                        "member_code": member_code,
+                        "member_name": member_name,
+                        "display_name": f"{member_code} - {member_name}",
+                    }
+                )
 
         # Sort by member code
-        members_list.sort(key=lambda x: x['member_code'])
+        members_list.sort(key=lambda x: x["member_code"])
 
-        return {
-            "success": True,
-            "members": members_list,
-            "total_count": len(members_list)
-        }
+        return {"success": True, "members": members_list, "total_count": len(members_list)}
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get members list: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get members list: {str(e)}")

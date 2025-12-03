@@ -18,14 +18,14 @@ class UpdateWeightsRequest(BaseModel):
     weights: Dict[str, float] = Field(
         ...,
         description="New weights for recommendation scoring",
-        examples=[{"readiness": 0.5, "probability": 0.3, "utility": 0.2}],
+        examples=[{"readiness": 0.5, "bayesian": 0.3, "utility": 0.2}],
     )
 
     @field_validator("weights")
     @classmethod
     def validate_weights_sum(cls, v: Dict[str, float]) -> Dict[str, float]:
         """Validate that weights sum to 1.0."""
-        required_keys = {"readiness", "probability", "utility"}
+        required_keys = {"readiness", "bayesian", "utility"}
         if set(v.keys()) != required_keys:
             raise ValueError(f"Weights must contain exactly: {required_keys}")
 

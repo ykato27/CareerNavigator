@@ -97,21 +97,17 @@ class TrainingService:
         # Store trained model
         self.repository.add_model(model_id, recommender)
 
-        # Prepare training summary
+        # Prepare training summary (flattened structure for test compatibility)
         summary = {
             "model_id": model_id,
             "session_id": session_id,
-            "statistics": {
-                "num_members": len(recommender.skill_matrix_.index),
-                "num_skills": len(recommender.skill_matrix_.columns),
-                "learning_time": round(learning_time, 2),
-                "total_time": round(total_time, 2),
-            },
-            "parameters": {
-                "min_members_per_skill": min_members_per_skill,
-                "correlation_threshold": correlation_threshold,
-                "weights": final_weights,
-            },
+            "num_members": len(recommender.skill_matrix_.index),
+            "num_skills": len(recommender.skill_matrix_.columns),
+            "learning_time": round(learning_time, 2),
+            "total_time": round(total_time, 2),
+            "weights": final_weights,
+            "min_members_per_skill": min_members_per_skill,
+            "correlation_threshold": correlation_threshold,
         }
 
         logger.info("Model stored successfully", model_id=model_id)
@@ -149,12 +145,10 @@ class TrainingService:
 
         return {
             "model_id": model_id,
-            "statistics": {
-                "num_members": len(recommender.skill_matrix_.index),
-                "num_skills": len(recommender.skill_matrix_.columns),
-                "has_causal_graph": hasattr(recommender, "adj_matrix_"),
-            },
-            "parameters": {"weights": weights},
+            "num_members": len(recommender.skill_matrix_.index),
+            "num_skills": len(recommender.skill_matrix_.columns),
+            "weights": weights,
+            "has_causal_graph": hasattr(recommender, "adj_matrix_"),
         }
 
     async def delete_model(self, model_id: str) -> Dict[str, Any]:

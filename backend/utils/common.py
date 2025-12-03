@@ -1,6 +1,7 @@
 """
 Common utilities and constants for the backend API.
 """
+
 from pathlib import Path
 from typing import Dict, Any
 import pandas as pd
@@ -26,7 +27,7 @@ def clean_column_name(col_name: str) -> str:
     Returns:
         Cleaned column name
     """
-    return re.sub(r'\s*###\[.*?\]###', '', col_name).strip()
+    return re.sub(r"\s*###\[.*?\]###", "", col_name).strip()
 
 
 def clean_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -74,17 +75,16 @@ def load_csv_files(session_id: str) -> Dict[str, pd.DataFrame]:
 
     if not session_dir.exists():
         raise HTTPException(
-            status_code=404,
-            detail="Session data not found. Please upload data first."
+            status_code=404, detail="Session data not found. Please upload data first."
         )
 
     csv_files = {
-        'members': 'members.csv',
-        'skills': 'skills.csv',
-        'education': 'education.csv',
-        'license': 'license.csv',
-        'categories': 'categories.csv',
-        'acquired': 'acquired.csv'
+        "members": "members.csv",
+        "skills": "skills.csv",
+        "education": "education.csv",
+        "license": "license.csv",
+        "categories": "categories.csv",
+        "acquired": "acquired.csv",
     }
 
     data = {}
@@ -93,7 +93,7 @@ def load_csv_files(session_id: str) -> Dict[str, pd.DataFrame]:
         if not filepath.exists():
             raise HTTPException(
                 status_code=404,
-                detail=f"File not found: {filename}. Please upload all required files."
+                detail=f"File not found: {filename}. Please upload all required files.",
             )
         data[key] = pd.read_csv(filepath)
 
@@ -116,24 +116,22 @@ def transform_data(data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
     transformer = DataTransformer()
 
     competence_master = transformer.create_competence_master(data)
-    member_competence, valid_members = transformer.create_member_competence(
-        data, competence_master
-    )
+    member_competence, valid_members = transformer.create_member_competence(data, competence_master)
 
     # Create cleaned members DataFrame
-    members_df = data['members'].copy()
+    members_df = data["members"].copy()
 
     # Clean column names (remove ###[...]### markers)
     members_df = clean_dataframe_columns(members_df)
     competence_master = clean_dataframe_columns(competence_master)
 
     # Filter to valid members only
-    members_df = members_df[members_df['メンバーコード'].isin(valid_members)]
+    members_df = members_df[members_df["メンバーコード"].isin(valid_members)]
 
     return {
         "member_competence": member_competence,
         "competence_master": competence_master,
-        "members_clean": members_df
+        "members_clean": members_df,
     }
 
 
@@ -156,11 +154,7 @@ def load_and_transform_session_data(session_id: str) -> Dict[str, Any]:
 
 
 # Default model weights
-DEFAULT_WEIGHTS = {
-    'readiness': 0.6,
-    'bayesian': 0.3,
-    'utility': 0.1
-}
+DEFAULT_WEIGHTS = {"readiness": 0.6, "bayesian": 0.3, "utility": 0.1}
 
 
 def validate_weights(weights: Dict[str, float]) -> bool:
@@ -175,16 +169,12 @@ def validate_weights(weights: Dict[str, float]) -> bool:
     """
     total = sum(weights.values())
     if abs(total - 1.0) > 0.01:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Weights must sum to 1.0, got {total}"
-        )
+        raise HTTPException(status_code=400, detail=f"Weights must sum to 1.0, got {total}")
 
     for key, value in weights.items():
         if value < 0:
             raise HTTPException(
-                status_code=400,
-                detail=f"Weight '{key}' must be non-negative, got {value}"
+                status_code=400, detail=f"Weight '{key}' must be non-negative, got {value}"
             )
 
     return True

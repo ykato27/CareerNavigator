@@ -60,7 +60,7 @@ class TestUpdateWeights:
             }
         )
         
-        assert response.status_code == 400
+        assert response.status_code == 422  # Pydantic validation error
 
 
 class TestGetWeights:

@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import logging
@@ -47,7 +46,7 @@ async def get_ego_network(request: EgoGraphRequest):
     if not recommender:
         raise HTTPException(
             status_code=404,
-            detail=f"Model '{request.model_id}' not found. Please train a model first."
+            detail=f"Model '{request.model_id}' not found. Please train a model first.",
         )
 
     try:
@@ -67,25 +66,19 @@ async def get_ego_network(request: EgoGraphRequest):
             show_negative=request.show_negative,
             member_skills=request.member_skills or [],
             output_path=str(output_path),
-            height="600px"
+            height="600px",
         )
 
-        with open(html_path, 'r', encoding='utf-8') as f:
+        with open(html_path, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        logger.info(f"[GRAPH] Ego network generated successfully")
+        logger.info("[GRAPH] Ego network generated successfully")
 
-        return {
-            "success": True,
-            "html": html_content
-        }
+        return {"success": True, "html": html_content}
 
     except Exception as e:
         logger.error(f"[GRAPH] Graph generation failed: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Graph generation failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Graph generation failed: {str(e)}")
 
 
 @router.post("/graph/full")
@@ -108,7 +101,7 @@ async def get_full_graph(request: FullGraphRequest):
     if not recommender:
         raise HTTPException(
             status_code=404,
-            detail=f"Model '{request.model_id}' not found. Please train a model first."
+            detail=f"Model '{request.model_id}' not found. Please train a model first.",
         )
 
     try:
@@ -127,23 +120,16 @@ async def get_full_graph(request: FullGraphRequest):
             top_n=request.top_n,
             show_negative=request.show_negative,
             height="800px",
-            width="100%"
+            width="100%",
         )
 
-        with open(html_path, 'r', encoding='utf-8') as f:
+        with open(html_path, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        logger.info(f"[GRAPH] Full causal graph generated successfully")
+        logger.info("[GRAPH] Full causal graph generated successfully")
 
-        return {
-            "success": True,
-            "html": html_content,
-            "node_count": request.top_n
-        }
+        return {"success": True, "html": html_content, "node_count": request.top_n}
 
     except Exception as e:
         logger.error(f"[GRAPH] Graph generation failed: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Graph generation failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Graph generation failed: {str(e)}")

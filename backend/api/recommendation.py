@@ -1,72 +1,53 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Optional
-import logging
+"""
+Recommendation API endpoints.
 
-from backend.utils import session_manager
+This module provides endpoints for generating skill recommendations.
+"""
+
+from fastapi import APIRouter, HTTPException
+from backend.schemas.request.recommendation import GetRecommendationsRequest
+from backend.schemas.response.recommendation import RecommendationsResponse
+from backend.services.recommendation_service import recommendation_service
+from backend.core.exceptions import AppException
+from backend.core.logging import get_logger
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-class RecommendationRequest(BaseModel):
-    model_id: str
-    member_id: str
-    top_n: int = 10
-
-
-@router.post("/recommend")
-async def get_recommendations(request: RecommendationRequest):
+@router.post("/recommend", response_model=RecommendationsResponse)
+async def get_recommendations(request: GetRecommendationsRequest):
     """
-    Get skill recommendations for a member using a trained model.
+    Get skill recommendations for a member.
 
     Args:
-        request: Contains model_id, member_id, and top_n
+        request: Request containing model_id, member_id, and top_n
 
     Returns:
-        dict: Recommendations with scores and explanations
+        RecommendationsResponse: List of recommended skills with scores
 
     Raises:
         HTTPException: If model or member not found
     """
-    # Get model from session manager
-    recommender = session_manager.get_model(request.model_id)
-
-    if not recommender:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Model '{request.model_id}' not found. Please train a model first."
-        )
-
     try:
-        logger.info(f"[RECOMMEND] Getting recommendations for member {request.member_id}")
-
-        recommendations = recommender.recommend(request.member_id, top_n=request.top_n)
-
-        if not recommendations:
-            logger.info(f"[RECOMMEND] No recommendations found for member {request.member_id}")
-            return {
-                "member_id": request.member_id,
-                "recommendations": [],
-                "message": "推奨できるスキルが見つかりませんでした"
-            }
-
-        logger.info(f"[RECOMMEND] Found {len(recommendations)} recommendations")
-
-        return {
-            "member_id": request.member_id,
-            "recommendations": recommendations
-        }
-
-    except KeyError:
-        logger.error(f"[RECOMMEND] Member ID '{request.member_id}' not found")
-        raise HTTPException(
-            status_code=404,
-            detail=f"Member ID '{request.member_id}' not found in the training data"
+        result = await recommendation_service.get_recommendations(
+            model_id=request.model_id,
+            member_id=request.member_id,
+            top_n=request.top_n,
         )
+
+        return RecommendationsResponse(
+            success=True,
+            model_id=result["model_id"],
+            member_id=result["member_id"],
+            member_name=result.get("member_name", ""),
+            recommendations=result["recommendations"],
+            metadata=result.get("metadata", {}),
+        )
+
+    except AppException:
+        # Custom exceptions are handled by error_handler_middleware
+        raise
     except Exception as e:
-        logger.error(f"[RECOMMEND] Recommendation failed: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Recommendation failed: {str(e)}"
-        )
+        logger.error("Unexpected error generating recommendations", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate recommendations: {str(e)}")

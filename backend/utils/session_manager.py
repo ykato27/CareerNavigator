@@ -6,6 +6,7 @@ This module provides centralized management of:
 - Trained models
 - Cached transformed data
 """
+
 from typing import Dict, Any, Optional
 import time
 from threading import Lock
@@ -45,7 +46,7 @@ class SessionManager:
             self._sessions[session_id] = {
                 **data,
                 "timestamp": time.time(),
-                "last_accessed": time.time()
+                "last_accessed": time.time(),
             }
 
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -80,7 +81,8 @@ class SessionManager:
 
         with self._data_lock:
             sessions_to_remove = [
-                sid for sid, data in self._sessions.items()
+                sid
+                for sid, data in self._sessions.items()
                 if current_time - data.get("last_accessed", 0) > max_age_seconds
             ]
 
@@ -94,10 +96,7 @@ class SessionManager:
     def add_model(self, model_id: str, model: Any) -> None:
         """Store a trained model."""
         with self._data_lock:
-            self._models[model_id] = {
-                "model": model,
-                "timestamp": time.time()
-            }
+            self._models[model_id] = {"model": model, "timestamp": time.time()}
 
     def get_model(self, model_id: str) -> Optional[Any]:
         """Retrieve a trained model."""
@@ -128,7 +127,8 @@ class SessionManager:
 
         with self._data_lock:
             models_to_remove = [
-                mid for mid, data in self._models.items()
+                mid
+                for mid, data in self._models.items()
                 if current_time - data.get("timestamp", 0) > max_age_seconds
             ]
 
@@ -142,10 +142,7 @@ class SessionManager:
     def add_cache(self, session_id: str, data: Dict[str, Any]) -> None:
         """Cache transformed data for a session."""
         with self._data_lock:
-            self._cache[session_id] = {
-                "data": data,
-                "timestamp": time.time()
-            }
+            self._cache[session_id] = {"data": data, "timestamp": time.time()}
 
     def get_cache(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve cached data for a session."""
@@ -171,7 +168,7 @@ class SessionManager:
                 "active_sessions": len(self._sessions),
                 "trained_models": len(self._models),
                 "cached_sessions": len(self._cache),
-                "total_memory_items": len(self._sessions) + len(self._models) + len(self._cache)
+                "total_memory_items": len(self._sessions) + len(self._models) + len(self._cache),
             }
 
 

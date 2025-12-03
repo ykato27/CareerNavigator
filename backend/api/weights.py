@@ -1,187 +1,80 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Dict, Optional
-import logging
+"""
+Weights management API endpoints.
 
-from backend.utils import session_manager, validate_weights
+This module provides endpoints for managing recommendation weights.
+"""
+
+from fastapi import APIRouter, HTTPException
+from backend.schemas.request.weights import UpdateWeightsRequest, GetWeightsRequest
+from backend.schemas.response.weights import WeightsResponse
+from backend.services.weights_service import weights_service
+from backend.core.exceptions import AppException
+from backend.core.logging import get_logger
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-class UpdateWeightsRequest(BaseModel):
-    model_id: str
-    weights: Dict[str, float]
-
-
-class OptimizeWeightsRequest(BaseModel):
-    model_id: str
-    n_trials: int = 50
-    n_jobs: int = -1
-    holdout_ratio: float = 0.2
-    top_k: int = 10
-
-
-@router.post("/weights/update")
+@router.post("/weights/update", response_model=WeightsResponse)
 async def update_weights(request: UpdateWeightsRequest):
     """
-    Manually update recommendation weights.
+    Update recommendation weights for a model.
 
     Args:
-        request: Contains model_id and weights dictionary
+        request: Request containing model_id and new weights
 
     Returns:
-        dict: Updated normalized weights
+        WeightsResponse: Updated weights and confirmation
 
     Raises:
         HTTPException: If model not found or weights invalid
     """
-    # Get model from session manager
-    recommender = session_manager.get_model(request.model_id)
-
-    if not recommender:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Model '{request.model_id}' not found. Please train a model first."
+    try:
+        updated_weights = await weights_service.update_weights(
+            model_id=request.model_id, weights=request.weights
         )
 
-    try:
-        logger.info(f"[WEIGHTS] Updating weights for model {request.model_id}")
+        return WeightsResponse(
+            success=True,
+            model_id=request.model_id,
+            weights=updated_weights,
+            message="Weights updated successfully",
+        )
 
-        # Validate weight keys
-        required_keys = {'readiness', 'bayesian', 'utility'}
-        if set(request.weights.keys()) != required_keys:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Weights must include exactly: {required_keys}"
-            )
-
-        # Validate weight values
-        total = sum(request.weights.values())
-        if total == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Weight sum cannot be zero"
-            )
-
-        # Normalize weights
-        normalized_weights = {k: v / total for k, v in request.weights.items()}
-
-        # Validate normalized weights sum to 1.0
-        validate_weights(normalized_weights)
-
-        # Update model weights
-        if hasattr(recommender, 'set_weights'):
-            recommender.set_weights(normalized_weights)
-        else:
-            recommender.weights = normalized_weights
-
-        logger.info(f"[WEIGHTS] Weights updated successfully: {normalized_weights}")
-
-        return {
-            "success": True,
-            "weights": normalized_weights,
-            "message": "重みを更新しました"
-        }
-
-    except HTTPException:
+    except AppException:
+        # Custom exceptions are handled by error_handler_middleware
         raise
     except Exception as e:
-        logger.error(f"[WEIGHTS] Weight update failed: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Weight update failed: {str(e)}"
-        )
+        logger.error("Unexpected error updating weights", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update weights: {str(e)}")
 
 
-@router.post("/weights/optimize")
-async def optimize_weights(request: OptimizeWeightsRequest):
+@router.post("/weights/get", response_model=WeightsResponse)
+async def get_weights(request: GetWeightsRequest):
     """
-    Automatically optimize weights using Bayesian optimization.
+    Get current recommendation weights for a model.
 
     Args:
-        request: Contains model_id and optimization parameters
+        request: Request containing model_id
 
     Returns:
-        dict: Optimized weights and success status
-
-    Raises:
-        HTTPException: If model not found or optimization fails
-    """
-    # Get model from session manager
-    recommender = session_manager.get_model(request.model_id)
-
-    if not recommender:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Model '{request.model_id}' not found. Please train a model first."
-        )
-
-    if not hasattr(recommender, 'optimize_weights'):
-        raise HTTPException(
-            status_code=400,
-            detail="Model does not support weight optimization"
-        )
-
-    try:
-        logger.info(
-            f"[WEIGHTS] Starting weight optimization for model {request.model_id} "
-            f"(trials={request.n_trials})"
-        )
-
-        best_weights = recommender.optimize_weights(
-            n_trials=request.n_trials,
-            n_jobs=request.n_jobs,
-            holdout_ratio=request.holdout_ratio,
-            top_k=request.top_k
-        )
-
-        logger.info(f"[WEIGHTS] Optimization completed: {best_weights}")
-
-        return {
-            "success": True,
-            "optimized_weights": best_weights,
-            "message": "重みの最適化が完了しました"
-        }
-
-    except Exception as e:
-        logger.error(f"[WEIGHTS] Optimization failed: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Optimization failed: {str(e)}"
-        )
-
-
-@router.get("/weights/{model_id}")
-async def get_weights(model_id: str):
-    """
-    Get current weights for a model.
-
-    Args:
-        model_id: The unique model identifier
-
-    Returns:
-        dict: Current weights
+        WeightsResponse: Current weights
 
     Raises:
         HTTPException: If model not found
     """
-    # Get model from session manager
-    recommender = session_manager.get_model(model_id)
+    try:
+        current_weights = await weights_service.get_weights(model_id=request.model_id)
 
-    if not recommender:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Model '{model_id}' not found. Please train a model first."
+        return WeightsResponse(
+            success=True,
+            model_id=request.model_id,
+            weights=current_weights,
+            message="",
         )
 
-    weights = (
-        recommender.get_weights()
-        if hasattr(recommender, 'get_weights')
-        else recommender.weights
-    )
-
-    return {
-        "model_id": model_id,
-        "weights": weights
-    }
+    except AppException:
+        raise
+    except Exception as e:
+        logger.error("Unexpected error getting weights", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
