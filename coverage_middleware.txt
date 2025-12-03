@@ -1,0 +1,88 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.12, pytest-9.0.1, pluggy-1.6.0
+rootdir: C:\Users\加藤裕樹\OneDrive - 株式会社Skillnote\デスクトップ\CareerNavigator
+configfile: pyproject.toml
+plugins: anyio-4.11.0, asyncio-1.3.0, cov-7.0.0, mock-3.15.1
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 5 items
+
+tests\backend\test_middleware_error_handler.py ...                       [ 60%]
+tests\backend\test_middleware_logging.py ..
+ERROR: Coverage failure: total of 38 is less than fail-under=90
+                                                                         [100%]
+
+============================== warnings summary ===============================
+skillnote_recommendation\__init__.py:7
+  C:\Users\加藤裕樹\OneDrive - 株式会社Skillnote\デスクトップ\CareerNavigator\skillnote_recommendation\__init__.py:7: DeprecationWarning: skillnote_recommendation.core.config is deprecated. Use 'from skillnote_recommendation.settings import get_settings' instead. See MIGRATION_CONFIG.md for details.
+    from skillnote_recommendation.core.config import Config
+
+skillnote_recommendation\ml\causal_structure_learner.py:17
+  C:\Users\加藤裕樹\OneDrive - 株式会社Skillnote\デスクトップ\CareerNavigator\skillnote_recommendation\ml\causal_structure_learner.py:17: DeprecationWarning: skillnote_recommendation.config is deprecated. Use 'from skillnote_recommendation.settings import get_settings' instead. See MIGRATION_CONFIG.md for details.
+    from skillnote_recommendation.config import config
+
+.venv\Lib\site-packages\pythonjsonlogger\jsonlogger.py:11
+  C:\Users\加藤裕樹\OneDrive - 株式会社Skillnote\デスクトップ\CareerNavigator\.venv\Lib\site-packages\pythonjsonlogger\jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+    warnings.warn(
+
+backend\schemas\response\common.py:21
+  C:\Users\加藤裕樹\OneDrive - 株式会社Skillnote\デスクトップ\CareerNavigator\backend\schemas\response\common.py:21: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class ErrorResponse(BaseModel):
+
+backend\schemas\response\common.py:39
+  C:\Users\加藤裕樹\OneDrive - 株式会社Skillnote\デスクトップ\CareerNavigator\backend\schemas\response\common.py:39: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class SuccessResponse(BaseModel, Generic[T]):
+
+backend\schemas\response\common.py:51
+  C:\Users\加藤裕樹\OneDrive - 株式会社Skillnote\デスクトップ\CareerNavigator\backend\schemas\response\common.py:51: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class MessageResponse(BaseModel):
+
+backend\schemas\response\common.py:61
+  C:\Users\加藤裕樹\OneDrive - 株式会社Skillnote\デスクトップ\CareerNavigator\backend\schemas\response\common.py:61: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class PaginatedResponse(BaseModel, Generic[T]):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+______________ coverage: platform win32, python 3.12.12-final-0 _______________
+
+Name                                         Stmts   Miss  Cover   Missing
+--------------------------------------------------------------------------
+backend\api\__init__.py                          0      0   100%
+backend\api\career_dashboard.py                338    265    22%   99-104, 115-135, 140-143, 155-190, 200-202, 220-244, 261-339, 358-391, 405-429, 443-464, 478-532, 546-682, 696-840
+backend\api\graph.py                            60     36    40%   44-81, 99-135
+backend\api\organizational.py                  152    117    23%   51-122, 141-192, 209-265, 282-346, 352-364, 369-385, 390-403
+backend\api\recommendation.py                   18      8    56%   32-53
+backend\api\role_based_dashboard.py            269    211    22%   90-95, 104, 111-114, 131-158, 177-247, 261-347, 361-514, 528-664
+backend\api\train.py                            38     24    37%   38-58, 75-84, 101-110
+backend\api\upload.py                          118     98    17%   26-57, 69-162, 176-181, 201-214, 225-226, 240-245, 267-297
+backend\api\weights.py                          28     16    43%   32-49, 66-80
+backend\core\__init__.py                         2      0   100%
+backend\core\exceptions.py                      55     19    65%   46, 58, 65, 72, 80-83, 96, 103, 114, 121, 130, 140-143, 151, 160
+backend\core\logging.py                         23      4    83%   40, 85-86, 91
+backend\main.py                                 24      2    92%   61, 67
+backend\middleware\__init__.py                   3      0   100%
+backend\middleware\error_handler.py             21      0   100%
+backend\middleware\logging.py                   20      0   100%
+backend\repositories\__init__.py                 2      0   100%
+backend\repositories\session_repository.py      30     13    57%   28, 41, 53, 65, 74-75, 88, 98, 110, 122, 131-132, 142
+backend\schemas\__init__.py                      0      0   100%
+backend\schemas\request\__init__.py              4      0   100%
+backend\schemas\request\recommendation.py       12      3    75%   26-28
+backend\schemas\request\training.py             21      8    62%   49-58
+backend\schemas\request\weights.py              19      9    53%   28-40
+backend\schemas\response\__init__.py             5      0   100%
+backend\schemas\response\common.py              30      0   100%
+backend\schemas\response\recommendation.py      20      0   100%
+backend\schemas\response\training.py            30      0   100%
+backend\schemas\response\weights.py              8      0   100%
+backend\services\__init__.py                     4      0   100%
+backend\services\recommendation_service.py      27     17    37%   39-93
+backend\services\training_service.py            52     37    29%   51-115, 134-146, 167-174
+backend\services\weights_service.py             31     19    39%   37-58, 74-87
+backend\utils\__init__.py                        3      0   100%
+backend\utils\common.py                         48     33    31%   30, 43-45, 58, 74-100, 116-131, 152-153, 170-180
+backend\utils\session_manager.py                92     57    38%   34, 45-46, 54-58, 62, 66-72, 79-93, 98-99, 103-106, 110, 114-118, 125-139, 144-145, 149-152, 156-161, 166-167
+--------------------------------------------------------------------------
+TOTAL                                         1607    996    38%
+Coverage HTML written to dir htmlcov
+FAIL Required test coverage of 90.0% not reached. Total coverage: 38.02%
+======================== 5 passed, 7 warnings in 0.83s ========================

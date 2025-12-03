@@ -163,18 +163,6 @@ backend/
 │   ├── career_dashboard.py         # キャリアダッシュボードAPI
 │   ├── role_based_dashboard.py     # 役職ベース分析API
 │   └── __init__.py
-│
-├── utils/                          # ユーティリティ
-│   ├── data_manager.py             # データ管理
-│   └── __init__.py
-│
-├── main.py                         # FastAPIアプリケーション
-└── requirements.txt                # Python依存関係
-```
-
-### APIエンドポイント
-
-#### キャリアダッシュボードAPI (`career_dashboard.py`)
 
 **基本エンドポイント**:
 
