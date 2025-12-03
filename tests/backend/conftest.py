@@ -106,9 +106,10 @@ def session_manager_reset():
 
 
 @pytest.fixture
-def mock_session_data(tmp_path, sample_csv_files):
+def mock_session_data(tmp_path, sample_csv_files, session_manager_reset):
     """Create a mock session with uploaded files."""
     from backend.utils import get_upload_dir
+    from backend.utils.session_manager import SessionManager
     import shutil
     
     session_id = "test_session_001"
@@ -118,6 +119,10 @@ def mock_session_data(tmp_path, sample_csv_files):
     # Copy sample CSV files to upload directory
     for csv_file in sample_csv_files.glob("*.csv"):
         shutil.copy(csv_file, upload_dir / csv_file.name)
+    
+    # Register session in SessionManager
+    manager = SessionManager()
+    manager.add_session(session_id, {})
     
     yield session_id
     
