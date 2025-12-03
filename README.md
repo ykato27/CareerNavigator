@@ -93,13 +93,19 @@ CareerNavigator/
 │   │   ├── matrix_factorization.py  # Matrix Factorizationモデル
 │   │   ├── diversity.py           # 多様性再ランキング
 │   │   └── ml_recommender.py      # ML推薦システム
-│   ├── graph/                     # グラフベース推薦モジュール → [詳細](skillnote_recommendation/graph/README.md)
-│   │   ├── knowledge_graph.py     # 知識グラフ
-│   │   ├── hybrid_recommender.py  # ハイブリッド推薦
-│   │   └── career_path.py         # キャリアパス
+│   ├── graph/                     # 因果グラフモジュール → [詳細](skillnote_recommendation/graph/README.md)
+│   │   ├── lingam_recommender.py  # LiNGAM因果推論
+│   │   └── career_path.py         # キャリアパス生成
 │   └── scripts/                   # 実行スクリプト（現在未使用）
 │
-├── tests/                         # テストコード（393テスト、カバレッジ47%）
+├── tests/                         # テストコード（Phase 2完了: 81+テスト、コア層100%カバレッジ）
+│   ├── backend/                   # WebUI バックエンドテスト
+│   │   ├── test_services_*.py     # Servicesレイヤー（96-100%）
+│   │   ├── test_repositories_*.py # Repositoriesレイヤー（100%）
+│   │   ├── test_schemas_*.py      # Schemasレイヤー（100%）
+│   │   ├── test_middleware_*.py   # Middlewareレイヤー（100%）
+│   │   └── test_api_*.py          # API統合テスト（進行中）
+│   └── その他                      # コアライブラリテスト（レガシー、整理予定）
 │   ├── test_data_loader.py
 │   ├── test_directory_scan.py
 │   ├── test_data_transformer.py
@@ -378,15 +384,19 @@ uv sync --upgrade
 uv add pandas --upgrade
 ```
 
-### 仮想環境の操作
+### uvによる仮想環境管理
+
+**uvは自動的に仮想環境を管理します。** 手動でアクティベート/ディアクティベートする必要はありません。
 
 ```bash
-# 仮想環境をアクティベート
-source .venv/bin/activate  # Linux/macOS
-.venv\Scripts\activate     # Windows
+# uvが自動的に.venv内で実行（アクティベート不要）
+uv run python script.py
+uv run pytest
+uv run streamlit run streamlit_app.py
 
-# 仮想環境をディアクティベート
-deactivate
+# 必要に応じて仮想環境を再作成
+uv venv --clear
+uv sync
 ```
 
 ## 推薦アルゴリズム
