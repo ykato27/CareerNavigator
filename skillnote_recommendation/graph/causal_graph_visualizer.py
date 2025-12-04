@@ -381,7 +381,7 @@ class CausalGraphVisualizer:
                         "enabled": true,
                         "direction": "UD",
                         "sortMethod": "directed",
-                        "nodeSpacing": 150,
+                        "nodeSpacing": 250,
                         "levelSeparation": 200
                     }
                 },
