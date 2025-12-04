@@ -17,6 +17,7 @@ class EgoGraphRequest(BaseModel):
     threshold: float = 0.05
     show_negative: bool = False
     member_skills: Optional[list[str]] = None
+    layout: str = "hierarchical"  # 新規追加
 
 
 class FullGraphRequest(BaseModel):
@@ -53,6 +54,29 @@ async def get_ego_network(request: EgoGraphRequest):
         logger.info(f"[GRAPH] Generating ego network for {request.center_node}")
 
         adj_matrix = recommender.learner.get_adjacency_matrix()
+        
+        # center_nodeがskill_codeの場合、skill_nameに変換
+        center_node = request.center_node
+        if hasattr(recommender, 'code_to_name') and center_node in recommender.code_to_name:
+            skill_name = recommender.code_to_name[center_node]
+            logger.info(f"[GRAPH] Converting skill_code '{center_node}' to skill_name '{skill_name}'")
+            center_node = skill_name
+        
+        # デバッグ情報を追加
+        logger.info(f"[GRAPH DEBUG] Adjacency matrix shape: {adj_matrix.shape}")
+        logger.info(f"[GRAPH DEBUG] Center node '{center_node}' in columns: {center_node in adj_matrix.columns}")
+        logger.info(f"[GRAPH DEBUG] Center node '{center_node}' in index: {center_node in adj_matrix.index}")
+        
+        # 因果グラフに含まれるノード数とエッジ数を確認
+        non_zero_edges = (adj_matrix.abs() >= request.threshold).sum().sum()
+        logger.info(f"[GRAPH DEBUG] Non-zero edges (threshold={request.threshold}): {non_zero_edges}")
+        
+        # center_nodeが含まれる場合、その接続数を確認
+        if center_node in adj_matrix.columns and center_node in adj_matrix.index:
+            incoming_edges = (adj_matrix[center_node].abs() >= request.threshold).sum()
+            outgoing_edges = (adj_matrix.loc[center_node].abs() >= request.threshold).sum()
+            logger.info(f"[GRAPH DEBUG] Center node edges: incoming={incoming_edges}, outgoing={outgoing_edges}")
+        
         visualizer = CausalGraphVisualizer(adj_matrix)
 
         output_dir = PROJECT_ROOT / "backend" / "temp_graphs"
@@ -60,13 +84,14 @@ async def get_ego_network(request: EgoGraphRequest):
         output_path = output_dir / f"ego_{request.model_id}_{request.center_node}.html"
 
         html_path = visualizer.visualize_ego_network_pyvis(
-            center_node=request.center_node,
+            center_node=center_node,  # 変換されたskill_nameを使用
             radius=request.radius,
             threshold=request.threshold,
             show_negative=request.show_negative,
             member_skills=request.member_skills or [],
             output_path=str(output_path),
             height="600px",
+            layout=request.layout  # 新規追加
         )
 
         with open(html_path, "r", encoding="utf-8") as f:

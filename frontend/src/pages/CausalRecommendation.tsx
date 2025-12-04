@@ -10,18 +10,15 @@ interface Member {
 }
 
 interface Recommendation {
+  skill_code: string;
   skill_name: string;
-  skill_code?: string;
-  competence_name?: string;
-  score: number;
-  explanation: string;
-  details?: {
-    readiness_score_normalized?: number;
-    bayesian_score_normalized?: number;
-    utility_score_normalized?: number;
-    readiness_reasons?: [string, number][];
-    utility_reasons?: [string, number][];
-  };
+  category: string;
+  readiness_score: number;
+  probability_score: number;
+  utility_score: number;
+  final_score: number;
+  reason?: string;
+  dependencies?: string[];
 }
 
 interface RecommendationResponse {
@@ -62,8 +59,9 @@ export const CausalRecommendation = () => {
 
   // Graph parameters
   const [graphRadius, setGraphRadius] = useState(1);
-  const [graphThreshold, setGraphThreshold] = useState(0.05);
+  const [graphThreshold, setGraphThreshold] = useState(0.001);  // 0.05から0.001に変更
   const [showGraphSettings, setShowGraphSettings] = useState(false);
+  const [graphLayout, setGraphLayout] = useState<'hierarchical' | 'force' | 'circular'>('hierarchical');
 
   useEffect(() => {
     const sid = sessionStorage.getItem('career_session_id');
@@ -200,7 +198,8 @@ export const CausalRecommendation = () => {
         radius: graphRadius,
         threshold: graphThreshold,
         show_negative: false,
-        member_skills: memberSkills  // Pass the member's acquired skills
+        member_skills: memberSkills,  // Pass the member's acquired skills
+        layout: graphLayout  // Pass layout selection
       });
 
       setGraphHtml(response.data.html);
@@ -215,7 +214,7 @@ export const CausalRecommendation = () => {
     setSelectedRecommendationIndex(index);
     if (index >= 0 && results && results.recommendations[index]) {
       const rec = results.recommendations[index];
-      loadEgoGraph(rec.competence_name || rec.skill_name, rec.skill_code);
+      loadEgoGraph(rec.skill_name, rec.skill_code);
     } else {
       setGraphHtml(null);
     }
@@ -544,7 +543,7 @@ export const CausalRecommendation = () => {
                       <option value={-1}>スキルを選択してください</option>
                       {results.recommendations.map((rec, index) => (
                         <option key={index} value={index}>
-                          #{index + 1} - {rec.competence_name || rec.skill_name} ({(rec.score * 100).toFixed(1)}%)
+                          #{index + 1} - {rec.skill_name} ({(rec.final_score * 100).toFixed(1)}%)
                         </option>
                       ))}
                     </select>
@@ -562,15 +561,15 @@ export const CausalRecommendation = () => {
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="text-2xl font-bold text-gray-400">#{selectedRecommendationIndex + 1}</span>
                                 <h3 className="font-bold text-gray-800 text-xl">
-                                  {rec.competence_name || rec.skill_name}
+                                  {rec.skill_name}
                                 </h3>
                               </div>
-                              {rec.explanation && (
-                                <p className="text-sm text-gray-600">{rec.explanation}</p>
+                              {rec.reason && (
+                                <p className="text-sm text-gray-600">{rec.reason}</p>
                               )}
                             </div>
                             <div className="bg-[#00A968] text-white px-4 py-2 rounded-full text-lg font-bold">
-                              {(rec.score * 100).toFixed(1)}%
+                              {(rec.final_score * 100).toFixed(1)}%
                             </div>
                           </div>
 
@@ -580,28 +579,28 @@ export const CausalRecommendation = () => {
                               <div className="flex justify-between items-center mb-2">
                                 <p className="text-xs font-medium text-gray-600">Readiness（準備度）</p>
                                 <p className="text-sm font-bold text-blue-600">
-                                  {((rec.details?.readiness_score_normalized || 0) * 100).toFixed(0)}%
+                                  {(rec.readiness_score * 100).toFixed(0)}%
                                 </p>
                               </div>
                               <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-blue-500 transition-all"
-                                  style={{ width: `${(rec.details?.readiness_score_normalized || 0) * 100}%` }}
+                                  style={{ width: `${rec.readiness_score * 100}%` }}
                                 />
                               </div>
                               <p className="text-xs text-gray-500 mt-1">保有スキルからの習得しやすさ</p>
                             </div>
                             <div>
                               <div className="flex justify-between items-center mb-2">
-                                <p className="text-xs font-medium text-gray-600">Bayesian（確率）</p>
+                                <p className="text-xs font-medium text-gray-600">Probability（確率）</p>
                                 <p className="text-sm font-bold text-purple-600">
-                                  {((rec.details?.bayesian_score_normalized || 0) * 100).toFixed(0)}%
+                                  {(rec.probability_score * 100).toFixed(0)}%
                                 </p>
                               </div>
                               <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-purple-500 transition-all"
-                                  style={{ width: `${(rec.details?.bayesian_score_normalized || 0) * 100}%` }}
+                                  style={{ width: `${rec.probability_score * 100}%` }}
                                 />
                               </div>
                               <p className="text-xs text-gray-500 mt-1">同様パターンでの習得確率</p>
@@ -610,13 +609,13 @@ export const CausalRecommendation = () => {
                               <div className="flex justify-between items-center mb-2">
                                 <p className="text-xs font-medium text-gray-600">Utility（将来性）</p>
                                 <p className="text-sm font-bold text-green-600">
-                                  {((rec.details?.utility_score_normalized || 0) * 100).toFixed(0)}%
+                                  {(rec.utility_score * 100).toFixed(0)}%
                                 </p>
                               </div>
                               <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-green-500 transition-all"
-                                  style={{ width: `${(rec.details?.utility_score_normalized || 0) * 100}%` }}
+                                  style={{ width: `${rec.utility_score * 100}%` }}
                                 />
                               </div>
                               <p className="text-xs text-gray-500 mt-1">習得後の将来的な価値</p>
@@ -630,41 +629,25 @@ export const CausalRecommendation = () => {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="bg-blue-50 rounded-lg p-4">
                               <h4 className="font-semibold text-blue-800 mb-2 text-sm">準備度の根拠</h4>
-                              {rec.details?.readiness_reasons && rec.details.readiness_reasons.length > 0 ? (
-                                <ul className="text-xs text-blue-700 space-y-1">
-                                  {rec.details.readiness_reasons.slice(0, 5).map(([skill, effect], idx) => (
-                                    <li key={idx}>• {skill} (因果効果: {effect.toFixed(3)})</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="text-xs text-blue-700">
-                                  あなたが既に保有しているスキルから、このスキルへの因果的なつながりが強く、
-                                  習得に必要な基礎が整っています。
-                                </p>
-                              )}
+                              <p className="text-xs text-blue-700">
+                                あなたが既に保有しているスキルから、このスキルへの因果的なつながりが強く、
+                                習得に必要な基礎が整っています。（{(rec.readiness_score * 100).toFixed(1)}%）
+                              </p>
                             </div>
                             <div className="bg-purple-50 rounded-lg p-4">
                               <h4 className="font-semibold text-purple-800 mb-2 text-sm">確率の根拠</h4>
                               <p className="text-xs text-purple-700">
                                 同様のスキルセットを持つメンバーがこのスキルを高確率で習得しているため、
                                 あなたも習得できる可能性が高いです。
-                                ({((rec.details?.bayesian_score_normalized || 0) * 100).toFixed(1)}%の確率)
+                                （{(rec.probability_score * 100).toFixed(1)}%の確率）
                               </p>
                             </div>
                             <div className="bg-green-50 rounded-lg p-4">
                               <h4 className="font-semibold text-green-800 mb-2 text-sm">将来性の根拠</h4>
-                              {rec.details?.utility_reasons && rec.details.utility_reasons.length > 0 ? (
-                                <ul className="text-xs text-green-700 space-y-1">
-                                  {rec.details.utility_reasons.slice(0, 5).map(([skill, effect], idx) => (
-                                    <li key={idx}>• {skill} (因果効果: {effect.toFixed(3)})</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="text-xs text-green-700">
-                                  このスキルを習得すると、さらに多くの高度なスキルへの道が開かれ、
-                                  キャリアの選択肢が大きく広がります。
-                                </p>
-                              )}
+                              <p className="text-xs text-green-700">
+                                このスキルを習得すると、さらに多くの高度なスキルへの道が開かれ、
+                                キャリアの選択肢が大きく広がります。（{(rec.utility_score * 100).toFixed(1)}%）
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -684,7 +667,7 @@ export const CausalRecommendation = () => {
                             <div className="flex items-center justify-between mb-4">
                               <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                                 <Network size={20} className="text-[#00A968]" />
-                                因果グラフ - {rec.competence_name || rec.skill_name}
+                                因果グラフ - {rec.skill_name}
                               </h2>
                               <button
                                 onClick={() => setShowGraphSettings(!showGraphSettings)}
@@ -719,19 +702,36 @@ export const CausalRecommendation = () => {
                                   </div>
                                   <div>
                                     <label className="block text-sm text-gray-700 mb-2">
-                                      因果効果の閾値: {graphThreshold.toFixed(3)}
+                                      因果効果の閉値: {graphThreshold.toFixed(3)}
                                     </label>
                                     <input
                                       type="range"
-                                      min="0.01"
+                                      min="0.001"
                                       max="0.2"
-                                      step="0.01"
+                                      step="0.001"
                                       value={graphThreshold}
                                       onChange={(e) => setGraphThreshold(parseFloat(e.target.value))}
                                       className="w-full"
                                     />
                                     <p className="text-xs text-gray-500 mt-1">
-                                      この値以下の因果効果は表示されません（0.01〜0.2）
+                                      この値以下の因果効果は表示されません（0.001〜0.2）
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm text-gray-700 mb-2">
+                                      グラフレイアウト: {graphLayout === 'hierarchical' ? '階層型' : graphLayout === 'force' ? '力学モデル' : '円形'}
+                                    </label>
+                                    <select
+                                      value={graphLayout}
+                                      onChange={(e) => setGraphLayout(e.target.value as 'hierarchical' | 'force' | 'circular')}
+                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
+                                    >
+                                      <option value="hierarchical">階層型（上下関係が明確）</option>
+                                      <option value="force">力学モデル（自然な配置）</option>
+                                      <option value="circular">円形（全体構造把握）</option>
+                                    </select>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      ノードの配置アルゴリズムを選択
                                     </p>
                                   </div>
                                 </div>
@@ -757,6 +757,15 @@ export const CausalRecommendation = () => {
                                   ノード（丸）がスキルを表し、エッジ（矢印）が因果関係を表します。
                                   矢印の太さは因果効果の強さを示します。
                                 </p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-blue-800 mb-2">インタラクション:</p>
+                                <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                                  <li><strong>ズーム:</strong> マウスホイールまたはピンチジェスチャーで拡大・縮小</li>
+                                  <li><strong>パン:</strong> ドラッグでグラフ全体を移動</li>
+                                  <li><strong>ノードクリック:</strong> ノードをクリックするとハイライトされます</li>
+                                  <li><strong>ノードドラッグ:</strong> 個別のノードをドラッグで位置変更</li>
+                                </ul>
                               </div>
                               <div>
                                 <p className="text-sm font-semibold text-blue-800 mb-2">凡例:</p>

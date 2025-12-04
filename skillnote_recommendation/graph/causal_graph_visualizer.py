@@ -128,6 +128,16 @@ class CausalGraphVisualizer:
             show_negative: 負の因果関係も表示するか
             member_skills: メンバーの保有スキルリスト（緑でハイライト）
         """
+        # center_nodeが隣接行列に存在するかチェック
+        if center_node not in self.adj_matrix.columns or center_node not in self.adj_matrix.index:
+            logger.warning(f"Node {center_node} not found in adjacency matrix. Returning single-node graph.")
+            # 中心ノードのみのグラフを返す
+            dot = graphviz.Digraph(comment='Ego Network (Node Not Found)')
+            dot.attr(rankdir='LR')
+            dot.attr('node', fontsize='18', width='2.0', height='0.8')
+            dot.node(center_node, center_node, style='filled', fillcolor='lightblue', shape='box')
+            return dot
+        
         # 簡易実装: 関連するノードを抽出して visualize を呼ぶ
         related_nodes = {center_node}
 
@@ -170,11 +180,51 @@ class CausalGraphVisualizer:
         show_negative: bool = False,
         member_skills: Optional[List[str]] = None,
         output_path: str = "ego_network.html",
-        height: str = "500px"
+        height: str = "500px",
+        layout: str = "hierarchical"  # 新規追加
     ) -> str:
         """
         エゴネットワークをインタラクティブに可視化
         """
+        # center_nodeが隣接行列に存在するかチェック
+        if center_node not in self.adj_matrix.columns or center_node not in self.adj_matrix.index:
+            logger.warning(f"Node {center_node} not found in adjacency matrix. Returning empty graph.")
+            # 空のグラフを返す
+            try:
+                from pyvis.network import Network
+            except ImportError:
+                raise ImportError(
+                    "pyvis is not installed. Please install it with: pip install pyvis>=0.3.2"
+                )
+            
+            net = Network(
+                height=height,
+                width="100%",
+                directed=True,
+                notebook=False
+            )
+            
+            # center_nodeのみを追加
+            net.add_node(
+                center_node,
+                label=center_node,
+                color="#97C2FC",
+                title=f"<b>{center_node}</b><br>※このスキルは因果グラフに含まれていません<br>（因果関係を学習するには、より多くのデータが必要です）",
+                size=25,
+                font={"size": 20, "face": "arial", "bold": True}
+            )
+            
+            # 出力パスの決定
+            if output_path is None:
+                fd, output_path = tempfile.mkstemp(suffix=".html", prefix="causal_graph_")
+                os.close(fd)
+            
+            # HTMLファイルを生成
+            net.save_graph(output_path)
+            logger.info(f"Empty graph (node not in matrix) saved to: {output_path}")
+            
+            return output_path
+        
         # 簡易実装: 関連するノードを抽出して visualize_interactive を呼ぶ
         related_nodes = {center_node}
 
@@ -189,11 +239,16 @@ class CausalGraphVisualizer:
 
         # サブセット作成
         sub_matrix = self.adj_matrix.loc[list(related_nodes), list(related_nodes)]
+        
+        # エッジ数をカウント（デバッグ用）
+        edge_count = (sub_matrix.abs() >= threshold).sum().sum()
+        logger.info(f"Ego network: {len(related_nodes)} nodes, {edge_count} edges (threshold={threshold})")
 
         # サブクラス作成して可視化
         sub_visualizer = CausalGraphVisualizer(sub_matrix)
         
-        return sub_visualizer.visualize_interactive(
+        # デバッグ情報を付与
+        html_path = sub_visualizer.visualize_interactive(
             output_path=output_path,
             threshold=threshold,
             top_n=len(related_nodes), # 全ノード表示
@@ -201,8 +256,11 @@ class CausalGraphVisualizer:
             width="100%",
             highlight_nodes=[center_node],
             member_skills=member_skills,
-            show_negative=show_negative
+            show_negative=show_negative,
+            layout=layout  # 新規追加
         )
+        
+        return html_path
 
     def _filter_nodes_by_centrality(
         self,
@@ -265,7 +323,8 @@ class CausalGraphVisualizer:
         physics_enabled: bool = True,
         height: str = "750px",
         width: str = "100%",
-        notebook: bool = False
+        notebook: bool = False,
+        layout: str = "hierarchical"  # 新規追加
     ) -> str:
         """
         PyVisを用いてインタラクティブなHTMLグラフを生成
@@ -282,6 +341,7 @@ class CausalGraphVisualizer:
             height: グラフの高さ
             width: グラフの幅
             notebook: Notebook環境かどうか
+            layout: レイアウトアルゴリズム ("hierarchical", "force", "circular")
 
         Returns:
             生成されたHTMLファイルのパス
@@ -311,29 +371,88 @@ class CausalGraphVisualizer:
             notebook=False
         )
 
-        # 物理演算の設定
-        if physics_enabled:
+        # 物理演算とレイアウトの設定
+        if layout == "hierarchical":
+            # 階層型レイアウト
             net.set_options("""
             {
-                "physics": {
-                    "enabled": true,
-                    "barnesHut": {
-                        "gravitationalConstant": -30000,
-                        "centralGravity": 0.3,
-                        "springLength": 200,
-                        "springConstant": 0.04,
-                        "damping": 0.09,
-                        "avoidOverlap": 0.5
-                    },
-                    "stabilization": {
+                "layout": {
+                    "hierarchical": {
                         "enabled": true,
-                        "iterations": 100
+                        "direction": "UD",
+                        "sortMethod": "directed",
+                        "nodeSpacing": 150,
+                        "levelSeparation": 200
                     }
+                },
+                "physics": {
+                    "enabled": false
                 }
             }
             """)
+        elif layout == "circular":
+            # 円形レイアウト
+            net.set_options("""
+            {
+                "layout": {
+                    "randomSeed": 42
+                },
+                "physics": {
+                    "enabled": false
+                }
+            }
+            """)
+            # Note: 円形配置は手動で座標を設定する必要があるが、
+            # PyVisの制限により完全な円形配置は難しいため、
+            # 物理演算を無効にした自然な配置を使用
+        elif layout == "force":
+            # 力学モデル（デフォルト）
+            if physics_enabled:
+                net.set_options("""
+                {
+                    "physics": {
+                        "enabled": true,
+                        "barnesHut": {
+                            "gravitationalConstant": -30000,
+                            "centralGravity": 0.3,
+                            "springLength": 200,
+                            "springConstant": 0.04,
+                            "damping": 0.09,
+                            "avoidOverlap": 0.5
+                        },
+                        "stabilization": {
+                            "enabled": true,
+                            "iterations": 100
+                        }
+                    }
+                }
+                """)
+            else:
+                net.toggle_physics(False)
         else:
-            net.toggle_physics(False)
+            # デフォルトは力学モデル
+            if physics_enabled:
+                net.set_options("""
+                {
+                    "physics": {
+                        "enabled": true,
+                        "barnesHut": {
+                            "gravitationalConstant": -30000,
+                            "centralGravity": 0.3,
+                            "springLength": 200,
+                            "springConstant": 0.04,
+                            "damping": 0.09,
+                            "avoidOverlap": 0.5
+                        },
+                        "stabilization": {
+                            "enabled": true,
+                            "iterations": 100
+                        }
+                    }
+                }
+                """)
+            else:
+                net.toggle_physics(False)
 
         highlight_set = set(highlight_nodes) if highlight_nodes else set()
         member_skills_set = set(member_skills) if member_skills else set()
@@ -406,8 +525,21 @@ class CausalGraphVisualizer:
             fd, output_path = tempfile.mkstemp(suffix=".html", prefix="causal_graph_")
             os.close(fd)
 
+        # デバッグ情報をタイトルに追加
+        debug_info = f"<p style='text-align:center; color:#666; font-size:12px; margin-top:10px;'>ノード数: {len(selected_nodes)} | エッジ数: {net.num_edges()} | 閾値: {threshold}</p>"
+        
         # HTMLファイルを生成
         net.save_graph(output_path)
+        
+        # HTMLを読み込んでデバッグ情報を追加
+        with open(output_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        # </body>の直前にデバッグ情報を挿入
+        html_content = html_content.replace('</body>', f'{debug_info}</body>')
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
 
         logger.info(f"Interactive graph saved to: {output_path}")
         logger.info(f"Nodes: {len(selected_nodes)}, Edges: {net.num_edges()}")
