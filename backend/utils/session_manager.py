@@ -3,13 +3,14 @@ Session and model state management for the backend API.
 
 This module provides centralized management of:
 - Uploaded session data
-- Trained models
+- Trained models (with disk persistence)
 - Cached transformed data
 """
 
 from typing import Dict, Any, Optional
 import time
 from threading import Lock
+from backend.utils.model_persistence import model_persistence
 
 
 class SessionManager:
@@ -37,6 +38,7 @@ class SessionManager:
         self._models: Dict[str, Any] = {}
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._data_lock = Lock()
+        self._model_persistence = model_persistence
         self._initialized = True
 
     # Session management
@@ -93,10 +95,21 @@ class SessionManager:
         return removed_count
 
     # Model management
-    def add_model(self, model_id: str, model: Any) -> None:
-        """Store a trained model."""
+    def add_model(self, model_id: str, model: Any, metadata: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Store a trained model in memory and on disk.
+        
+        Args:
+            model_id: Unique model identifier
+            model: CausalGraphRecommender instance
+            metadata: Optional metadata to save with the model
+        """
         with self._data_lock:
             self._models[model_id] = {"model": model, "timestamp": time.time()}
+        
+        # Save to disk (outside of lock to avoid blocking)
+        if metadata:
+            self._model_persistence.save_model(model_id, model, metadata)
 
     def get_model(self, model_id: str) -> Optional[Any]:
         """Retrieve a trained model."""
@@ -110,12 +123,26 @@ class SessionManager:
         return model_id in self._models
 
     def remove_model(self, model_id: str) -> bool:
-        """Remove a trained model."""
+        """
+        Remove a trained model from memory and disk.
+        
+        Args:
+            model_id: Unique model identifier
+            
+        Returns:
+            True if removed, False if not found
+        """
+        removed = False
         with self._data_lock:
             if model_id in self._models:
                 del self._models[model_id]
-                return True
-            return False
+                removed = True
+        
+        # Delete from disk (outside of lock)
+        if removed:
+            self._model_persistence.delete_saved_model(model_id)
+        
+        return removed
 
     def cleanup_old_models(self, max_age_seconds: int = 86400) -> int:
         """
@@ -137,6 +164,54 @@ class SessionManager:
                 removed_count += 1
 
         return removed_count
+    
+    def load_all_models(self) -> Dict[str, Any]:
+        """
+        Load all saved models from disk into memory.
+        Called on application startup.
+        
+        Returns:
+            Dictionary with statistics about loaded models
+        """
+        from backend.core.logging import get_logger
+        logger = get_logger(__name__)
+        
+        saved_models = self._model_persistence.list_saved_models()
+        loaded_count = 0
+        failed_count = 0
+        
+        logger.info(f"Loading saved models from disk", total_models=len(saved_models))
+        
+        for model_info in saved_models:
+            model_id = model_info['model_id']
+            
+            try:
+                # Load model from disk
+                recommender = self._model_persistence.load_model(model_id)
+                
+                if recommender:
+                    # Add to memory (without saving to disk again)
+                    with self._data_lock:
+                        timestamp = model_info['metadata'].get('created_at', time.time())
+                        self._models[model_id] = {"model": recommender, "timestamp": timestamp}
+                    loaded_count += 1
+                    logger.debug(f"Loaded model", model_id=model_id)
+                else:
+                    failed_count += 1
+                    logger.warning(f"Failed to load model", model_id=model_id)
+                    
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"Error loading model", model_id=model_id, error=str(e), exc_info=True)
+        
+        result = {
+            'total_found': len(saved_models),
+            'loaded': loaded_count,
+            'failed': failed_count
+        }
+        
+        logger.info(f"Model loading complete", **result)
+        return result
 
     # Cache management
     def add_cache(self, session_id: str, data: Dict[str, Any]) -> None:

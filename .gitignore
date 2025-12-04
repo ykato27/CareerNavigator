@@ -85,6 +85,9 @@ yarn-error.log*
 # Backend temporary uploads
 backend/temp_uploads/
 
+# Saved models (excluded for privacy and size)
+backend/saved_models/
+
 # Test coverage reports
 coverage.json
 .coverage

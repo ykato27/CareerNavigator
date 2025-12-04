@@ -94,9 +94,6 @@ class TrainingService:
         # Generate unique model ID
         model_id = f"model_{session_id}_{int(time.time())}"
 
-        # Store trained model
-        self.repository.add_model(model_id, recommender)
-
         # Prepare training summary (flattened structure for test compatibility)
         summary = {
             "model_id": model_id,
@@ -109,6 +106,21 @@ class TrainingService:
             "min_members_per_skill": min_members_per_skill,
             "correlation_threshold": correlation_threshold,
         }
+        
+        # Prepare metadata for disk persistence
+        metadata = {
+            "model_id": model_id,
+            "session_id": session_id,
+            "num_members": len(recommender.skill_matrix_.index),
+            "num_skills": len(recommender.skill_matrix_.columns),
+            "weights": final_weights,
+            "created_at": time.time(),
+            "min_members_per_skill": min_members_per_skill,
+            "correlation_threshold": correlation_threshold,
+        }
+
+        # Store trained model (will save to disk automatically)
+        self.repository.add_model(model_id, recommender, metadata)
 
         logger.info("Model stored successfully", model_id=model_id)
 

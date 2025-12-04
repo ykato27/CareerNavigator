@@ -56,6 +56,29 @@ app.include_router(
 )
 
 
+# Startup event: Load saved models from disk
+@app.on_event("startup")
+async def load_saved_models():
+    """Load all saved models from disk on application startup."""
+    from backend.utils import session_manager
+    from backend.core.logging import get_logger
+    
+    logger = get_logger(__name__)
+    logger.info("Application startup: Loading saved models...")
+    
+    try:
+        result = session_manager.load_all_models()
+        logger.info(
+            "Model loading complete",
+            total_found=result['total_found'],
+            loaded=result['loaded'],
+            failed=result['failed']
+        )
+    except Exception as e:
+        logger.error("Failed to load saved models", error=str(e), exc_info=True)
+        # Don't raise - allow application to start even if model loading fails
+
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to CareerNavigator API", "version": "1.0.0"}
