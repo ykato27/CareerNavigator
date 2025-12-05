@@ -161,17 +161,35 @@ class CausalGraphRecommender:
         scores = []
         
         for target_skill in unowned_skills:
-            # 1. Readiness Score: Owned -> Target
-            readiness_score = 0.0
+            # 1. Readiness Score: Target への全因果効果のうち、保有スキルからの割合
+            # 全スキルからの因果効果を集計（正負の符号を考慮）
+            total_effects_to_target = 0.0
+            owned_effects_to_target = 0.0
             readiness_reasons = []
             
-            for owned in owned_skills:
-                # owned が target に与える影響
-                effect = self._get_effect(owned, target_skill)
+            # target_skillへの因果効果を全スキルから集計
+            for skill in self.skill_matrix_.columns:
+                effect = self._get_effect(skill, target_skill)
                 # 閾値を0.001に下げて、より弱い因果効果も捕捉
-                if effect > 0.001:
-                    readiness_score += effect
-                    readiness_reasons.append((owned, effect))
+                # 符号を考慮して合計（負の効果もカウント）
+                if abs(effect) > 0.001:
+                    total_effects_to_target += effect  # 符号を保持
+                    
+                    # 保有スキルの場合
+                    if skill in owned_skills:
+                        owned_effects_to_target += effect  # 符号を保持
+                        readiness_reasons.append((skill, effect))
+            
+            # Readiness Score = 保有スキルからの効果 / 全スキルからの効果
+            # 分母が0または負の場合の処理
+            if total_effects_to_target > 0.001:
+                readiness_score = max(owned_effects_to_target / total_effects_to_target, 0.0)
+            elif total_effects_to_target < -0.001:
+                # 全体が負の場合（習得を阻害するスキルが多い）
+                readiness_score = 0.0
+            else:
+                # 全体の効果がほぼ0の場合
+                readiness_score = 0.0
             
             # 2. Utility Score: Target -> Unowned (Future)
             utility_score = 0.0
@@ -221,26 +239,23 @@ class CausalGraphRecommender:
                     'utility_reasons': sorted(utility_reasons, key=lambda x: x[1], reverse=True)
                 })
 
-        # スコアの正規化（絶対値ベース）
+        # スコアの正規化
+        # Readinessは既に0〜1の範囲（割合）
+        # Utilityのみ相対的に正規化
         if scores:
-            # 理論的最大値を計算（保有/未習得スキル数 × 平均因果効果）
-            # 経験的に因果効果の平均値は0.3程度と仮定
-            avg_effect = 0.3
-            theoretical_max_readiness = len(owned_skills) * avg_effect if owned_skills else 1.0
-            theoretical_max_utility = len(unowned_skills) * avg_effect if unowned_skills else 1.0
+            max_utility = max(s['utility_score'] for s in scores) if scores else 1.0
             
-            # 絶対値ベースで正規化（理論最大値で割る）
             for s in scores:
-                # min()で1.0を超えないようにクリップ
-                s['readiness_score_normalized'] = min(
-                    s['readiness_score'] / theoretical_max_readiness, 1.0
-                ) if theoretical_max_readiness > 0 else 0.0
+                # Readiness: 既に0〜1（全効果に対する保有効果の割合）
+                s['readiness_score_normalized'] = s['readiness_score']
                 
-                s['utility_score_normalized'] = min(
-                    s['utility_score'] / theoretical_max_utility, 1.0
-                ) if theoretical_max_utility > 0 else 0.0
+                # Utility: 相対値で正規化
+                s['utility_score_normalized'] = (
+                    s['utility_score'] / max_utility if max_utility > 0 else 0.0
+                )
                 
-                s['bayesian_score_normalized'] = s['bayesian_score']  # 既に0〜1
+                # Bayesian: 既に0〜1
+                s['bayesian_score_normalized'] = s['bayesian_score']
 
                 # 総合スコアを正規化後の値で計算
                 s['total_score'] = (
@@ -375,16 +390,28 @@ class CausalGraphRecommender:
                 'utility_reasons': []
             }
         
-        # --- Causalスコア計算（recommendメソッドのロジックを直接実装） ---
+        # --- Causalスコア計算（新ロジック）---
         
-        # 1. Readiness Score: 保有スキルからのreadiness効果の合計
-        readiness_score = 0.0
+        # 1. Readiness Score: 全スキルからの効果に対する保有スキルからの効果の割合
+        total_effects_to_target = 0.0
+        owned_effects_to_target = 0.0
         readiness_reasons = []
-        for prereq in owned_skills:
-            effect = self._get_effect(prereq, skill_name)
-            if effect > 0.001:
-                readiness_score += effect
-                readiness_reasons.append((prereq, effect))
+        
+        # target_skillへの因果効果を全スキルから集計
+        for skill in self.skill_matrix_.columns:
+            effect = self._get_effect(skill, skill_name)
+            if abs(effect) > 0.001:
+                total_effects_to_target += effect  # 符号を保持
+                
+                if skill in owned_skills:
+                    owned_effects_to_target += effect  # 符号を保持
+                    readiness_reasons.append((skill, effect))
+        
+        # Readiness Score = 保有効果 / 全効果（0〜1の範囲）
+        if total_effects_to_target > 0.001:
+            readiness_score = max(owned_effects_to_target / total_effects_to_target, 0.0)
+        else:
+            readiness_score = 0.0
         
         # 2. Utility Score: このスキルが未習得スキルに与える影響の合計
         unowned_skills = member_skills[member_skills == 0].index.tolist()
@@ -406,18 +433,12 @@ class CausalGraphRecommender:
             except Exception as e:
                 logger.debug(f"ベイジアン推論エラー ({skill_name}): {e}")
         
-        # スコアの正規化（絶対値ベース）
-        # 理論的最大値で割ることで、100%が真の準備完了を意味する
-        avg_effect = 0.3  # 経験的な平均因果効果
+        # スコアの正規化
+        # Readiness: 既に0〜1（割合）
+        readiness_normalized = readiness_score
         
-        # Readiness: 保有スキル数 × 平均効果
-        theoretical_max_readiness = len(owned_skills) * avg_effect if owned_skills else 1.0
-        readiness_normalized = min(
-            readiness_score / theoretical_max_readiness, 1.0
-        ) if theoretical_max_readiness > 0 else 0.0
-        
-        # Utility: 未習得スキル数 × 平均効果
-        theoretical_max_utility = len(unowned_skills) * avg_effect if unowned_skills else 1.0
+        # Utility: 簡易的に相対値で正規化（理論最大値で割る）
+        theoretical_max_utility = len(unowned_skills) * 0.3 if unowned_skills else 1.0
         utility_normalized = min(
             utility_score / theoretical_max_utility, 1.0
         ) if theoretical_max_utility > 0 else 0.0
