@@ -88,6 +88,9 @@ backend/temp_uploads/
 # Saved models (excluded for privacy and size)
 backend/saved_models/
 
+# Session constraints (excluded for privacy)
+backend/session_constraints/
+
 # Test coverage reports
 coverage.json
 .coverage

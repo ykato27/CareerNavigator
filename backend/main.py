@@ -9,6 +9,7 @@ from backend.api import (
     organizational,
     career_dashboard,
     role_based_dashboard,
+    constraints,
 )
 from backend.middleware import error_handler_middleware, logging_middleware
 from backend.core.logging import configure_logging
@@ -49,6 +50,7 @@ app.include_router(recommendation.router, prefix="/api", tags=["recommendation"]
 app.include_router(train.router, prefix="/api", tags=["train"])
 app.include_router(weights.router, prefix="/api", tags=["weights"])
 app.include_router(graph.router, prefix="/api", tags=["graph"])
+app.include_router(constraints.router, prefix="/api", tags=["constraints"])
 app.include_router(organizational.router, prefix="/api", tags=["organizational"])
 app.include_router(career_dashboard.router, prefix="/api/career", tags=["career-dashboard"])
 app.include_router(

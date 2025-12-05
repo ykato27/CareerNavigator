@@ -239,3 +239,50 @@ class CausalStructureLearner:
                     if abs(val) > 0.01:
                         effects[col][row] = val
             return effects
+
+    def apply_constraints(self, constraints: List[Dict[str, Any]]) -> None:
+        """
+        学習済み隣接行列に制約を適用
+        
+        Args:
+            constraints: 制約のリスト
+                         各制約: {'from_skill', 'to_skill', 'constraint_type', 'value'}
+        
+        制約タイプ:
+            - 'required': エッジを強制的に追加/設定
+            - 'forbidden': エッジを強制的に削除
+            - 'deleted': エッジを削除
+        """
+        if not self.is_fitted:
+            raise RuntimeError("モデルが学習されていません。fit()を実行してください。")
+        
+        applied_count = 0
+        skipped_count = 0
+        
+        for constraint in constraints:
+            from_skill = constraint.get('from_skill')
+            to_skill = constraint.get('to_skill')
+            c_type = constraint.get('constraint_type')
+            
+            # スキル名が存在しない場合はスキップ
+            if from_skill not in self.adjacency_matrix_.index or to_skill not in self.adjacency_matrix_.columns:
+                logger.warning(f"制約のスキルが行列に存在しません: {from_skill} -> {to_skill}")
+                skipped_count += 1
+                continue
+            
+            # 制約を適用
+            if c_type == 'required':
+                # 必須: 強制的に値を設定
+                value = constraint.get('value', 0.5)
+                self.adjacency_matrix_.loc[from_skill, to_skill] = value
+                applied_count += 1
+                logger.debug(f"必須制約を適用: {from_skill} -> {to_skill} = {value}")
+                
+            elif c_type in ['forbidden', 'deleted']:
+                # 禁止/削除: 値を0に
+                self.adjacency_matrix_.loc[from_skill, to_skill] = 0.0
+                applied_count += 1
+                logger.debug(f"{c_type}制約を適用: {from_skill} -> {to_skill} = 0.0")
+        
+        logger.info(f"制約適用完了: {applied_count}個適用, {skipped_count}個スキップ")
+

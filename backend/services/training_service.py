@@ -31,6 +31,7 @@ class TrainingService:
         min_members_per_skill: int = 5,
         correlation_threshold: float = 0.2,
         weights: Dict[str, float] | None = None,
+        apply_constraints: bool = True,
     ) -> Dict[str, Any]:
         """
         Train a causal inference model.
@@ -118,6 +119,16 @@ class TrainingService:
             "min_members_per_skill": min_members_per_skill,
             "correlation_threshold": correlation_threshold,
         }
+
+        # Apply constraints if enabled
+        constraints_applied = 0
+        if apply_constraints:
+            from backend.utils.constraint_manager import constraint_manager
+            constraints = constraint_manager.load_constraints(session_id)
+            if constraints:
+                recommender.learner.apply_constraints(constraints)
+                constraints_applied = len(constraints)
+                logger.info(f"Applied {constraints_applied} constraints to model")
 
         # Store trained model (will save to disk automatically)
         self.repository.add_model(model_id, recommender, metadata)
