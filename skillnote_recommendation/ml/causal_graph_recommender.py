@@ -221,22 +221,25 @@ class CausalGraphRecommender:
                     'utility_reasons': sorted(utility_reasons, key=lambda x: x[1], reverse=True)
                 })
 
-        # スコアの正規化（全候補スキル間で0〜1に正規化）
+        # スコアの正規化（絶対値ベース）
         if scores:
-            # 各スコアの最大値を取得
-            max_readiness = max(s['readiness_score'] for s in scores)
-            max_utility = max(s['utility_score'] for s in scores)
-            # bayesian_scoreは既に0〜1なので正規化不要
-
-            # 正規化を実行し、正規化後の値で総合スコアを再計算
+            # 理論的最大値を計算（保有/未習得スキル数 × 平均因果効果）
+            # 経験的に因果効果の平均値は0.3程度と仮定
+            avg_effect = 0.3
+            theoretical_max_readiness = len(owned_skills) * avg_effect if owned_skills else 1.0
+            theoretical_max_utility = len(unowned_skills) * avg_effect if unowned_skills else 1.0
+            
+            # 絶対値ベースで正規化（理論最大値で割る）
             for s in scores:
-                # 0除算を防ぐ
-                s['readiness_score_normalized'] = (
-                    s['readiness_score'] / max_readiness if max_readiness > 0 else 0.0
-                )
-                s['utility_score_normalized'] = (
-                    s['utility_score'] / max_utility if max_utility > 0 else 0.0
-                )
+                # min()で1.0を超えないようにクリップ
+                s['readiness_score_normalized'] = min(
+                    s['readiness_score'] / theoretical_max_readiness, 1.0
+                ) if theoretical_max_readiness > 0 else 0.0
+                
+                s['utility_score_normalized'] = min(
+                    s['utility_score'] / theoretical_max_utility, 1.0
+                ) if theoretical_max_utility > 0 else 0.0
+                
                 s['bayesian_score_normalized'] = s['bayesian_score']  # 既に0〜1
 
                 # 総合スコアを正規化後の値で計算
@@ -403,18 +406,21 @@ class CausalGraphRecommender:
             except Exception as e:
                 logger.debug(f"ベイジアン推論エラー ({skill_name}): {e}")
         
-        # スコアの正規化は、全スキルと比較する必要があるため、ここでは生のスコアを返す
-        # 正規化は呼び出し側で実施する必要がある場合がある
-        # ただし、簡易的に0-1の範囲に収めるため、適当な最大値で割る
+        # スコアの正規化（絶対値ベース）
+        # 理論的最大値で割ることで、100%が真の準備完了を意味する
+        avg_effect = 0.3  # 経験的な平均因果効果
         
-        # 簡易的な正規化（最大値を仮定）
-        # Readiness: 保有スキル数 × 平均効果(0.3) を最大と仮定
-        max_readiness = len(owned_skills) * 0.3 if owned_skills else 1.0
-        readiness_normalized = min(readiness_score / max_readiness, 1.0) if max_readiness > 0 else 0.0
+        # Readiness: 保有スキル数 × 平均効果
+        theoretical_max_readiness = len(owned_skills) * avg_effect if owned_skills else 1.0
+        readiness_normalized = min(
+            readiness_score / theoretical_max_readiness, 1.0
+        ) if theoretical_max_readiness > 0 else 0.0
         
-        # Utility: 未習得スキル数 × 平均効果(0.3) を最大と仮定
-        max_utility = len(unowned_skills) * 0.3 if unowned_skills else 1.0
-        utility_normalized = min(utility_score / max_utility, 1.0) if max_utility > 0 else 0.0
+        # Utility: 未習得スキル数 × 平均効果
+        theoretical_max_utility = len(unowned_skills) * avg_effect if unowned_skills else 1.0
+        utility_normalized = min(
+            utility_score / theoretical_max_utility, 1.0
+        ) if theoretical_max_utility > 0 else 0.0
         
         # Bayesian: 既に0-1の範囲
         bayesian_normalized = bayesian_score
