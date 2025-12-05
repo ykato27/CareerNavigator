@@ -54,6 +54,12 @@ export const API_ENDPOINTS = {
   ORG_SKILL_GAP: `${API_PREFIX}/organizational/skill-gap`,
   ORG_SUCCESSION: `${API_PREFIX}/organizational/succession`,
   ORG_SIMULATE: `${API_PREFIX}/organizational/simulate`,
+
+  // Constraints
+  CONSTRAINTS: (sessionId: string) => `${API_PREFIX}/constraints/${sessionId}`,
+  CONSTRAINT_DELETE: (sessionId: string, constraintId: string) =>
+    `${API_PREFIX}/constraints/${sessionId}/${constraintId}`,
+  CONSTRAINTS_APPLY: (sessionId: string) => `${API_PREFIX}/constraints/${sessionId}/apply`,
 } as const;
 
 // UI Constants

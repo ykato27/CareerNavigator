@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import lingam
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 import logging
 import community.community_louvain as community_louvain
 
