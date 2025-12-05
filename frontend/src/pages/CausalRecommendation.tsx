@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Brain, TrendingUp, AlertCircle, Loader2, Network, Info, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
+import { ConstraintManagementPanel } from '../components/ConstraintManagementPanel';
 
 interface Member {
   member_code: string;
@@ -429,6 +430,18 @@ export const CausalRecommendation = () => {
           )}
         </div>
 
+        {/* Constraint Management Panel */}
+        <ConstraintManagementPanel
+          sessionId={sessionId}
+          modelId={modelId}
+          onConstraintsApplied={() => {
+            // Reload recommendations if member is selected
+            if (selectedMember) {
+              handleSubmit(new Event('submit') as any);
+            }
+          }}
+        />
+
         {/* Input Form */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">推薦パラメータ</h2>
@@ -739,7 +752,7 @@ export const CausalRecommendation = () => {
                                   onClick={() => {
                                     if (selectedRecommendationIndex >= 0 && results && results.recommendations[selectedRecommendationIndex]) {
                                       const rec = results.recommendations[selectedRecommendationIndex];
-                                      loadEgoGraph(rec.competence_name || rec.skill_name, rec.skill_code);
+                                      loadEgoGraph(rec.skill_name, rec.skill_code);
                                     }
                                   }}
                                   disabled={loadingGraph}

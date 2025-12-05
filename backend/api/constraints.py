@@ -177,3 +177,39 @@ async def apply_constraints(session_id: str, request: ApplyConstraintsRequest):
     except Exception as e:
         logger.error("Failed to apply constraints", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"制約の適用に失敗しました: {str(e)}")
+
+
+@router.get("/skills/{model_id}")
+async def get_model_skills(model_id: str):
+    """
+    Get all skills from a trained model.
+    
+    Args:
+        model_id: Model identifier
+        
+    Returns:
+        List of skill names
+    """
+    try:
+        # Get the model
+        recommender = session_manager.get_model(model_id)
+        if not recommender:
+            raise ModelNotFoundException(model_id)
+        
+        # Get skills from the skill matrix
+        if hasattr(recommender, 'skill_matrix_') and recommender.skill_matrix_ is not None:
+            skills = recommender.skill_matrix_.columns.tolist()
+        else:
+            skills = []
+        
+        return {
+            "model_id": model_id,
+            "skills": skills,
+            "count": len(skills)
+        }
+        
+    except ModelNotFoundException:
+        raise HTTPException(status_code=404, detail=f"モデル '{model_id}' が見つかりません")
+    except Exception as e:
+        logger.error("Failed to get model skills", model_id=model_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"スキル一覧の取得に失敗しました: {str(e)}")

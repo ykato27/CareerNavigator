@@ -253,12 +253,25 @@ class CausalGraphRecommender:
         results = []
         for item in scores[:top_n]:
             explanation = self._generate_explanation(item)
+            
+            # competence_masterからカテゴリを取得
+            skill_code = item['skill_code']
+            category = ''
+            if not self.competence_master.empty:
+                mask = self.competence_master['力量コード'] == skill_code
+                if mask.any():
+                    category = str(self.competence_master.loc[mask, '力量カテゴリー名'].iloc[0])
+            
             results.append({
-                'competence_code': item['skill_code'],
-                'competence_name': item['skill_name'],
-                'score': item['total_score'],
-                'explanation': explanation,
-                'details': item # 詳細データも含める
+                'skill_code': skill_code,
+                'skill_name': item['skill_name'],
+                'category': category,
+                'readiness_score': item['readiness_score_normalized'],
+                'probability_score': item['bayesian_score_normalized'],
+                'utility_score': item['utility_score_normalized'],
+                'final_score': item['total_score'],
+                'reason': explanation,
+                'dependencies': []  # TODO: 依存関係を返す場合は実装
             })
             
         return results

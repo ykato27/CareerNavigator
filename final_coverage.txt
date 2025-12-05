@@ -180,3 +180,4 @@ tests/backend/test_utils_session_manager.py::TestSessionManagement::test_get_non
 tests/backend/test_utils_session_manager.py::TestSessionManagement::test_remove_session PASSED [ 89%]
 tests/backend/test_utils_session_manager.py::TestSessionManagement::test_remove_nonexistent_session PASSED [ 89%]
 tests/backend/test_utils_session_manager.py::TestSessionManagement::test_last_accessed_updated PASSED [ 90%]
+tests/backend/test_utils_session_manager.py::TestSessionManagement::test_cleanup_old_sessions 

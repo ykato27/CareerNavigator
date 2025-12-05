@@ -108,8 +108,13 @@ class SessionManager:
             self._models[model_id] = {"model": model, "timestamp": time.time()}
         
         # Save to disk (outside of lock to avoid blocking)
-        if metadata:
-            self._model_persistence.save_model(model_id, model, metadata)
+        # If no metadata provided, create basic metadata
+        if metadata is None:
+            metadata = {
+                "model_id": model_id,
+                "created_at": time.time()
+            }
+        self._model_persistence.save_model(model_id, model, metadata)
 
     def get_model(self, model_id: str) -> Optional[Any]:
         """Retrieve a trained model."""

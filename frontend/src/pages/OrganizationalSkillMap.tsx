@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   LayoutGrid, TrendingDown, Users, Briefcase,
   AlertCircle, Info, Loader2, BarChart3,
-  Target, Award, Clock
+  Target, Award, Clock, Download, Filter, X
 } from 'lucide-react';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
 
@@ -65,6 +65,10 @@ export const OrganizationalSkillMap = () => {
   const [targetPosition, setTargetPosition] = useState('');
   const [successionCandidates, setSuccessionCandidates] = useState<SuccessionCandidate[]>([]);
   const [loadingSuccession, setLoadingSuccession] = useState(false);
+
+  // Filter state
+  const [skillFilter, setSkillFilter] = useState('');
+  const [showFilter, setShowFilter] = useState(false);
 
   const [error, setError] = useState('');
 
@@ -152,6 +156,121 @@ export const OrganizationalSkillMap = () => {
     return '要大幅育成';
   };
 
+  // CSV Export function
+  const exportToCSV = (data: any[], filename: string) => {
+    if (data.length === 0) return;
+
+    const keys = Object.keys(data[0]);
+    const csvContent = [
+      keys.join(','),
+      ...data.map(row => keys.map(key => {
+        const value = row[key];
+        // エスケープ処理（カンマや改行を含む場合はクォートで囲む）
+        if (typeof value === 'string' && (value.includes(',') || value.includes('\n'))) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      }).join(','))
+    ].join('\n');
+
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportMetrics = () => {
+    if (!metrics) return;
+
+    const data = [
+      {
+        '項目': '総メンバー数',
+        '値': metrics.total_members,
+        '単位': '人'
+      },
+      {
+        '項目': '総スキル数',
+        '値': metrics.total_skills,
+        '単位': 'スキル'
+      },
+      {
+        '項目': '1人あたり平均スキル数',
+        '値': metrics.avg_skills_per_member,
+        '単位': 'スキル'
+      },
+      {
+        '項目': 'スキルカバレッジ率',
+        '値': `${(metrics.coverage_rate * 100).toFixed(1)}%`,
+        '単位': ''
+      },
+      {
+        '項目': 'スキル多様性指標',
+        '値': metrics.diversity_index,
+        '単位': ''
+      }
+    ];
+    exportToCSV(data, '組織メトリクス');
+  };
+
+  const exportTopSkills = () => {
+    if (topSkills.length === 0) return;
+
+    const data = topSkills.map((skill, idx) => ({
+      '順位': idx + 1,
+      'スキルコード': skill.skill_code,
+      'スキル名': skill.skill_name,
+      '保有人数': skill.member_count
+    }));
+    exportToCSV(data, 'トップスキル');
+  };
+
+  const exportGapAnalysis = () => {
+    if (gapAnalysis.length === 0) return;
+
+    const data = gapAnalysis.map((gap, idx) => ({
+      '順位': idx + 1,
+      'スキルコード': gap.skill_code,
+      'スキル名': gap.skill_name,
+      '現在保有率': `${(gap.current_rate * 100).toFixed(1)}%`,
+      '目標保有率': `${(gap.target_rate * 100).toFixed(1)}%`,
+      'ギャップ': `${(gap.gap_rate * 100).toFixed(1)}%`,
+      'ギャップ率': `${(gap.gap_percentage * 100).toFixed(1)}%`
+    }));
+    exportToCSV(data, 'スキルギャップ分析');
+  };
+
+  const exportSuccessionCandidates = () => {
+    if (successionCandidates.length === 0) return;
+
+    const data = successionCandidates.map((candidate, idx) => ({
+      '順位': idx + 1,
+      'メンバーコード': candidate.member_code,
+      'メンバー名': candidate.member_name,
+      '現在役職': candidate.current_position,
+      '現在等級': candidate.current_grade,
+      '準備度スコア': `${(candidate.readiness_score * 100).toFixed(1)}%`,
+      'スキルマッチ度': `${(candidate.skill_match_rate * 100).toFixed(1)}%`,
+      '保有スキル数': candidate.owned_skills_count,
+      '不足スキル数': candidate.missing_skills_count,
+      '推定育成期間': candidate.estimated_timeline
+    }));
+    exportToCSV(data, `後継者候補_${targetPosition}`);
+  };
+
+  // Filter functions
+  const filteredTopSkills = topSkills.filter(skill =>
+    skill.skill_name.toLowerCase().includes(skillFilter.toLowerCase())
+  );
+
+  const filteredGapAnalysis = gapAnalysis.filter(gap =>
+    gap.skill_name.toLowerCase().includes(skillFilter.toLowerCase())
+  );
+
   if (!dataUploaded) {
     return (
       <div className="flex-1 px-8 py-12">
@@ -181,24 +300,72 @@ export const OrganizationalSkillMap = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <LayoutGrid size={32} className="text-[#00A968]" />
-            <h1 className="text-3xl font-bold text-gray-800">組織スキルマップ</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <LayoutGrid size={32} className="text-[#00A968]" />
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">組織スキルマップ</h1>
+              </div>
+              <p className="text-sm sm:text-base text-gray-600">
+                組織全体のスキル保有状況を可視化し、スキルギャップを分析し、戦略的な人材配置を支援します
+              </p>
+            </div>
+            {/* Filter Toggle Button */}
+            {(metrics || gapAnalysis.length > 0) && (
+              <button
+                onClick={() => setShowFilter(!showFilter)}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors self-start sm:self-auto"
+              >
+                <Filter size={18} />
+                <span className="text-sm font-medium">フィルター</span>
+              </button>
+            )}
           </div>
-          <p className="text-gray-600">
-            組織全体のスキル保有状況を可視化し、スキルギャップを分析し、戦略的な人材配置を支援します
-          </p>
+
+          {/* Filter Panel */}
+          {showFilter && (metrics || gapAnalysis.length > 0) && (
+            <div className="mt-4 p-4 bg-white border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-800">スキルフィルター</h3>
+                <button
+                  onClick={() => {
+                    setSkillFilter('');
+                    setShowFilter(false);
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  スキル名で検索
+                </label>
+                <input
+                  type="text"
+                  value={skillFilter}
+                  onChange={(e) => setSkillFilter(e.target.value)}
+                  placeholder="例: CAD, 製図, Python"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00A968]"
+                />
+                {skillFilter && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    「{skillFilter}」で絞り込み中
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-gray-200">
+        <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 overflow-x-auto">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
-              activeTab === 'dashboard'
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${activeTab === 'dashboard'
                 ? 'text-[#00A968] border-[#00A968]'
                 : 'text-gray-600 border-transparent hover:text-gray-800'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-2">
               <BarChart3 size={18} />
@@ -207,11 +374,10 @@ export const OrganizationalSkillMap = () => {
           </button>
           <button
             onClick={() => setActiveTab('gap')}
-            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
-              activeTab === 'gap'
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${activeTab === 'gap'
                 ? 'text-[#00A968] border-[#00A968]'
                 : 'text-gray-600 border-transparent hover:text-gray-800'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-2">
               <TrendingDown size={18} />
@@ -220,11 +386,10 @@ export const OrganizationalSkillMap = () => {
           </button>
           <button
             onClick={() => setActiveTab('succession')}
-            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
-              activeTab === 'succession'
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${activeTab === 'succession'
                 ? 'text-[#00A968] border-[#00A968]'
                 : 'text-gray-600 border-transparent hover:text-gray-800'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-2">
               <Briefcase size={18} />
@@ -293,12 +458,24 @@ export const OrganizationalSkillMap = () => {
                 {/* Top Skills */}
                 {topSkills.length > 0 && (
                   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                      <Award size={20} className="text-[#00A968]" />
-                      保有人数が多いスキル Top 10
-                    </h2>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                      <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                        <Award size={20} className="text-[#00A968]" />
+                        保有人数が多いスキル Top 10
+                        {skillFilter && (
+                          <span className="text-sm font-normal text-gray-500">({filteredTopSkills.length}件)</span>
+                        )}
+                      </h2>
+                      <button
+                        onClick={exportTopSkills}
+                        className="flex items-center gap-2 px-3 py-2 bg-[#00A968] text-white rounded-md hover:bg-[#008F58] transition-colors text-sm self-start sm:self-auto"
+                      >
+                        <Download size={16} />
+                        CSVエクスポート
+                      </button>
+                    </div>
                     <div className="space-y-3">
-                      {topSkills.map((skill, idx) => (
+                      {(skillFilter ? filteredTopSkills : topSkills).map((skill, idx) => (
                         <div key={skill.skill_code} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                           <div className="flex items-center gap-3">
                             <span className="text-sm font-bold text-gray-500 w-6">#{idx + 1}</span>
@@ -383,10 +560,22 @@ export const OrganizationalSkillMap = () => {
             {gapCalculated && gapAnalysis.length > 0 && (
               <div>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                  <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <TrendingDown size={20} className="text-[#00A968]" />
-                    ギャップが大きいスキル Top 20
-                  </h2>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                    <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                      <TrendingDown size={20} className="text-[#00A968]" />
+                      ギャップが大きいスキル Top 20
+                      {skillFilter && (
+                        <span className="text-sm font-normal text-gray-500">({filteredGapAnalysis.length}件)</span>
+                      )}
+                    </h2>
+                    <button
+                      onClick={exportGapAnalysis}
+                      className="flex items-center gap-2 px-3 py-2 bg-[#00A968] text-white rounded-md hover:bg-[#008F58] transition-colors text-sm self-start sm:self-auto"
+                    >
+                      <Download size={16} />
+                      CSVエクスポート
+                    </button>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
@@ -400,7 +589,7 @@ export const OrganizationalSkillMap = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {gapAnalysis.map((gap, idx) => (
+                        {(skillFilter ? filteredGapAnalysis : gapAnalysis).map((gap, idx) => (
                           <tr key={gap.skill_code} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="py-3 px-4 text-sm font-bold text-gray-500">#{idx + 1}</td>
                             <td className="py-3 px-4">
@@ -417,11 +606,10 @@ export const OrganizationalSkillMap = () => {
                               {(gap.gap_rate * 100).toFixed(1)}%
                             </td>
                             <td className="py-3 px-4 text-right">
-                              <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${
-                                gap.gap_percentage >= 0.5 ? 'bg-red-100 text-red-700' :
-                                gap.gap_percentage >= 0.3 ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-blue-100 text-blue-700'
-                              }`}>
+                              <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${gap.gap_percentage >= 0.5 ? 'bg-red-100 text-red-700' :
+                                  gap.gap_percentage >= 0.3 ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-blue-100 text-blue-700'
+                                }`}>
                                 {(gap.gap_percentage * 100).toFixed(1)}%
                               </span>
                             </td>
@@ -525,10 +713,19 @@ export const OrganizationalSkillMap = () => {
             {successionCandidates.length > 0 && (
               <div>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                  <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <Award size={20} className="text-[#00A968]" />
-                    {targetPosition} の後継者候補ランキング
-                  </h2>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                    <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                      <Award size={20} className="text-[#00A968]" />
+                      {targetPosition} の後継者候補ランキング
+                    </h2>
+                    <button
+                      onClick={exportSuccessionCandidates}
+                      className="flex items-center gap-2 px-3 py-2 bg-[#00A968] text-white rounded-md hover:bg-[#008F58] transition-colors text-sm self-start sm:self-auto"
+                    >
+                      <Download size={16} />
+                      CSVエクスポート
+                    </button>
+                  </div>
                   <p className="text-sm text-gray-600 mb-6">
                     {successionCandidates.length}人の候補者が見つかりました
                   </p>

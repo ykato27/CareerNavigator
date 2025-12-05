@@ -411,7 +411,7 @@ async def generate_role_career_path(request: RoleCareerPathRequest):
         for rec in all_recommendations:
             # Get skill code from name
             skill_info = competence_master_df[
-                competence_master_df["力量名"] == rec["competence_name"]
+                competence_master_df["力量名"] == rec.get("skill_name", rec.get("competence_name", ""))
             ]
 
             if len(skill_info) == 0:
@@ -424,7 +424,7 @@ async def generate_role_career_path(request: RoleCareerPathRequest):
                 continue
 
             # Apply score filters
-            if rec["score"] < request.min_total_score:
+            if rec.get("total_score", rec.get("score", 0)) < request.min_total_score:
                 continue
 
             details = rec.get("details", {})
@@ -433,12 +433,13 @@ async def generate_role_career_path(request: RoleCareerPathRequest):
             if readiness < request.min_readiness_score:
                 continue
 
+            skill_name = rec.get("skill_name", rec.get("competence_name", ""))
             filtered_recommendations.append(
                 {
                     "competence_code": skill_code,
-                    "competence_name": rec["competence_name"],
+                    "competence_name": skill_name,
                     "category": skill_info.iloc[0].get("カテゴリー", "未分類"),
-                    "total_score": rec["score"],
+                    "total_score": rec.get("total_score", rec.get("score", 0)),
                     "readiness_score": readiness,
                     "bayesian_score": details.get("bayesian_score_normalized", 0),
                     "utility_score": details.get("utility_score_normalized", 0),
@@ -578,7 +579,7 @@ async def generate_role_career_roadmap(request: RoleRoadmapRequest):
         for rec in all_recommendations:
             # Get skill code from name
             skill_info = competence_master_df[
-                competence_master_df["力量名"] == rec["competence_name"]
+                competence_master_df["力量名"] == rec.get("skill_name", rec.get("competence_name", ""))
             ]
 
             if len(skill_info) == 0:
@@ -600,12 +601,13 @@ async def generate_role_career_roadmap(request: RoleRoadmapRequest):
             if readiness < request.min_readiness_score:
                 continue
 
+            skill_name = rec.get("skill_name", rec.get("competence_name", ""))
             filtered_recommendations.append(
                 {
                     "competence_code": skill_code,
-                    "competence_name": rec["competence_name"],
+                    "competence_name": skill_name,
                     "category": skill_info.iloc[0].get("カテゴリー", "未分類"),
-                    "total_score": rec["score"],
+                    "total_score": rec.get("total_score", rec.get("score", 0)),
                     "readiness_score": readiness,
                     "bayesian_score": details.get("bayesian_score_normalized", 0),
                     "utility_score": details.get("utility_score_normalized", 0),

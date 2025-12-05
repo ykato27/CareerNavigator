@@ -44,6 +44,17 @@ class RecommendationService:
             raise ModelNotFoundException(model_id)
 
         # Check if member exists
+        # Debug: Log available member IDs and the requested member_id
+        available_members = list(recommender.skill_matrix_.index[:5])  # First 5 for debugging
+        logger.debug(
+            "Member lookup debug",
+            requested_member_id=member_id,
+            requested_type=type(member_id).__name__,
+            available_sample=available_members,
+            available_type=type(available_members[0]).__name__ if available_members else "none",
+            total_members=len(recommender.skill_matrix_.index)
+        )
+        
         if member_id not in recommender.skill_matrix_.index:
             raise MemberNotFoundException(member_id)
 
