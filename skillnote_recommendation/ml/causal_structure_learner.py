@@ -52,12 +52,14 @@ class CausalStructureLearner:
         
         self.is_fitted = False
 
-    def fit(self, skill_matrix: pd.DataFrame) -> 'CausalStructureLearner':
+    def fit(self, skill_matrix: pd.DataFrame, prior_knowledge: Optional[np.ndarray] = None) -> 'CausalStructureLearner':
         """
         因果構造を学習
         
         Args:
             skill_matrix: メンバー×スキルのデータフレーム (数値データ)
+            prior_knowledge: 事前知識行列 (n_features x n_features)
+                            -1: データから学習, 0: 因果関係なし(禁止), 1: 因果関係あり(必須)
             
         Returns:
             self
@@ -65,6 +67,8 @@ class CausalStructureLearner:
         logger.info("=" * 60)
         logger.info("因果構造学習 (LiNGAM) 開始")
         logger.info(f"データサイズ: {skill_matrix.shape}")
+        if prior_knowledge is not None:
+            logger.info(f"制約付き学習: prior_knowledge行列あり (shape: {prior_knowledge.shape})")
         logger.info("=" * 60)
         
         # 欠損値処理
@@ -106,8 +110,23 @@ class CausalStructureLearner:
                 # クラスタ内のデータ抽出
                 cluster_data = skill_matrix[cluster_features]
                 
+                # 制約付き学習: クラスタ用のprior_knowledgeを抽出
+                cluster_prior_knowledge = None
+                if prior_knowledge is not None:
+                    # クラスタのスキルインデックスを取得
+                    cluster_indices = [self.feature_names.index(f) for f in cluster_features]
+                    # 部分行列を抽出
+                    cluster_prior_knowledge = prior_knowledge[np.ix_(cluster_indices, cluster_indices)]
+                
                 # LiNGAM実行
-                model = lingam.DirectLiNGAM(random_state=self.random_state)
+                if cluster_prior_knowledge is not None:
+                    model = lingam.DirectLiNGAM(
+                        random_state=self.random_state,
+                        prior_knowledge=cluster_prior_knowledge
+                    )
+                else:
+                    model = lingam.DirectLiNGAM(random_state=self.random_state)
+                    
                 model.fit(cluster_data)
                 
                 # 隣接行列の取得

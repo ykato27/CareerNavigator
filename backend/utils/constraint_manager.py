@@ -237,6 +237,62 @@ class ConstraintManager:
             f"Applied {applied_count} constraints, skipped {skipped_count}"
         )
         return result
+    
+    def build_prior_knowledge_matrix(
+        self,
+        feature_names: List[str],
+        constraints: List[Dict[str, Any]]
+    ) -> 'np.ndarray':
+        """
+        制約リストからLiNGAM用のprior_knowledge行列を構築
+        
+        Args:
+            feature_names: スキル名のリスト（順序はskill_matrixと同じ）
+            constraints: 制約リスト
+            
+        Returns:
+            prior_knowledge行列 (n x n)
+            -1: データから学習（デフォルト）
+             0: 因果関係なし（禁止）
+             1: 因果関係あり（必須）
+        """
+        import numpy as np
+        
+        n = len(feature_names)
+        prior_knowledge = np.full((n, n), -1, dtype=int)  # デフォルト: -1 (不明)
+        
+       # スキル名→インデックスのマップ
+        name_to_idx = {name: idx for idx, name in enumerate(feature_names)}
+        
+        applied_count = 0
+        skipped_count = 0
+        
+        for constraint in constraints:
+            from_skill = constraint.get('from_skill')
+            to_skill = constraint.get('to_skill')
+            c_type = constraint.get('constraint_type')
+            
+            if from_skill not in name_to_idx or to_skill not in name_to_idx:
+                logger.debug(f"Constraint skill not found: {from_skill} -> {to_skill}")
+                skipped_count += 1
+                continue
+            
+            i = name_to_idx[from_skill]
+            j = name_to_idx[to_skill]
+            
+            if c_type == 'required':
+                prior_knowledge[i, j] = 1  # 必須
+                applied_count += 1
+            elif c_type in ['forbidden', 'deleted']:
+                prior_knowledge[i, j] = 0  # 禁止
+                applied_count += 1
+        
+        logger.info(
+            f"Built prior_knowledge matrix: {applied_count} constraints applied, "
+            f"{skipped_count} skipped"
+        )
+        
+        return prior_knowledge
 
 
 # Singleton instance

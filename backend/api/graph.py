@@ -25,6 +25,7 @@ class FullGraphRequest(BaseModel):
     threshold: float = 0.3
     top_n: int = 20
     show_negative: bool = False
+    layout: str = "hierarchical"  # hierarchical, force, circular
 
 
 @router.post("/graph/ego")
@@ -130,9 +131,12 @@ async def get_full_graph(request: FullGraphRequest):
         )
 
     try:
-        logger.info(f"[GRAPH] Generating full causal graph (top {request.top_n})")
+        logger.info(f"[GRAPH] Generating full causal graph (top {request.top_n}, threshold={request.threshold})")
+        logger.info(f"[GRAPH] Model ID: {request.model_id}, show_negative: {request.show_negative}")
 
         adj_matrix = recommender.learner.get_adjacency_matrix()
+        logger.info(f"[GRAPH] Adjacency matrix shape: {adj_matrix.shape}")
+        
         visualizer = CausalGraphVisualizer(adj_matrix)
 
         output_dir = PROJECT_ROOT / "backend" / "temp_graphs"
@@ -146,6 +150,7 @@ async def get_full_graph(request: FullGraphRequest):
             show_negative=request.show_negative,
             height="800px",
             width="100%",
+            layout=request.layout
         )
 
         with open(html_path, "r", encoding="utf-8") as f:

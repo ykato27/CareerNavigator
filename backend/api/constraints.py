@@ -122,7 +122,11 @@ async def delete_constraint(session_id: str, constraint_id: str):
 @router.post("/constraints/{session_id}/apply", response_model=ApplyConstraintsResponse)
 async def apply_constraints(session_id: str, request: ApplyConstraintsRequest):
     """
-    Apply constraints to an existing model without retraining.
+    Apply constraints to a model by retraining with prior knowledge.
+    
+    This method uses DirectLiNGAM's prior_knowledge feature to properly
+    incorporate constraints into causal structure learning, ensuring
+    statistical validity and DAG structure.
     
     Args:
         session_id: Session identifier
@@ -150,23 +154,53 @@ async def apply_constraints(session_id: str, request: ApplyConstraintsRequest):
                 message="制約がありません"
             )
         
-        # Apply constraints
-        recommender.learner.apply_constraints(constraints)
+        # Get skill matrix from the model
+        if not hasattr(recommender, 'skill_matrix_') or recommender.skill_matrix_ is None:
+            raise HTTPException(
+                status_code=400,
+                detail="モデルにスキル行列が保存されていません"
+            )
         
-        # Count results (simple approximation)
-        applied_count = len(constraints)
-        skipped_count = 0
+        skill_matrix = recommender.skill_matrix_
+        feature_names = skill_matrix.columns.tolist()
         
         logger.info(
-            "Applied constraints to model",
+            "Starting constrained retraining",
             model_id=request.model_id,
-            applied=applied_count
+            num_constraints=len(constraints),
+            num_skills=len(feature_names)
+        )
+        
+        # Build prior_knowledge matrix from constraints
+        prior_knowledge = constraint_manager.build_prior_knowledge_matrix(
+            feature_names,
+            constraints
+        )
+        
+        # Retrain with constraints
+        recommender.learner.fit(skill_matrix, prior_knowledge=prior_knowledge)
+        
+        # Update model in session manager
+        session_manager.add_model(request.model_id, recommender)
+        
+        # Count actual results
+        applied_count = sum(1 for c in constraints 
+                           if c.get('from_skill') in feature_names 
+                           and c.get('to_skill') in feature_names)
+        skipped_count = len(constraints) - applied_count
+        
+        logger.info(
+            "Constrained retraining completed",
+            model_id=request.model_id,
+            applied=applied_count,
+            skipped=skipped_count
         )
         
         return ApplyConstraintsResponse(
             model_id=request.model_id,
             applied_count=applied_count,
-            skipped_count=skipped_count
+            skipped_count=skipped_count,
+            message=f"制約を適用して再学習しました ({applied_count}個適用)"
         )
         
     except ModelNotFoundException:

@@ -20,6 +20,7 @@ export const ModelTraining = ({ sessionId: _sessionId, onTrainingComplete }: Mod
   const [weightMode, setWeightMode] = useState<'default' | 'manual' | 'auto'>('default');
 
   const handleTrain = async () => {
+    console.log('=== Training started, setting training=true ===');
     setTraining(true);
     setError(null);
     setSuccess(false);
@@ -138,6 +139,24 @@ export const ModelTraining = ({ sessionId: _sessionId, onTrainingComplete }: Mod
             <span className="text-sm">因果モデルの学習が完了しました</span>
           </div>
         )}
+
+        {/* Training Progress - デバッグ用に目立つスタイル */}
+        <div
+          className="px-4 py-3 rounded-lg space-y-2"
+          style={{
+            display: training ? 'block' : 'none',
+            backgroundColor: '#ff0000',  // デバッグ用：赤色
+            border: '3px solid #000000'
+          }}
+        >
+          <div className="flex items-center gap-2" style={{ color: '#ffffff' }}>
+            <Brain className="animate-pulse" size={20} />
+            <span className="text-sm font-medium">因果モデルを学習中...（60-90秒）</span>
+          </div>
+          <div className="w-full bg-gray-300 rounded-full h-2">
+            <div className="bg-[#00A968] h-2 rounded-full animate-pulse" style={{ width: '100%' }} />
+          </div>
+        </div>
 
         {/* Train Button */}
         <button

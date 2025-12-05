@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Brain, TrendingUp, AlertCircle, Loader2, Network, Info, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
 import { ConstraintManagementPanel } from '../components/ConstraintManagementPanel';
+import { ModelTraining } from '../components/ModelTraining';
 
 interface Member {
   member_code: string;

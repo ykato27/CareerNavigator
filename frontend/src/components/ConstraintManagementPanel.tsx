@@ -248,10 +248,16 @@ export const ConstraintManagementPanel: React.FC<ConstraintManagementPanelProps>
                             className="w-full bg-[#00A968] text-white py-3 rounded-md font-medium hover:bg-[#008F58] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                             {applyingConstraints ? (
-                                <>
-                                    <Loader2 size={20} className="animate-spin" />
-                                    {constraints.length > 0 ? '制約を適用中...' : 'リセット中...'}
-                                </>
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <Loader2 size={20} className="animate-spin" />
+                                        <span>制約を適用して再学習中...（30-90秒）</span>
+                                    </div>
+                                    {/* プログレスバー */}
+                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                        <div className="bg-[#00A968] h-2 rounded-full animate-pulse" style={{ width: '100%' }} />
+                                    </div>
+                                </div>
                             ) : (
                                 <>
                                     <Edit3 size={20} />

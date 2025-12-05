@@ -592,7 +592,8 @@ async def generate_role_career_roadmap(request: RoleRoadmapRequest):
                 continue
 
             # Apply score filters
-            if rec["score"] < request.min_total_score:
+            score = rec.get("total_score", rec.get("score", 0))
+            if score < request.min_total_score:
                 continue
 
             details = rec.get("details", {})
