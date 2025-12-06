@@ -161,34 +161,30 @@ class CausalGraphRecommender:
         scores = []
         
         for target_skill in unowned_skills:
-            # 1. Readiness Score: Target への全因果効果のうち、保有スキルからの割合
-            # 全スキルからの因果効果を集計（正負の符号を考慮）
-            total_effects_to_target = 0.0
-            owned_effects_to_target = 0.0
+            # 1. Readiness Score: 正の因果効果を持つ因子スキルのうち、保有している割合
+            # 正の因果効果のみを因子としてカウント（負の効果は除外）
+            total_positive_effects = 0.0
+            owned_positive_effects = 0.0
             readiness_reasons = []
-            
-            # target_skillへの因果効果を全スキルから集計
+
+            # target_skillへの正の因果効果を持つスキル（因子）を集計
             for skill in self.skill_matrix_.columns:
                 effect = self._get_effect(skill, target_skill)
-                # 閾値を0.001に下げて、より弱い因果効果も捕捉
-                # 符号を考慮して合計（負の効果もカウント）
-                if abs(effect) > 0.001:
-                    total_effects_to_target += effect  # 符号を保持
-                    
+                # 正の因果効果のみを因子として扱う（閾値: 0.001）
+                if effect > 0.001:
+                    total_positive_effects += effect
+
                     # 保有スキルの場合
                     if skill in owned_skills:
-                        owned_effects_to_target += effect  # 符号を保持
+                        owned_positive_effects += effect
                         readiness_reasons.append((skill, effect))
-            
-            # Readiness Score = 保有スキルからの効果 / 全スキルからの効果
-            # 分母が0または負の場合の処理
-            if total_effects_to_target > 0.001:
-                readiness_score = max(owned_effects_to_target / total_effects_to_target, 0.0)
-            elif total_effects_to_target < -0.001:
-                # 全体が負の場合（習得を阻害するスキルが多い）
-                readiness_score = 0.0
+
+            # Readiness Score = 保有因子からの効果 / 全因子からの効果
+            # 正の効果のみを対象にすることで、100%を超えることがなくなる
+            if total_positive_effects > 0.001:
+                readiness_score = owned_positive_effects / total_positive_effects
             else:
-                # 全体の効果がほぼ0の場合
+                # 因子がない場合
                 readiness_score = 0.0
             
             # 2. Utility Score: Target -> Unowned (Future)
@@ -391,25 +387,28 @@ class CausalGraphRecommender:
             }
         
         # --- Causalスコア計算（新ロジック）---
-        
-        # 1. Readiness Score: 全スキルからの効果に対する保有スキルからの効果の割合
-        total_effects_to_target = 0.0
-        owned_effects_to_target = 0.0
+
+        # 1. Readiness Score: 正の因果効果を持つ因子スキルのうち、保有している割合
+        # 正の因果効果のみを因子としてカウント（負の効果は除外）
+        total_positive_effects = 0.0
+        owned_positive_effects = 0.0
         readiness_reasons = []
-        
-        # target_skillへの因果効果を全スキルから集計
+
+        # target_skillへの正の因果効果を持つスキル（因子）を集計
         for skill in self.skill_matrix_.columns:
             effect = self._get_effect(skill, skill_name)
-            if abs(effect) > 0.001:
-                total_effects_to_target += effect  # 符号を保持
-                
+            # 正の因果効果のみを因子として扱う（閾値: 0.001）
+            if effect > 0.001:
+                total_positive_effects += effect
+
                 if skill in owned_skills:
-                    owned_effects_to_target += effect  # 符号を保持
+                    owned_positive_effects += effect
                     readiness_reasons.append((skill, effect))
-        
-        # Readiness Score = 保有効果 / 全効果（0〜1の範囲）
-        if total_effects_to_target > 0.001:
-            readiness_score = max(owned_effects_to_target / total_effects_to_target, 0.0)
+
+        # Readiness Score = 保有因子からの効果 / 全因子からの効果
+        # 正の効果のみを対象にすることで、100%を超えることがなくなる
+        if total_positive_effects > 0.001:
+            readiness_score = owned_positive_effects / total_positive_effects
         else:
             readiness_score = 0.0
         
