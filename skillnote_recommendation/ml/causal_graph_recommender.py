@@ -157,9 +157,17 @@ class CausalGraphRecommender:
         member_skills = self.skill_matrix_.loc[member_code]
         owned_skills = member_skills[member_skills > 0].index.tolist()
         unowned_skills = member_skills[member_skills == 0].index.tolist()
-        
+
+        # 全スキルから未習得スキルへの正の因果効果の合計を事前計算（Utility正規化用）
+        total_effects_to_unowned = 0.0
+        for source_skill in self.skill_matrix_.columns:
+            for future_skill in unowned_skills:
+                effect = self._get_effect(source_skill, future_skill)
+                if effect > 0.001:
+                    total_effects_to_unowned += effect
+
         scores = []
-        
+
         for target_skill in unowned_skills:
             # 1. Readiness Score: 正の因果効果を持つ因子スキルのうち、保有している割合
             # 正の因果効果のみを因子としてカウント（負の効果は除外）
@@ -187,19 +195,26 @@ class CausalGraphRecommender:
                 # 因子がない場合
                 readiness_score = 0.0
             
-            # 2. Utility Score: Target -> Unowned (Future)
-            utility_score = 0.0
+            # 2. Utility Score: ターゲットから未習得スキルへの効果 / 全スキルから未習得スキルへの効果
+            # Readinessと対称的なロジック（割合ベース）
+            target_effects_to_unowned = 0.0
             utility_reasons = []
-            
+
             for future in unowned_skills:
                 if future == target_skill:
                     continue
                 # target が future に与える影響
                 effect = self._get_effect(target_skill, future)
-                # 閾値を0.001に下げて、より弱い因果効果も捕捉
+                # 正の因果効果のみ
                 if effect > 0.001:
-                    utility_score += effect
+                    target_effects_to_unowned += effect
                     utility_reasons.append((future, effect))
+
+            # Utility Score = このスキルから未習得への効果 / 全スキルから未習得への効果
+            if total_effects_to_unowned > 0.001:
+                utility_score = target_effects_to_unowned / total_effects_to_unowned
+            else:
+                utility_score = 0.0
             
             # 3. Bayesian Score: P(Target=1 | Owned)
             bayesian_score = 0.0
@@ -236,24 +251,19 @@ class CausalGraphRecommender:
                 })
 
         # スコアの正規化
-        # Readinessは既に0〜1の範囲（割合）
-        # Utilityのみ相対的に正規化
+        # Readiness, Utility, Bayesian は全て既に0〜1の範囲（割合ベース）
         if scores:
-            max_utility = max(s['utility_score'] for s in scores) if scores else 1.0
-            
             for s in scores:
-                # Readiness: 既に0〜1（全効果に対する保有効果の割合）
+                # Readiness: 既に0〜1（保有因子効果 / 全因子効果）
                 s['readiness_score_normalized'] = s['readiness_score']
-                
-                # Utility: 相対値で正規化
-                s['utility_score_normalized'] = (
-                    s['utility_score'] / max_utility if max_utility > 0 else 0.0
-                )
-                
+
+                # Utility: 既に0〜1（ターゲット→未習得への効果 / 全スキル→未習得への効果）
+                s['utility_score_normalized'] = s['utility_score']
+
                 # Bayesian: 既に0〜1
                 s['bayesian_score_normalized'] = s['bayesian_score']
 
-                # 総合スコアを正規化後の値で計算
+                # 総合スコアを計算
                 s['total_score'] = (
                     s['readiness_score_normalized'] * self.weights['readiness'] +
                     s['bayesian_score_normalized'] * self.weights['bayesian'] +
@@ -412,17 +422,33 @@ class CausalGraphRecommender:
         else:
             readiness_score = 0.0
         
-        # 2. Utility Score: このスキルが未習得スキルに与える影響の合計
+        # 2. Utility Score: ターゲットから未習得スキルへの効果 / 全スキルから未習得スキルへの効果
         unowned_skills = member_skills[member_skills == 0].index.tolist()
-        utility_score = 0.0
+
+        # 全スキルから未習得スキルへの正の因果効果の合計を計算
+        total_effects_to_unowned = 0.0
+        for source_skill in self.skill_matrix_.columns:
+            for future in unowned_skills:
+                effect = self._get_effect(source_skill, future)
+                if effect > 0.001:
+                    total_effects_to_unowned += effect
+
+        # このスキルから未習得スキルへの正の因果効果の合計を計算
+        target_effects_to_unowned = 0.0
         utility_reasons = []
         for future in unowned_skills:
             if future == skill_name:
                 continue
             effect = self._get_effect(skill_name, future)
             if effect > 0.001:
-                utility_score += effect
+                target_effects_to_unowned += effect
                 utility_reasons.append((future, effect))
+
+        # Utility Score = このスキルから未習得への効果 / 全スキルから未習得への効果
+        if total_effects_to_unowned > 0.001:
+            utility_score = target_effects_to_unowned / total_effects_to_unowned
+        else:
+            utility_score = 0.0
         
         # 3. Bayesian Score: P(Target=1 | Owned)
         bayesian_score = 0.0
@@ -433,16 +459,9 @@ class CausalGraphRecommender:
                 logger.debug(f"ベイジアン推論エラー ({skill_name}): {e}")
         
         # スコアの正規化
-        # Readiness: 既に0〜1（割合）
+        # Readiness, Utility, Bayesian は全て既に0〜1の範囲（割合ベース）
         readiness_normalized = readiness_score
-        
-        # Utility: 簡易的に相対値で正規化（理論最大値で割る）
-        theoretical_max_utility = len(unowned_skills) * 0.3 if unowned_skills else 1.0
-        utility_normalized = min(
-            utility_score / theoretical_max_utility, 1.0
-        ) if theoretical_max_utility > 0 else 0.0
-        
-        # Bayesian: 既に0-1の範囲
+        utility_normalized = utility_score
         bayesian_normalized = bayesian_score
         
         # 総合スコア
