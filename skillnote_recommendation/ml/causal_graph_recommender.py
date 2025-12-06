@@ -41,7 +41,7 @@ class CausalGraphRecommender:
             member_competence: メンバー力量データ
             competence_master: 力量マスタ
             learner_params: CausalStructureLearnerのパラメータ
-            weights: スコア重み {'readiness': 0.6, 'bayesian': 0.3, 'utility': 0.1}
+            weights: スコア重み {'readiness': 0.6, 'utility': 0.4}（2軸スコアリング）
         """
         self.member_competence = member_competence
         self.competence_master = competence_master
@@ -54,8 +54,8 @@ class CausalGraphRecommender:
         self.learner = CausalStructureLearner(**params)
         self.bn_recommender: Optional[BayesianNetworkRecommender] = None
 
-        # 重みのデフォルト値
-        self.weights = weights or {'readiness': 0.6, 'bayesian': 0.3, 'utility': 0.1}
+        # 重みのデフォルト値（2軸: Readiness 60%, Utility 40%）
+        self.weights = weights or {'readiness': 0.6, 'utility': 0.4, 'bayesian': 0.0}
 
         self.is_fitted = False
         self.skill_matrix_: Optional[pd.DataFrame] = None
