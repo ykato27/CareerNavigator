@@ -24,6 +24,7 @@ export const API_ENDPOINTS = {
 
   // Recommendations
   RECOMMEND: `${API_PREFIX}/recommend`,
+  SCATTER_PLOT: `${API_PREFIX}/scatter-plot`,
 
   // Graphs
   GRAPH_EGO: `${API_PREFIX}/graph/ego`,
