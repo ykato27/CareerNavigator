@@ -41,7 +41,7 @@ class CausalGraphRecommender:
             member_competence: メンバー力量データ
             competence_master: 力量マスタ
             learner_params: CausalStructureLearnerのパラメータ
-            weights: スコア重み {'readiness': 0.6, 'bayesian': 0.3, 'utility': 0.1}
+            weights: スコア重み {'readiness': 0.6, 'utility': 0.4}（2軸スコアリング）
         """
         self.member_competence = member_competence
         self.competence_master = competence_master
@@ -54,8 +54,8 @@ class CausalGraphRecommender:
         self.learner = CausalStructureLearner(**params)
         self.bn_recommender: Optional[BayesianNetworkRecommender] = None
 
-        # 重みのデフォルト値
-        self.weights = weights or {'readiness': 0.6, 'bayesian': 0.3, 'utility': 0.1}
+        # 重みのデフォルト値（2軸: Readiness 60%, Utility 40%）
+        self.weights = weights or {'readiness': 0.6, 'utility': 0.4, 'bayesian': 0.0}
 
         self.is_fitted = False
         self.skill_matrix_: Optional[pd.DataFrame] = None
@@ -578,3 +578,182 @@ class CausalGraphRecommender:
         self.set_weights(best_weights)
 
         return best_weights
+
+    def plot_readiness_utility_scatter(
+        self,
+        member_code: str,
+        top_n: Optional[int] = None,
+        highlight_top_n: int = 5,
+        width: int = 800,
+        height: int = 600
+    ) -> 'go.Figure':
+        """
+        Readiness（準備度）× Utility（将来性）の散布図を作成
+
+        横軸: Readiness（このスキルを習得する準備がどれだけできているか）
+        縦軸: Utility（このスキルが将来どれだけ役立つか）
+
+        Args:
+            member_code: メンバーコード
+            top_n: 表示するスキル数（Noneで全て）
+            highlight_top_n: ハイライトする上位スキル数
+            width: グラフの幅
+            height: グラフの高さ
+
+        Returns:
+            Plotly Figure オブジェクト
+        """
+        import plotly.graph_objects as go
+
+        if not self.is_fitted:
+            logger.warning("モデルが学習されていません")
+            fig = go.Figure()
+            fig.update_layout(title="モデルが学習されていません")
+            return fig
+
+        # 推薦結果を取得（全スキル）
+        all_recommendations = self.recommend(member_code, top_n=top_n or 1000)
+
+        if not all_recommendations:
+            fig = go.Figure()
+            fig.update_layout(title="推薦結果がありません")
+            return fig
+
+        # データを抽出
+        skill_names = [r['skill_name'] for r in all_recommendations]
+        readiness_scores = [r['readiness_score'] * 100 for r in all_recommendations]  # %表示
+        utility_scores = [r['utility_score'] * 100 for r in all_recommendations]  # %表示
+        final_scores = [r['final_score'] for r in all_recommendations]
+
+        # 上位N件をハイライト
+        top_indices = set(range(min(highlight_top_n, len(all_recommendations))))
+
+        colors = []
+        sizes = []
+        for i in range(len(all_recommendations)):
+            if i in top_indices:
+                colors.append('#E24A4A')  # 赤: 上位推薦
+                sizes.append(15)
+            else:
+                colors.append('#4A90E2')  # 青: その他
+                sizes.append(8)
+
+        # 散布図を作成
+        fig = go.Figure()
+
+        # その他のスキル（先に描画）
+        other_indices = [i for i in range(len(skill_names)) if i not in top_indices]
+        if other_indices:
+            fig.add_trace(go.Scatter(
+                x=[readiness_scores[i] for i in other_indices],
+                y=[utility_scores[i] for i in other_indices],
+                mode='markers',
+                name='その他のスキル',
+                marker=dict(
+                    size=8,
+                    color='#4A90E2',
+                    opacity=0.6,
+                    line=dict(width=1, color='white')
+                ),
+                text=[skill_names[i] for i in other_indices],
+                customdata=[[final_scores[i]] for i in other_indices],
+                hovertemplate=(
+                    '<b>%{text}</b><br>'
+                    '準備度: %{x:.1f}%<br>'
+                    '将来性: %{y:.1f}%<br>'
+                    '総合スコア: %{customdata[0]:.3f}<br>'
+                    '<extra></extra>'
+                )
+            ))
+
+        # 上位スキル（後に描画して前面に）
+        top_indices_list = list(top_indices)
+        if top_indices_list:
+            fig.add_trace(go.Scatter(
+                x=[readiness_scores[i] for i in top_indices_list],
+                y=[utility_scores[i] for i in top_indices_list],
+                mode='markers+text',
+                name=f'上位{highlight_top_n}推薦',
+                marker=dict(
+                    size=15,
+                    color='#E24A4A',
+                    line=dict(width=2, color='white')
+                ),
+                text=[skill_names[i] for i in top_indices_list],
+                textposition='top center',
+                textfont=dict(size=10),
+                customdata=[[final_scores[i]] for i in top_indices_list],
+                hovertemplate=(
+                    '<b>%{text}</b><br>'
+                    '準備度: %{x:.1f}%<br>'
+                    '将来性: %{y:.1f}%<br>'
+                    '総合スコア: %{customdata[0]:.3f}<br>'
+                    '<extra></extra>'
+                )
+            ))
+
+        # レイアウト設定
+        fig.update_layout(
+            title=dict(
+                text=f'スキル推薦マップ: Readiness × Utility<br>'
+                     f'<sub>メンバー: {member_code} | 総スキル数: {len(skill_names)}</sub>',
+                x=0.5,
+                xanchor='center'
+            ),
+            xaxis=dict(
+                title='Readiness（準備度）%',
+                range=[-5, 105],
+                gridcolor='lightgray',
+                zerolinecolor='gray'
+            ),
+            yaxis=dict(
+                title='Utility（将来性）%',
+                range=[-5, 105],
+                gridcolor='lightgray',
+                zerolinecolor='gray'
+            ),
+            width=width,
+            height=height,
+            hovermode='closest',
+            showlegend=True,
+            legend=dict(
+                yanchor='top',
+                y=0.99,
+                xanchor='left',
+                x=0.01
+            ),
+            plot_bgcolor='white',
+            # 四象限の説明を追加
+            annotations=[
+                dict(
+                    x=90, y=90,
+                    text='🎯 最優先<br>(準備OK・将来性高)',
+                    showarrow=False,
+                    font=dict(size=10, color='green'),
+                    bgcolor='rgba(144, 238, 144, 0.3)'
+                ),
+                dict(
+                    x=10, y=90,
+                    text='📚 基盤構築が必要<br>(準備不足・将来性高)',
+                    showarrow=False,
+                    font=dict(size=10, color='orange'),
+                    bgcolor='rgba(255, 200, 100, 0.3)'
+                ),
+                dict(
+                    x=90, y=10,
+                    text='✅ すぐ習得可能<br>(準備OK・将来性低)',
+                    showarrow=False,
+                    font=dict(size=10, color='blue'),
+                    bgcolor='rgba(173, 216, 230, 0.3)'
+                ),
+                dict(
+                    x=10, y=10,
+                    text='⏸️ 後回し<br>(準備不足・将来性低)',
+                    showarrow=False,
+                    font=dict(size=10, color='gray'),
+                    bgcolor='rgba(200, 200, 200, 0.3)'
+                )
+            ]
+        )
+
+        return fig
