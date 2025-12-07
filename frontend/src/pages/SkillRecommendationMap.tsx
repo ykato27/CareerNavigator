@@ -175,16 +175,28 @@ export const SkillRecommendationMap = () => {
       xanchor: 'center'
     },
     xaxis: {
-      title: 'Readiness（準備度）%',
+      title: {
+        text: '← 準備不足　　　Readiness（準備度）%　　　準備OK →',
+        font: { size: 16, color: '#333', family: 'Arial, sans-serif' },
+        standoff: 20
+      },
       range: [-5, 105],
       gridcolor: 'lightgray',
-      zerolinecolor: 'gray'
+      zerolinecolor: 'gray',
+      tickfont: { size: 12 },
+      ticksuffix: '%'
     },
     yaxis: {
-      title: 'Utility（将来性）%',
+      title: {
+        text: '← 将来性低　　　Utility（将来性）%　　　将来性高 →',
+        font: { size: 16, color: '#333', family: 'Arial, sans-serif' },
+        standoff: 20
+      },
       range: [-5, 105],
       gridcolor: 'lightgray',
-      zerolinecolor: 'gray'
+      zerolinecolor: 'gray',
+      tickfont: { size: 12 },
+      ticksuffix: '%'
     },
     hovermode: 'closest',
     showlegend: true,
