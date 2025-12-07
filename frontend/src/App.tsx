@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutGrid, Brain, Database, Settings, HelpCircle, User, FolderOpen, Zap, Network } from 'lucide-react';
+import { LayoutGrid, Brain, Database, Settings, HelpCircle, User, FolderOpen, Zap, Network, Map } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { DataUpload } from './pages/DataUpload';
 import { CausalAnalysis } from './pages/CausalAnalysis';
@@ -8,6 +8,7 @@ import { CausalGraphExplorer } from './pages/CausalGraphExplorer';
 import { EmployeeCareerDashboard } from './pages/EmployeeCareerDashboard';
 import { ModelTraining } from './pages/ModelTraining';
 import { OrganizationalSkillMap } from './pages/OrganizationalSkillMap';
+import { SkillRecommendationMap } from './pages/SkillRecommendationMap';
 
 const NavItem = ({ to, icon: Icon, label }: { to: string; icon: any; label: string }) => {
   const location = useLocation();
@@ -52,6 +53,8 @@ function App() {
         return 'モデル学習';
       case '/causal-recommendation':
         return '因果推論';
+      case '/recommendation-map':
+        return '推薦マップ';
       case '/causal-graph':
         return '因果グラフ全体';
       case '/career-dashboard':
@@ -91,6 +94,7 @@ function App() {
             <NavItem to="/data-upload" icon={Database} label="データ管理" />
             <NavItem to="/model-training" icon={Zap} label="モデル学習" />
             <NavItem to="/causal-recommendation" icon={Brain} label="因果推論" />
+            <NavItem to="/recommendation-map" icon={Map} label="推薦マップ" />
             <NavItem to="/causal-graph" icon={Network} label="因果グラフ全体" />
           </div>
 
@@ -132,6 +136,7 @@ function App() {
               <Route path="/data-upload" element={<DataUpload />} />
               <Route path="/model-training" element={<ModelTraining />} />
               <Route path="/causal-recommendation" element={<CausalRecommendation />} />
+              <Route path="/recommendation-map" element={<SkillRecommendationMap />} />
               <Route path="/causal-graph" element={<CausalGraphExplorer />} />
               <Route path="/career-dashboard" element={<EmployeeCareerDashboard />} />
               <Route path="/skill-map" element={<OrganizationalSkillMap />} />

@@ -116,5 +116,72 @@ class RecommendationService:
         }
 
 
+    async def get_scatter_plot_data(
+        self, model_id: str, member_id: str
+    ) -> Dict[str, Any]:
+        """
+        Get scatter plot data (Readiness × Utility) for all unowned skills.
+
+        Args:
+            model_id: Trained model identifier
+            member_id: Member code
+
+        Returns:
+            Dictionary containing scatter plot data
+        """
+        logger.info("Getting scatter plot data", model_id=model_id, member_id=member_id)
+
+        # Get trained model
+        recommender = self.repository.get_model(model_id)
+        if not recommender:
+            raise ModelNotFoundException(model_id)
+
+        if member_id not in recommender.skill_matrix_.index:
+            raise MemberNotFoundException(member_id)
+
+        # Get all recommendations (no limit)
+        try:
+            all_recommendations = recommender.recommend(member_code=member_id, top_n=1000)
+        except Exception as e:
+            logger.error("Failed to get recommendations for scatter plot", error=str(e))
+            all_recommendations = []
+
+        # Format for scatter plot
+        scatter_data = []
+        for rec in all_recommendations:
+            scatter_data.append({
+                "skill_code": rec.get("skill_code", ""),
+                "skill_name": rec.get("skill_name", ""),
+                "category": rec.get("category", ""),
+                "readiness_score": rec.get("readiness_score", 0.0),
+                "utility_score": rec.get("utility_score", 0.0),
+                "final_score": rec.get("final_score", 0.0),
+            })
+
+        # Get weights
+        weights = (
+            recommender.get_weights()
+            if hasattr(recommender, "get_weights")
+            else recommender.weights
+        )
+
+        logger.info(
+            "Scatter plot data generated",
+            model_id=model_id,
+            member_id=member_id,
+            count=len(scatter_data),
+        )
+
+        return {
+            "model_id": model_id,
+            "member_id": member_id,
+            "skills": scatter_data,
+            "metadata": {
+                "weights": weights,
+                "total_skills": len(scatter_data),
+            },
+        }
+
+
 # Singleton instance
 recommendation_service = RecommendationService()
