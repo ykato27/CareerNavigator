@@ -53,8 +53,8 @@ export const CausalRecommendation = () => {
   // Manual weight adjustment state
   const [showManualWeights, setShowManualWeights] = useState(false);
   const [readinessWeight, setReadinessWeight] = useState(0.6);
-  const [bayesianWeight, setBayesianWeight] = useState(0.3);
-  const [utilityWeight, setUtilityWeight] = useState(0.1);
+  const [bayesianWeight, setBayesianWeight] = useState(0.0);
+  const [utilityWeight, setUtilityWeight] = useState(0.4);
   const [currentWeights, setCurrentWeights] = useState<any>(null);
   const [loadingWeights, setLoadingWeights] = useState(false);
   const [updatingWeights, setUpdatingWeights] = useState(false);
@@ -144,7 +144,7 @@ export const CausalRecommendation = () => {
         model_id: modelId,
         weights: {
           readiness: readinessWeight,
-          bayesian: bayesianWeight,
+          bayesian: 0.0,  // 2軸スコアリング: Bayesianは無効
           utility: utilityWeight
         }
       });
@@ -269,8 +269,7 @@ export const CausalRecommendation = () => {
               <p className="font-semibold mb-2">因果推論推薦の仕組み</p>
               <ul className="space-y-1 list-disc list-inside">
                 <li><strong>LiNGAM</strong>: スキル間の因果関係（原因→結果）を自動発見</li>
-                <li><strong>Bayesian Network</strong>: 同様のスキルパターンを持つ人の習得確率を計算</li>
-                <li><strong>3軸スコアリング</strong>: Readiness（準備度）、Bayesian（確率）、Utility（将来性）で評価</li>
+                <li><strong>2軸スコアリング</strong>: Readiness（準備度）60% + Utility（将来性）40% で評価</li>
                 <li><strong>因果グラフ可視化</strong>: 各スキルの因果関係ネットワークを視覚的に理解</li>
               </ul>
             </div>
@@ -302,7 +301,7 @@ export const CausalRecommendation = () => {
                 <div className="flex items-start gap-2">
                   <Info size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-blue-800">
-                    スライダーで重みを手動調整できます。推薦スコアは「総合スコア = Readiness × w₁ + Bayesian × w₂ + Utility × w₃」で計算されます。
+                    スライダーで重みを手動調整できます。推薦スコアは「総合スコア = Readiness × w₁ + Utility × w₂」で計算されます。
                   </p>
                 </div>
               </div>
@@ -317,17 +316,13 @@ export const CausalRecommendation = () => {
                   {currentWeights && (
                     <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                       <p className="text-sm font-medium text-gray-700 mb-2">現在の重み:</p>
-                      <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                          <span className="text-gray-600">Readiness: </span>
+                          <span className="text-gray-600">Readiness（準備度）: </span>
                           <span className="font-bold text-blue-600">{(currentWeights.readiness * 100).toFixed(1)}%</span>
                         </div>
                         <div>
-                          <span className="text-gray-600">Bayesian: </span>
-                          <span className="font-bold text-purple-600">{(currentWeights.bayesian * 100).toFixed(1)}%</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Utility: </span>
+                          <span className="text-gray-600">Utility（将来性）: </span>
                           <span className="font-bold text-green-600">{(currentWeights.utility * 100).toFixed(1)}%</span>
                         </div>
                       </div>
@@ -346,26 +341,14 @@ export const CausalRecommendation = () => {
                         max="1"
                         step="0.05"
                         value={readinessWeight}
-                        onChange={(e) => setReadinessWeight(parseFloat(e.target.value))}
+                        onChange={(e) => {
+                          const newReadiness = parseFloat(e.target.value);
+                          setReadinessWeight(newReadiness);
+                          setUtilityWeight(1 - newReadiness);
+                        }}
                         className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
                       />
                       <p className="text-xs text-gray-500 mt-1">保有スキルから推奨スキルへの因果効果の重み</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Bayesian（確率）: {(bayesianWeight * 100).toFixed(0)}%
-                      </label>
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={bayesianWeight}
-                        onChange={(e) => setBayesianWeight(parseFloat(e.target.value))}
-                        className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">同様のスキルパターンを持つ人の習得確率の重み</p>
                     </div>
 
                     <div>
@@ -378,34 +361,23 @@ export const CausalRecommendation = () => {
                         max="1"
                         step="0.05"
                         value={utilityWeight}
-                        onChange={(e) => setUtilityWeight(parseFloat(e.target.value))}
+                        onChange={(e) => {
+                          const newUtility = parseFloat(e.target.value);
+                          setUtilityWeight(newUtility);
+                          setReadinessWeight(1 - newUtility);
+                        }}
                         className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
                       />
                       <p className="text-xs text-gray-500 mt-1">推奨スキルから将来のスキルへの因果効果の重み</p>
                     </div>
                   </div>
 
-                  {/* Weight Sum Warning */}
-                  {(() => {
-                    const total = readinessWeight + bayesianWeight + utilityWeight;
-                    if (Math.abs(total - 1.0) > 0.01) {
-                      return (
-                        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                          <p className="text-sm text-yellow-800">
-                            ⚠️ 重みの合計: {total.toFixed(2)} （適用時に自動的に正規化されます）
-                          </p>
-                        </div>
-                      );
-                    } else {
-                      return (
-                        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <p className="text-sm text-green-800">
-                            ✅ 重みの合計: {total.toFixed(2)}
-                          </p>
-                        </div>
-                      );
-                    }
-                  })()}
+                  {/* Weight Sum Display */}
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800">
+                      ✅ 重みの合計: {(readinessWeight + utilityWeight).toFixed(2)}
+                    </p>
+                  </div>
 
                   {/* Update Button */}
                   <button
@@ -587,8 +559,8 @@ export const CausalRecommendation = () => {
                             </div>
                           </div>
 
-                          {/* 3-Axis Scores */}
-                          <div className="grid grid-cols-3 gap-4">
+                          {/* 2-Axis Scores */}
+                          <div className="grid grid-cols-2 gap-4">
                             <div>
                               <div className="flex justify-between items-center mb-2">
                                 <p className="text-xs font-medium text-gray-600">Readiness（準備度）</p>
@@ -603,21 +575,6 @@ export const CausalRecommendation = () => {
                                 />
                               </div>
                               <p className="text-xs text-gray-500 mt-1">保有スキルからの習得しやすさ</p>
-                            </div>
-                            <div>
-                              <div className="flex justify-between items-center mb-2">
-                                <p className="text-xs font-medium text-gray-600">Probability（確率）</p>
-                                <p className="text-sm font-bold text-purple-600">
-                                  {(rec.probability_score * 100).toFixed(0)}%
-                                </p>
-                              </div>
-                              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-purple-500 transition-all"
-                                  style={{ width: `${rec.probability_score * 100}%` }}
-                                />
-                              </div>
-                              <p className="text-xs text-gray-500 mt-1">同様パターンでの習得確率</p>
                             </div>
                             <div>
                               <div className="flex justify-between items-center mb-2">
@@ -640,20 +597,12 @@ export const CausalRecommendation = () => {
                         {/* Detailed Reasons */}
                         <div className="p-5 bg-gray-50 border-t border-gray-200">
                           <h3 className="font-semibold text-gray-800 mb-4">詳細な推薦理由</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="bg-blue-50 rounded-lg p-4">
                               <h4 className="font-semibold text-blue-800 mb-2 text-sm">準備度の根拠</h4>
                               <p className="text-xs text-blue-700">
                                 あなたが既に保有しているスキルから、このスキルへの因果的なつながりが強く、
                                 習得に必要な基礎が整っています。（{(rec.readiness_score * 100).toFixed(1)}%）
-                              </p>
-                            </div>
-                            <div className="bg-purple-50 rounded-lg p-4">
-                              <h4 className="font-semibold text-purple-800 mb-2 text-sm">確率の根拠</h4>
-                              <p className="text-xs text-purple-700">
-                                同様のスキルセットを持つメンバーがこのスキルを高確率で習得しているため、
-                                あなたも習得できる可能性が高いです。
-                                （{(rec.probability_score * 100).toFixed(1)}%の確率）
                               </p>
                             </div>
                             <div className="bg-green-50 rounded-lg p-4">
