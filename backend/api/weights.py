@@ -5,7 +5,7 @@ This module provides endpoints for managing recommendation weights.
 """
 
 from fastapi import APIRouter, HTTPException
-from backend.schemas.request.weights import UpdateWeightsRequest, GetWeightsRequest
+from backend.schemas.request.weights import UpdateWeightsRequest, GetWeightsRequest, OptimizeWeightsRequest
 from backend.schemas.response.weights import WeightsResponse
 from backend.services.weights_service import weights_service
 from backend.core.exceptions import AppException
@@ -78,3 +78,41 @@ async def get_weights(request: GetWeightsRequest):
     except Exception as e:
         logger.error("Unexpected error getting weights", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/weights/optimize", response_model=WeightsResponse)
+async def optimize_weights(request: OptimizeWeightsRequest):
+    """
+    Optimize recommendation weights for a model using Bayesian optimization.
+
+    Args:
+        request: Request containing model_id and optimization parameters
+
+    Returns:
+        WeightsResponse: Optimized weights and confirmation
+
+    Raises:
+        HTTPException: If model not found or optimization fails
+    """
+    try:
+        optimized_weights = await weights_service.optimize_weights(
+            model_id=request.model_id,
+            n_trials=request.n_trials,
+            n_jobs=request.n_jobs,
+            holdout_ratio=request.holdout_ratio,
+            top_k=request.top_k
+        )
+
+        return WeightsResponse(
+            success=True,
+            model_id=request.model_id,
+            weights=optimized_weights,
+            message="Weights optimized successfully",
+        )
+
+    except AppException:
+        # Custom exceptions are handled by error_handler_middleware
+        raise
+    except Exception as e:
+        logger.error("Unexpected error optimizing weights", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to optimize weights: {str(e)}")

@@ -7,14 +7,14 @@ import structlog
 logger = structlog.get_logger()
 
 try:
-    from pgmpy.models import BayesianNetwork
+    from pgmpy.models import DiscreteBayesianNetwork
     from pgmpy.estimators import MaximumLikelihoodEstimator
     from pgmpy.inference import VariableElimination
     PGMPY_AVAILABLE = True
 except ImportError:
     PGMPY_AVAILABLE = False
     # ダミー型定義（型ヒント用）
-    BayesianNetwork = Any
+    DiscreteBayesianNetwork = Any
     VariableElimination = Any
     logger.warning("pgmpy not found. Bayesian Network features will be disabled.")
 
@@ -31,7 +31,7 @@ class BayesianNetworkRecommender:
                         値は因果係数。0以外をエッジとみなす。
         """
         self.adj_matrix = adj_matrix
-        self.model: Optional[BayesianNetwork] = None
+        self.model: Optional[DiscreteBayesianNetwork] = None
         self.inference: Optional[VariableElimination] = None
         self.nodes: List[str] = []
         
@@ -68,7 +68,7 @@ class BayesianNetworkRecommender:
         if not edges:
             logger.warning("No edges found with current threshold. Bayesian Network cannot be built effectively.")
             # エッジがない場合でも、独立したノードとしてモデル化は可能
-            self.model = BayesianNetwork()
+            self.model = DiscreteBayesianNetwork()
             self.model.add_nodes_from(valid_nodes)
         else:
             # 閉路のチェックと除去（LiNGAMはDAGを保証するはずだが、念のため）
@@ -83,11 +83,11 @@ class BayesianNetworkRecommender:
                         # 閉路の最後のエッジを削除（簡易対応）
                         if (cycle[-1], cycle[0]) in edges:
                             edges.remove((cycle[-1], cycle[0]))
-                            
-                self.model = BayesianNetwork(edges)
+
+                self.model = DiscreteBayesianNetwork(edges)
                 # データに存在しないノードがエッジに含まれている場合の対処
                 # (valid_nodesでフィルタリングしているので基本的には起きないはず)
-                
+
             except Exception as e:
                 logger.error(f"Error constructing DAG: {e}")
                 raise e

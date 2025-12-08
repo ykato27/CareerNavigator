@@ -44,3 +44,41 @@ class GetWeightsRequest(BaseModel):
     """Request schema for getting current weights."""
 
     model_id: str = Field(..., min_length=1, description="ID of the model to get weights for")
+
+
+class OptimizeWeightsRequest(BaseModel):
+    """Request schema for optimizing weights."""
+
+    model_id: str = Field(
+        ...,
+        min_length=1,
+        description="ID of the model to optimize weights for",
+        examples=["model_abc123"],
+    )
+    n_trials: int = Field(
+        default=50,
+        ge=1,
+        le=200,
+        description="Number of optimization trials",
+        examples=[50],
+    )
+    n_jobs: int = Field(
+        default=-1,
+        ge=-1,
+        description="Number of parallel jobs (-1 for all cores)",
+        examples=[-1],
+    )
+    holdout_ratio: float = Field(
+        default=0.2,
+        gt=0.0,
+        lt=1.0,
+        description="Ratio of skills to holdout for evaluation",
+        examples=[0.2],
+    )
+    top_k: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Number of recommendations to evaluate",
+        examples=[10],
+    )

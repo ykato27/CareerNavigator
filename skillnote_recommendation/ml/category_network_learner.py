@@ -13,13 +13,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 try:
-    from pgmpy.models import BayesianNetwork
+    from pgmpy.models import DiscreteBayesianNetwork
     from pgmpy.estimators import HillClimbSearch, BicScore, MaximumLikelihoodEstimator
     from pgmpy.inference import VariableElimination
     PGMPY_AVAILABLE = True
 except ImportError:
     PGMPY_AVAILABLE = False
-    BayesianNetwork = None
+    DiscreteBayesianNetwork = None
     logger.warning("pgmpyがインストールされていません。ベイジアンネットワーク機能は無効です。")
 
 
@@ -51,7 +51,7 @@ class CategoryNetworkLearner:
         
         self.max_indegree = max_indegree
         self.scoring_method = scoring_method
-        self.model: Optional[BayesianNetwork] = None
+        self.model: Optional[DiscreteBayesianNetwork] = None
         self.inference: Optional[VariableElimination] = None
     
     def aggregate_to_categories(
@@ -173,15 +173,15 @@ class CategoryNetworkLearner:
     def learn_structure(
         self,
         category_data: pd.DataFrame
-    ) -> BayesianNetwork:
+    ) -> DiscreteBayesianNetwork:
         """
         ベイジアンネットワーク構造を学習
-        
+
         Args:
             category_data: カテゴリレベルのデータ（離散化済み）
-            
+
         Returns:
-            学習されたBayesianNetwork
+            学習されたDiscreteBayesianNetwork
         """
         logger.info("ベイジアンネットワーク構造を学習中")
         
@@ -240,18 +240,18 @@ class CategoryNetworkLearner:
         hierarchy,
         aggregation_method: str = 'max',
         n_bins: int = 3
-    ) -> BayesianNetwork:
+    ) -> DiscreteBayesianNetwork:
         """
         完全な学習パイプライン
-        
+
         Args:
             user_skills: ユーザー×スキルのDataFrame
             hierarchy: CategoryHierarchy オブジェクト
             aggregation_method: 集約方法
             n_bins: 離散化のビン数
-            
+
         Returns:
-            学習されたBayesianNetwork
+            学習されたDiscreteBayesianNetwork
         """
         # 1. カテゴリレベルに集約
         category_data = self.aggregate_to_categories(
