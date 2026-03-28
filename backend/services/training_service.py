@@ -139,7 +139,7 @@ class TrainingService:
                 logger.info(f"Applied {constraints_applied} constraints to model")
 
         # Store trained model (will save to disk automatically)
-        self.repository.add_model(model_id, recommender)
+        self.repository.add_model(model_id, recommender, metadata)
 
         logger.info("Model stored successfully", model_id=model_id)
 

@@ -132,10 +132,11 @@ class TestSessionRepository:
         """Test adding a model."""
         repository._manager = mock_manager
         mock_model = Mock()
+        metadata = {"session_id": "session_123", "weights": {"readiness": 0.6}}
         
-        repository.add_model("model_123", mock_model)
+        repository.add_model("model_123", mock_model, metadata)
         
-        mock_manager.add_model.assert_called_once_with("model_123", mock_model)
+        mock_manager.add_model.assert_called_once_with("model_123", mock_model, metadata)
 
     def test_remove_model_success(self, repository, mock_manager):
         """Test removing existing model."""

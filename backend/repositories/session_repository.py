@@ -87,15 +87,16 @@ class SessionRepository:
         """
         return self._manager.get_model(model_id)
 
-    def add_model(self, model_id: str, model: Any) -> None:
+    def add_model(self, model_id: str, model: Any, metadata: Optional[Dict[str, Any]] = None) -> None:
         """
         Store a trained model.
 
         Args:
             model_id: Model identifier
             model: Model object to store
+            metadata: Optional metadata to persist with the model
         """
-        self._manager.add_model(model_id, model)
+        self._manager.add_model(model_id, model, metadata)
 
     def remove_model(self, model_id: str) -> bool:
         """

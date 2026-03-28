@@ -88,6 +88,13 @@ class TestTrainingService:
         assert result["summary"]["num_skills"] == 3
         mock_repository.session_exists.assert_called_once_with("test_session_001")
         mock_repository.add_model.assert_called_once()
+        add_model_args = mock_repository.add_model.call_args.args
+        assert add_model_args[0].startswith("model_test_session_001_")
+        assert add_model_args[1] is mock_recommender
+        assert add_model_args[2]["session_id"] == "test_session_001"
+        assert add_model_args[2]["num_members"] == 2
+        assert add_model_args[2]["num_skills"] == 3
+        assert add_model_args[2]["weights"] == {'readiness': 0.6, 'bayesian': 0.3, 'utility': 0.1}
 
     @pytest.mark.asyncio
     async def test_train_model_session_not_found(self, service, mock_repository):
@@ -132,6 +139,8 @@ class TestTrainingService:
         )
         
         assert result["summary"]["weights"] == custom_weights
+        add_model_args = mock_repository.add_model.call_args.args
+        assert add_model_args[2]["weights"] == custom_weights
 
     @pytest.mark.asyncio
     async def test_train_model_insufficient_data(self, service, mock_repository, mocker):
