@@ -1,0 +1,608 @@
+"""
+スキル取得順序ベースSEMモデル
+
+スキルの取得順序（初級→中級→上級）に基づいたSEMモデルを構築し、
+メンバーの潜在的なスキルレベルを推定、推薦に活用します。
+
+このモデルは実際の取得時刻データから学習する完全にデータドリブンな手法です。
+"""
+
+import numpy as np
+import pandas as pd
+from typing import Dict, List, Optional, Tuple
+import logging
+
+from skillnote_recommendation.ml.acquisition_order_hierarchy import (
+    AcquisitionOrderHierarchy,
+)
+from skillnote_recommendation.ml.unified_sem_estimator import (
+    UnifiedSEMEstimator,
+    MeasurementModelSpec,
+    StructuralModelSpec,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class AcquisitionOrderSEMModel:
+    """
+    スキル取得順序ベースの階層的SEMモデル
+
+    スキルの平均取得順序から、初級→中級→上級の潜在変数を推定し、
+    スキル推薦に活用します。
+
+    例:
+        Stage 1（初級・平均取得順序0-10）
+            初級スキル（潜在変数） → [Python基礎, Git, HTML基礎]
+                ↓ パス係数 β=0.65
+        Stage 2（中級・平均取得順序11-20）
+            中級スキル（潜在変数） → [Web開発, API設計, テスト]
+                ↓ パス係数 β=0.58
+        Stage 3（上級・平均取得順序21以降）
+            上級スキル（潜在変数） → [システム設計, アーキテクチャ]
+    """
+
+    def __init__(
+        self,
+        member_competence: pd.DataFrame,
+        competence_master: pd.DataFrame,
+        acquisition_hierarchy: Optional[AcquisitionOrderHierarchy] = None,
+        n_stages: int = 3,
+    ):
+        """
+        Args:
+            member_competence: メンバー力量データ（メンバーコード、力量コード、正規化レベル、取得日）
+            competence_master: 力量マスタ（力量コード、力量名）
+            acquisition_hierarchy: スキル取得順序階層（Noneの場合は自動生成）
+            n_stages: ステージ数（デフォルト: 3）
+        """
+        self.member_competence = member_competence
+        self.competence_master = competence_master
+        self.n_stages = n_stages
+
+        # 取得順序階層を構築
+        if acquisition_hierarchy is None:
+            self.acquisition_hierarchy = AcquisitionOrderHierarchy(
+                member_competence, competence_master, n_stages=n_stages
+            )
+        else:
+            self.acquisition_hierarchy = acquisition_hierarchy
+
+        # SEMモデル
+        self.sem_model: Optional[UnifiedSEMEstimator] = None
+
+        # パス係数
+        self.path_coefficients: List[float] = []
+
+        # 潜在変数スコア（メンバーごと）
+        self.latent_scores: Dict[str, Dict[int, float]] = {}
+
+        self.is_fitted = False
+
+    def fit(self, min_competences_per_stage: int = 3):
+        """
+        SEMモデルを学習
+
+        Args:
+            min_competences_per_stage: 各ステージで最低限必要な力量数
+        """
+        logger.info("=" * 60)
+        logger.info("スキル取得順序SEMモデルの学習開始")
+        logger.info("=" * 60)
+
+        try:
+            # SEMモデルを構築・学習
+            logger.info("_fit_sem()を実行中...")
+            sem_model, path_coefs = self._fit_sem(min_competences_per_stage)
+            logger.info(f"_fit_sem()完了: sem_model={sem_model is not None}, path_coefs={path_coefs}")
+
+            if sem_model is not None:
+                self.sem_model = sem_model
+                self.path_coefficients = path_coefs
+                logger.info("✅ SEMモデル学習完了")
+                logger.info(f"   パス係数: {[f'{c:.3f}' for c in path_coefs]}")
+
+                # 潜在変数スコアを推定
+                logger.info("_estimate_latent_scores()を実行中...")
+                self._estimate_latent_scores()
+                logger.info("_estimate_latent_scores()完了")
+
+                self.is_fitted = True
+                logger.info("is_fitted = True を設定")
+            else:
+                logger.warning("⚠️ SEMモデル学習失敗（データ不足）")
+                return
+
+            logger.info("\n" + "=" * 60)
+            logger.info("✅ スキル取得順序SEMモデルの学習完了")
+            logger.info("=" * 60)
+
+        except Exception as e:
+            logger.error(f"❌ SEMモデル学習エラー: {e}", exc_info=True)
+
+    def _fit_sem(
+        self, min_competences_per_stage: int
+    ) -> Tuple[Optional[UnifiedSEMEstimator], List[float]]:
+        """
+        SEMモデルを構築・学習
+
+        Args:
+            min_competences_per_stage: 各ステージで最低限必要な力量数
+
+        Returns:
+            (学習済みSEMモデル, パス係数リスト)
+        """
+        # まずデータマッピングを準備（力量コード → 力量名）
+        competence_name_map = dict(
+            zip(
+                self.competence_master["力量コード"],
+                self.competence_master["力量名"],
+            )
+        )
+
+        # メンバー×力量のデータフレームを作成
+        skill_matrix = self.member_competence.pivot_table(
+            index="メンバーコード",
+            columns="力量コード",
+            values="正規化レベル",
+            fill_value=0.0,
+        )
+
+        # 力量名でリネーム
+        renamed_columns = {
+            code: competence_name_map.get(code, code) for code in skill_matrix.columns
+        }
+        skill_matrix_renamed = skill_matrix.rename(columns=renamed_columns)
+
+        # 利用可能な力量名（リネーム後のカラム名）を記録
+        available_skill_names = set(skill_matrix_renamed.columns)
+        logger.info(f"  利用可能な力量数: {len(available_skill_names)}")
+
+        # 測定モデルを定義（各ステージの潜在変数）
+        measurement_models = []
+        used_skill_names = set()  # 既に使用した「力量名」を記録（重要：コードではなく名前）
+
+        for stage_id in range(1, self.n_stages + 1):
+            stage_name = self.acquisition_hierarchy.get_stage_name(stage_id)
+            stage_skills = self.acquisition_hierarchy.get_skills_by_stage(stage_id)
+
+            logger.info(f"  Stage {stage_id}の処理開始: {len(stage_skills)}個のスキル")
+
+            if len(stage_skills) < min_competences_per_stage:
+                logger.warning(
+                    f"  ⚠️ Stage {stage_id}のスキル数不足: "
+                    f"{len(stage_skills)}個 < {min_competences_per_stage}個"
+                )
+                continue
+
+            # 力量名に変換（既に使用された「力量名」は除外、かつデータに存在するものだけ）
+            skill_names = []
+            failed_codes = []
+            duplicated_names = []  # 力量名重複
+            unavailable_codes = []
+
+            for code in stage_skills:
+                skill_name = competence_name_map.get(code)
+                if skill_name is None:
+                    failed_codes.append(code)
+                    continue
+
+                # **絶対に重要：力量名で重複チェック**
+                if skill_name in used_skill_names:
+                    duplicated_names.append(skill_name)
+                    logger.warning(f"  ⚠️ Stage {stage_id}: '{skill_name}'は既に使用済み（前のStageで使用）")
+                    continue
+
+                # データに実際に存在するか確認
+                if skill_name not in available_skill_names:
+                    unavailable_codes.append((code, skill_name))
+                    continue
+
+                skill_names.append(skill_name)
+                used_skill_names.add(skill_name)  # 力量名を記録
+
+            logger.info(
+                f"  Stage {stage_id}: 利用可能={len(skill_names)}個, "
+                f"力量マスタ不在={len(failed_codes)}個, "
+                f"データ不在={len(unavailable_codes)}個, "
+                f"重複除外={len(duplicated_names)}個"
+            )
+            if failed_codes:
+                logger.warning(
+                    f"  ⚠️ Stage {stage_id}で力量マスタに不在: {failed_codes[:5]}"
+                )
+            if unavailable_codes:
+                logger.warning(
+                    f"  ⚠️ Stage {stage_id}でメンバーデータに不在: {unavailable_codes[:5]}"
+                )
+            if duplicated_names:
+                logger.info(
+                    f"  ℹ️ Stage {stage_id}で重複スキル除外: {duplicated_names[:5]}"
+                )
+
+            if len(skill_names) >= 2:
+                # 重要：skill_names内の重複チェック
+                unique_skill_names = list(dict.fromkeys(skill_names))  # 順序保持しながら重複除外
+
+                logger.info(f"  Stage {stage_id}: 処理前={len(skill_names)}個, 重複除外後={len(unique_skill_names)}個")
+                logger.info(f"  Stage {stage_id}の力量名: {unique_skill_names[:10]}")
+
+                measurement_models.append(
+                    MeasurementModelSpec(
+                        latent_name=f"Stage_{stage_id}_{stage_name}",
+                        observed_vars=unique_skill_names,
+                        reference_indicator=unique_skill_names[0],
+                    )
+                )
+
+                logger.info(
+                    f"  Stage {stage_id} ({stage_name}): {len(unique_skill_names)}個のスキル → 測定モデル追加"
+                )
+            else:
+                logger.warning(
+                    f"  ⚠️ Stage {stage_id}: スキル数不足（{len(skill_names)}個 < 2個）"
+                )
+
+        # 全measurement_modelsの観測変数の重複チェック（最後の砦）
+        all_observed_vars = []
+        for mm in measurement_models:
+            all_observed_vars.extend(mm.observed_vars)
+
+        unique_vars = set(all_observed_vars)
+        logger.info(f"  全Stage合計: 観測変数数={len(all_observed_vars)}, ユニーク数={len(unique_vars)}")
+        logger.info(f"  観測変数リスト: {all_observed_vars}")
+
+        if len(all_observed_vars) > len(unique_vars):
+            duplicated_vars = [v for v in all_observed_vars if all_observed_vars.count(v) > 1]
+            logger.error(f"  ❌ 観測変数重複検出: {set(duplicated_vars)}")
+            logger.error(f"  重複の詳細:")
+            for var in set(duplicated_vars):
+                count = all_observed_vars.count(var)
+                logger.error(f"    '{var}': {count}回出現")
+            logger.error(f"  測定モデルの詳細:")
+            for i, mm in enumerate(measurement_models):
+                logger.error(f"    Stage {i + 1}: {mm.observed_vars}")
+            return None, []
+
+        if len(measurement_models) < 2:
+            logger.warning(
+                f"  ⚠️ 測定モデルが2個未満: {len(measurement_models)}個 "
+                f"（SEMには最低2個必要）"
+            )
+            return None, []
+
+        # 構造モデルを定義（ステージ間の因果関係）
+        structural_models = []
+
+        for i in range(len(measurement_models) - 1):
+            from_var = measurement_models[i].latent_name
+            to_var = measurement_models[i + 1].latent_name
+
+            structural_models.append(
+                StructuralModelSpec(from_latent=from_var, to_latent=to_var)
+            )
+
+        # SEMモデルを学習
+        try:
+            logger.info(f"  UnifiedSEMEstimatorを初期化中...")
+            logger.info(f"  - 測定モデル数: {len(measurement_models)}")
+            logger.info(f"  - 構造モデル数: {len(structural_models)}")
+            logger.info(f"  - データ形状: {skill_matrix_renamed.shape}")
+
+            sem_model = UnifiedSEMEstimator(
+                measurement_specs=measurement_models, structural_specs=structural_models
+            )
+            logger.info(f"  UnifiedSEMEstimator初期化完了")
+
+            logger.info(f"  SEMモデルをfit中...")
+            sem_model.fit(skill_matrix_renamed)
+            logger.info(f"  SEMモデルfitは成功しました: is_fitted={sem_model.is_fitted}")
+
+            # パス係数を抽出
+            path_coefs = []
+            for structural_spec in structural_models:
+                # semopyのパラメータ形式に合わせる: "{to} ~ {from}"
+                param_name = f"{structural_spec.to_latent} ~ {structural_spec.from_latent}"
+
+                if param_name in sem_model.params:
+                    path_coefs.append(sem_model.params[param_name].value)
+                else:
+                    # パラメータが見つからない場合、警告を出力
+                    logger.warning(f"  ⚠️ パラメータ '{param_name}' が見つかりません")
+                    logger.debug(f"  利用可能なパラメータ: {list(sem_model.params.keys())[:10]}")
+                    path_coefs.append(0.0)
+
+            logger.info(f"  パス係数抽出完了: {path_coefs}")
+            return sem_model, path_coefs
+
+        except Exception as e:
+            logger.error(f"  ❌ SEMモデル学習エラー: {e}", exc_info=True)
+            return None, []
+
+    def _estimate_latent_scores(self):
+        """
+        各メンバーの潜在変数スコアを推定
+        """
+        if self.sem_model is None:
+            return
+
+        logger.info("\nメンバーの潜在変数スコアを推定中...")
+
+        # 全メンバーの潜在変数スコアを計算
+        try:
+            # メンバー×力量のデータフレームを作成（学習時と同じデータで推定）
+            skill_matrix = self.member_competence.pivot_table(
+                index="メンバーコード",
+                columns="力量コード",
+                values="正規化レベル",
+                fill_value=0.0,
+            )
+
+            # 力量名でリネーム
+            competence_name_map = dict(
+                zip(
+                    self.competence_master["力量コード"],
+                    self.competence_master["力量名"],
+                )
+            )
+
+            renamed_columns = {
+                code: competence_name_map.get(code, code) for code in skill_matrix.columns
+            }
+            skill_matrix_renamed = skill_matrix.rename(columns=renamed_columns)
+
+            # predict_latent_scores()を使用して潜在変数スコアを推定
+            latent_scores_df = self.sem_model.predict_latent_scores(skill_matrix_renamed)
+
+            # メンバーごとにステージ別スコアを格納
+            for member_code in latent_scores_df.index:
+                self.latent_scores[member_code] = {}
+
+                for stage_id in range(1, self.n_stages + 1):
+                    stage_name = self.acquisition_hierarchy.get_stage_name(stage_id)
+                    col_name = f"Stage_{stage_id}_{stage_name}"
+
+                    if col_name in latent_scores_df.columns:
+                        self.latent_scores[member_code][stage_id] = latent_scores_df.loc[
+                            member_code, col_name
+                        ]
+                    else:
+                        self.latent_scores[member_code][stage_id] = 0.0
+
+            logger.info(
+                f"✅ {len(self.latent_scores)}名の潜在変数スコア推定完了"
+            )
+
+        except Exception as e:
+            logger.error(f"❌ 潜在変数スコア推定エラー: {e}")
+
+    def get_member_latent_scores(self, member_code: str) -> Optional[Dict[int, float]]:
+        """
+        メンバーの潜在変数スコアを取得
+
+        Args:
+            member_code: メンバーコード
+
+        Returns:
+            {stage_id: latent_score}
+        """
+        return self.latent_scores.get(member_code)
+
+    def recommend_next_skills(
+        self, member_code: str, top_n: int = 10
+    ) -> List[Dict]:
+        """
+        メンバーに次に習得すべきスキルを推薦
+
+        Args:
+            member_code: メンバーコード
+            top_n: 推薦数
+
+        Returns:
+            推薦スキルのリスト
+        """
+        try:
+            # モデル学習状態のチェック
+            if not self.is_fitted:
+                logger.warning("⚠️ SEMモデルが学習されていません。ルールベース推薦にフォールバックします")
+                # フォールバック: ルールベース推薦（取得順序のみ）
+                return self._recommend_fallback(member_code, top_n)
+
+            # メンバーの存在確認
+            member_skills = self.member_competence[
+                self.member_competence["メンバーコード"] == member_code
+            ]
+            if member_skills.empty:
+                logger.warning(f"⚠️ メンバー '{member_code}' のスキルデータが見つかりません")
+                return []
+
+            # 基本推薦を取得（取得順序ベース）
+            recommendations = self.acquisition_hierarchy.get_next_stage_skills(
+                member_code, top_n
+            )
+
+            if not recommendations:
+                logger.info(f"ℹ️ メンバー '{member_code}' に推薦できるスキルがありません")
+                return []
+
+            # 潜在変数スコアで調整
+            latent_scores = self.get_member_latent_scores(member_code)
+
+            if latent_scores:
+                for rec in recommendations:
+                    stage_id = rec["stage"]
+                    latent_score = latent_scores.get(stage_id, 0.0)
+
+                    # 潜在変数スコアを考慮した優先度調整
+                    rec["latent_score"] = latent_score
+                    rec["adjusted_priority_score"] = rec["priority_score"] * (
+                        1 + latent_score * 0.2
+                    )
+
+                # 調整後のスコアでソート
+                recommendations.sort(
+                    key=lambda x: x["adjusted_priority_score"], reverse=True
+                )
+            else:
+                logger.warning(f"⚠️ メンバー '{member_code}' の潜在変数スコアが取得できませんでした")
+                # フォールバック: adjusted_priority_scoreがない場合はpriority_scoreを使用
+                for rec in recommendations:
+                    rec["latent_score"] = 0.0
+                    rec["adjusted_priority_score"] = rec["priority_score"]
+
+            return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ 推薦生成エラー（メンバー: {member_code}）: {e}", exc_info=True)
+            # フォールバック: ルールベース推薦
+            return self._recommend_fallback(member_code, top_n)
+
+    def _recommend_fallback(self, member_code: str, top_n: int = 10) -> List[Dict]:
+        """
+        フォールバック推薦（ルールベース）
+
+        SEMモデルが利用できない場合の代替推薦方法
+
+        Args:
+            member_code: メンバーコード
+            top_n: 推薦数
+
+        Returns:
+            推薦スキルのリスト
+        """
+        try:
+            logger.info(f"ℹ️ ルールベース推薦を実行中（メンバー: {member_code}）")
+            recommendations = self.acquisition_hierarchy.get_next_stage_skills(
+                member_code, top_n
+            )
+
+            # adjusted_priority_scoreを設定（SEMなし）
+            for rec in recommendations:
+                rec["latent_score"] = 0.0
+                rec["adjusted_priority_score"] = rec["priority_score"]
+                rec["recommendation_method"] = "fallback_rule_based"
+
+            return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ フォールバック推薦エラー: {e}", exc_info=True)
+            return []
+
+    def explain_recommendation(
+        self, member_code: str, competence_code: str
+    ) -> Dict[str, any]:
+        """
+        推薦理由を詳しく説明
+
+        Args:
+            member_code: メンバーコード
+            competence_code: 力量コード
+
+        Returns:
+            推薦理由の詳細
+        """
+        explanation = {
+            "competence_code": competence_code,
+            "competence_name": None,
+            "recommendation_reason": [],
+            "details": {},
+            "is_recommended": False,
+        }
+
+        try:
+            # スキル情報を取得
+            skill_info = self.acquisition_hierarchy.skill_acquisition_stats.get(competence_code)
+
+            if skill_info:
+                explanation["competence_name"] = skill_info["competence_name"]
+                explanation["details"]["avg_acquisition_order"] = skill_info["avg_order"]
+                explanation["details"]["acquisition_count"] = skill_info["count"]
+
+            # スキルのステージを取得
+            stage = self.acquisition_hierarchy.get_stage(competence_code)
+
+            if stage:
+                stage_name = self.acquisition_hierarchy.get_stage_name(stage)
+                explanation["details"]["stage"] = stage
+                explanation["details"]["stage_name"] = stage_name
+
+                # メンバーの現在のステージを取得
+                current_stage, progress, acquired_skills = self.acquisition_hierarchy.estimate_member_stage(
+                    member_code
+                )
+
+                explanation["details"]["member_current_stage"] = current_stage
+                explanation["details"]["member_progress"] = progress
+
+                # 推薦理由を構築
+                if stage == current_stage:
+                    explanation["recommendation_reason"].append(
+                        f"このスキルは現在のステージ（Stage {current_stage}）のスキルです"
+                    )
+                    explanation["is_recommended"] = True
+                elif stage == current_stage + 1 and progress >= 0.8:
+                    explanation["recommendation_reason"].append(
+                        f"現在のステージ（Stage {current_stage}）の進捗率が{progress*100:.1f}%のため、"
+                        f"次のステージ（Stage {stage}）のスキルを推薦します"
+                    )
+                    explanation["is_recommended"] = True
+                elif stage > current_stage + 1:
+                    explanation["recommendation_reason"].append(
+                        f"このスキルはStage {stage}のため、現在のステージ（Stage {current_stage}）より"
+                        f"進んでいます。まず現在のステージを完了することを推奨します"
+                    )
+                    explanation["is_recommended"] = False
+                else:
+                    explanation["recommendation_reason"].append(
+                        f"このスキルはStage {stage}で、既に習得済みまたは現在のステージより前のスキルです"
+                    )
+                    explanation["is_recommended"] = False
+
+                # 取得順序に基づく説明
+                if skill_info:
+                    avg_order = skill_info["avg_order"]
+                    explanation["recommendation_reason"].append(
+                        f"このスキルは平均的に{avg_order:.1f}番目に取得されるスキルです"
+                    )
+
+                    # 取得人数に基づく説明
+                    count = skill_info["count"]
+                    explanation["recommendation_reason"].append(
+                        f"{count}名のメンバーがこのスキルを取得しています"
+                    )
+
+                # 潜在変数スコアに基づく説明
+                if self.is_fitted:
+                    latent_scores = self.get_member_latent_scores(member_code)
+
+                    if latent_scores and stage in latent_scores:
+                        latent_score = latent_scores[stage]
+                        explanation["details"]["latent_score"] = latent_score
+
+                        if latent_score > 0.5:
+                            explanation["recommendation_reason"].append(
+                                f"SEMモデルによると、あなたのStage {stage}の潜在スコアは{latent_score:.2f}で、"
+                                f"このスキルを習得する準備が整っています"
+                            )
+                        else:
+                            explanation["recommendation_reason"].append(
+                                f"SEMモデルによると、あなたのStage {stage}の潜在スコアは{latent_score:.2f}です"
+                            )
+
+            return explanation
+
+        except Exception as e:
+            logger.error(f"❌ 推薦理由説明エラー: {e}", exc_info=True)
+            explanation["recommendation_reason"].append(
+                f"推薦理由の生成中にエラーが発生しました: {e}"
+            )
+            return explanation
+
+    def get_statistics(self) -> pd.DataFrame:
+        """
+        モデルの統計情報を取得
+
+        Returns:
+            DataFrame with statistics
+        """
+        return self.acquisition_hierarchy.get_statistics()

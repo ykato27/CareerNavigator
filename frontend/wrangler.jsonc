@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "career-navigator",
+  "compatibility_date": "2026-03-28",
+  "pages_build_output_dir": "./dist",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "career-navigator-db",
+      "database_id": "99032143-6427-440f-9322-0d7473d64bbb"
+    }
+  ],
+  // Add the STORAGE R2 binding after enabling R2 in the Cloudflare dashboard
+  // and creating the bucket:
+  // "r2_buckets": [
+  //   {
+  //     "binding": "STORAGE",
+  //     "bucket_name": "career-navigator-data-ykato-20260328"
+  //   }
+  // ]
+}

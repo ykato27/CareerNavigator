@@ -1,0 +1,212 @@
+"""
+Service layer for recommendation operations.
+
+This module contains business logic for generating skill recommendations.
+"""
+
+from typing import Dict, Any
+from backend.repositories.session_repository import session_repository
+from backend.core.exceptions import ModelNotFoundException, MemberNotFoundException
+from backend.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class RecommendationService:
+    """Service for handling recommendation operations."""
+
+    def __init__(self):
+        self.repository = session_repository
+
+    def _get_member_name(self, recommender: Any, model_id: str, member_id: str) -> str:
+        """Resolve member name from model metadata or current session state."""
+        member_lookup = getattr(recommender, "member_lookup_", None)
+        if isinstance(member_lookup, dict):
+            member_name = member_lookup.get(member_id)
+            if member_name:
+                return str(member_name)
+
+        session_id = getattr(recommender, "session_id", None)
+        if not session_id and model_id.startswith("model_"):
+            model_suffix = model_id[len("model_") :]
+            session_id = model_suffix.rsplit("_", 1)[0] if "_" in model_suffix else None
+
+        if session_id:
+            session = self.repository.get_session(str(session_id))
+            if isinstance(session, dict):
+                for member in session.get("members", []):
+                    if str(member.get("member_code", "")) == member_id:
+                        member_name = member.get("member_name") or member.get("name")
+                        if member_name:
+                            return str(member_name)
+
+        return ""
+
+    async def get_recommendations(
+        self, model_id: str, member_id: str, top_n: int = 10
+    ) -> Dict[str, Any]:
+        """
+        Get skill recommendations for a member.
+
+        Args:
+            model_id: Trained model identifier
+            member_id: Member code to get recommendations for
+            top_n: Number of recommendations to return
+
+        Returns:
+            Dictionary containing recommendations and metadata
+
+        Raises:
+            ModelNotFoundException: If model not found
+            MemberNotFoundException: If member not found in model data
+        """
+        logger.info("Getting recommendations", model_id=model_id, member_id=member_id, top_n=top_n)
+
+        # Get trained model
+        recommender = self.repository.get_model(model_id)
+        if not recommender:
+            raise ModelNotFoundException(model_id)
+
+        # Check if member exists
+        # Debug: Log available member IDs and the requested member_id
+        available_members = list(recommender.skill_matrix_.index[:5])  # First 5 for debugging
+        logger.debug(
+            "Member lookup debug",
+            requested_member_id=member_id,
+            requested_type=type(member_id).__name__,
+            available_sample=available_members,
+            available_type=type(available_members[0]).__name__ if available_members else "none",
+            total_members=len(recommender.skill_matrix_.index)
+        )
+        
+        if member_id not in recommender.skill_matrix_.index:
+            raise MemberNotFoundException(member_id)
+
+        # Generate recommendations
+        try:
+            recommendations_list = recommender.recommend(member_code=member_id, top_n=top_n)
+        except Exception as e:
+            logger.error(
+                "Recommendation generation failed",
+                model_id=model_id,
+                member_id=member_id,
+                error=str(e),
+            )
+            recommendations_list = []
+
+        # Format recommendations
+        formatted_recommendations = []
+        for rec in recommendations_list:
+            formatted_recommendations.append(
+                {
+                    "skill_code": rec.get("skill_code", ""),
+                    "skill_name": rec.get("skill_name", ""),
+                    "category": rec.get("category", ""),
+                    "readiness_score": rec.get("readiness_score", 0.0),
+                    "probability_score": rec.get("probability_score", 0.0),
+                    "utility_score": rec.get("utility_score", 0.0),
+                    "final_score": rec.get("final_score", 0.0),
+                    "reason": rec.get("reason", ""),
+                    "dependencies": rec.get("dependencies", []),
+                }
+            )
+
+        # Get current weights
+        weights = (
+            recommender.get_weights()
+            if hasattr(recommender, "get_weights")
+            else recommender.weights
+        )
+
+        logger.info(
+            "Recommendations generated",
+            model_id=model_id,
+            member_id=member_id,
+            count=len(formatted_recommendations),
+        )
+        member_name = self._get_member_name(recommender, model_id, member_id)
+
+        return {
+            "model_id": model_id,
+            "member_id": member_id,
+            "member_name": member_name,
+            "recommendations": formatted_recommendations,
+            "metadata": {
+                "weights": weights,
+                "total_candidates": len(formatted_recommendations),
+            },
+            "message": (
+                "推薦を生成しました" if formatted_recommendations else "利用可能な推薦がありません"
+            ),
+        }
+
+
+    async def get_scatter_plot_data(
+        self, model_id: str, member_id: str
+    ) -> Dict[str, Any]:
+        """
+        Get scatter plot data (Readiness × Utility) for all unowned skills.
+
+        Args:
+            model_id: Trained model identifier
+            member_id: Member code
+
+        Returns:
+            Dictionary containing scatter plot data
+        """
+        logger.info("Getting scatter plot data", model_id=model_id, member_id=member_id)
+
+        # Get trained model
+        recommender = self.repository.get_model(model_id)
+        if not recommender:
+            raise ModelNotFoundException(model_id)
+
+        if member_id not in recommender.skill_matrix_.index:
+            raise MemberNotFoundException(member_id)
+
+        # Get all recommendations (no limit)
+        try:
+            all_recommendations = recommender.recommend(member_code=member_id, top_n=1000)
+        except Exception as e:
+            logger.error("Failed to get recommendations for scatter plot", error=str(e))
+            all_recommendations = []
+
+        # Format for scatter plot
+        scatter_data = []
+        for rec in all_recommendations:
+            scatter_data.append({
+                "skill_code": rec.get("skill_code", ""),
+                "skill_name": rec.get("skill_name", ""),
+                "category": rec.get("category", ""),
+                "readiness_score": rec.get("readiness_score", 0.0),
+                "utility_score": rec.get("utility_score", 0.0),
+                "final_score": rec.get("final_score", 0.0),
+            })
+
+        # Get weights
+        weights = (
+            recommender.get_weights()
+            if hasattr(recommender, "get_weights")
+            else recommender.weights
+        )
+
+        logger.info(
+            "Scatter plot data generated",
+            model_id=model_id,
+            member_id=member_id,
+            count=len(scatter_data),
+        )
+
+        return {
+            "model_id": model_id,
+            "member_id": member_id,
+            "skills": scatter_data,
+            "metadata": {
+                "weights": weights,
+                "total_skills": len(scatter_data),
+            },
+        }
+
+
+# Singleton instance
+recommendation_service = RecommendationService()

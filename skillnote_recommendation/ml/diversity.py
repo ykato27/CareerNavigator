@@ -1,0 +1,745 @@
+"""
+多様性を考慮した再ランキング
+
+MMR (Maximal Marginal Relevance)、カテゴリ多様性、タイプ多様性などを
+考慮して推薦結果を再ランキングする
+
+改善内容:
+1. MMRの効率化（キャッシング、早期終了）
+2. Position-aware ranking（上位は精度、下位は多様性）
+3. より柔軟な多様性戦略
+4. 埋め込みベースの意味的多様性（Semantic Diversity）
+"""
+
+import numpy as np
+import pandas as pd
+from typing import List, Tuple, Dict, Optional, Any
+from collections import defaultdict
+from scipy.spatial.distance import cosine
+
+
+class DiversityReranker:
+    """多様性を考慮した再ランキングクラス（意味的多様性対応）"""
+
+    def __init__(
+        self,
+        lambda_relevance: float = 0.7,
+        category_weight: float = 0.5,
+        type_weight: float = 0.3,
+        embedding_weight: float = 0.0,
+        embeddings: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        初期化
+
+        Args:
+            lambda_relevance: 関連性の重み（0-1）、高いほど精度重視、低いほど多様性重視
+            category_weight: カテゴリ多様性の重み（0-1）
+            type_weight: タイプ多様性の重み（0-1）
+            embedding_weight: 埋め込みベースの類似度の重み（0-1）
+                             0: カテゴリ/タイプベースのみ
+                             1: 埋め込みベースのみ
+                             0.5: 両者を半々でブレンド
+            embeddings: 埋め込み情報の辞書
+                       {
+                           "node2vec_model": Node2Vecモデル（.wv属性を持つ）,
+                           "nmf_model": MatrixFactorizationモデル,
+                           "embedding_type": "node2vec" | "nmf" | "both"
+                       }
+        """
+        self.lambda_relevance = lambda_relevance
+        self.category_weight = category_weight
+        self.type_weight = type_weight
+        self.embedding_weight = embedding_weight
+        self.embeddings = embeddings or {}
+
+    def rerank_mmr(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        use_position_aware: bool = False,
+    ) -> List[Tuple[str, float]]:
+        """
+        MMR (Maximal Marginal Relevance)による再ランキング（効率化版）
+
+        改善点:
+        - 類似度計算のキャッシング
+        - Position-aware ranking: 上位は精度重視、下位は多様性重視
+        - 早期終了による高速化
+        - 行列演算による一括類似度計算（候補数が多い場合に有効）
+
+        Args:
+            candidates: (力量コード, スコア)のリスト（スコア降順でソート済み想定）
+            competence_info: 力量情報DataFrame（力量コード, 力量カテゴリー名, 力量タイプ等）
+            k: 最終的な推薦数
+            use_position_aware: position-aware rankingを使用するか
+
+        Returns:
+            再ランキングされた(力量コード, スコア)のリスト
+        """
+        if len(candidates) == 0:
+            return []
+
+        # 候補数が少ない場合は従来の方式で高速処理
+        if len(candidates) <= 20:
+            return self._rerank_mmr_original(
+                candidates, competence_info, k, use_position_aware
+            )
+
+        # 候補数が多い場合は行列演算版を使用
+        return self._rerank_mmr_vectorized(candidates, competence_info, k, use_position_aware)
+
+    def _rerank_mmr_original(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        use_position_aware: bool = False,
+    ) -> List[Tuple[str, float]]:
+        """
+        オリジナルのMMR実装（候補数が少ない場合用）
+        """
+        # 力量情報をマッピング
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
+
+        # 類似度のキャッシュ
+        similarity_cache = {}
+
+        def cached_similarity(code1: str, code2: str) -> float:
+            """キャッシュを使った類似度計算"""
+            key = tuple(sorted([code1, code2]))
+            if key not in similarity_cache:
+                comp1 = competence_dict.get(code1, {}).copy()
+                comp2 = competence_dict.get(code2, {}).copy()
+                # 力量コードを明示的に追加（埋め込みベースの類似度計算で必要）
+                comp1["力量コード"] = code1
+                comp2["力量コード"] = code2
+                similarity_cache[key] = self._calculate_similarity(comp1, comp2)
+            return similarity_cache[key]
+
+        selected = []
+        remaining = list(candidates)
+        max_score = candidates[0][1] if candidates else 1.0  # 正規化用
+
+        while len(selected) < k and remaining:
+            best_idx = -1
+            best_mmr_score = -np.inf
+
+            # Position-aware ranking: 位置によってlambdaを動的に調整
+            if use_position_aware:
+                # 上位は精度重視（lambda高）、下位は多様性重視（lambda低）
+                position_ratio = len(selected) / k
+                current_lambda = self.lambda_relevance * (1 - 0.3 * position_ratio)
+            else:
+                current_lambda = self.lambda_relevance
+
+            for idx, (comp_code, relevance_score) in enumerate(remaining):
+                # 関連性スコア（正規化）
+                rel_score = relevance_score / max_score if max_score > 0 else 0
+
+                # 多様性スコア：選択済みアイテムとの非類似度
+                if len(selected) == 0:
+                    diversity_score = 1.0  # 最初のアイテムは多様性最大
+                else:
+                    # 選択済みアイテムとの最大類似度（キャッシュ使用）
+                    max_similarity = max(
+                        cached_similarity(comp_code, sel_code) for sel_code, _ in selected
+                    )
+                    diversity_score = 1.0 - max_similarity
+
+                # MMRスコア（position-aware lambdaを使用）
+                mmr_score = current_lambda * rel_score + (1 - current_lambda) * diversity_score
+
+                if mmr_score > best_mmr_score:
+                    best_mmr_score = mmr_score
+                    best_idx = idx
+
+            if best_idx >= 0:
+                selected.append(remaining.pop(best_idx))
+            else:
+                break  # 早期終了
+
+        return selected
+
+    def _rerank_mmr_vectorized(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        use_position_aware: bool = False,
+    ) -> List[Tuple[str, float]]:
+        """
+        行列演算を使用したMMR実装（候補数が多い場合用）
+
+        O(k·N) → O(N²) の事前計算 + O(k·N) のベクトル演算による高速化
+        """
+        # 力量情報をマッピング
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
+
+        # Step 1: 類似度行列を事前計算 (N x N)
+        n = len(candidates)
+        similarity_matrix = self._precompute_similarity_matrix(candidates, competence_dict)
+
+        # Step 2: 初期化
+        candidate_codes = [code for code, _ in candidates]
+        scores = np.array([score for _, score in candidates])
+        max_score = scores[0] if len(scores) > 0 else 1.0
+
+        selected_indices = []
+        remaining_indices = np.arange(n)
+
+        # Step 3: 反復選択（ベクトル演算）
+        while len(selected_indices) < k and len(remaining_indices) > 0:
+            # Position-aware ranking
+            if use_position_aware:
+                position_ratio = len(selected_indices) / k
+                current_lambda = self.lambda_relevance * (1 - 0.3 * position_ratio)
+            else:
+                current_lambda = self.lambda_relevance
+
+            # 関連性スコア（ベクトル）
+            rel_scores = scores[remaining_indices] / max_score if max_score > 0 else 0
+
+            # 多様性スコア（ベクトル演算）
+            if len(selected_indices) == 0:
+                diversity_scores = np.ones(len(remaining_indices))
+            else:
+                # 類似度行列から選択済みとの最大類似度を計算
+                # remaining_indices x selected_indices の部分行列を取得
+                sub_matrix = similarity_matrix[np.ix_(remaining_indices, selected_indices)]
+                max_similarities = sub_matrix.max(axis=1)
+                diversity_scores = 1.0 - max_similarities
+
+            # MMRスコア（ベクトル演算）
+            mmr_scores = current_lambda * rel_scores + (1 - current_lambda) * diversity_scores
+
+            # 最良のアイテムを選択
+            best_local_idx = mmr_scores.argmax()
+            best_global_idx = remaining_indices[best_local_idx]
+
+            selected_indices.append(best_global_idx)
+            remaining_indices = np.delete(remaining_indices, best_local_idx)
+
+        # 結果を構築
+        selected = [candidates[i] for i in selected_indices]
+        return selected
+
+    def _precompute_similarity_matrix(
+        self, candidates: List[Tuple[str, float]], competence_dict: Dict
+    ) -> np.ndarray:
+        """
+        候補間の類似度行列を事前計算
+
+        Args:
+            candidates: (力量コード, スコア)のリスト
+            competence_dict: 力量情報の辞書（キー: 力量コード）
+
+        Returns:
+            類似度行列 (N x N)
+        """
+        n = len(candidates)
+        similarity_matrix = np.zeros((n, n))
+
+        # 上三角行列のみ計算（対称性を利用）
+        for i in range(n):
+            code1 = candidates[i][0]
+            comp1 = competence_dict.get(code1, {})
+            # 力量コードを明示的に追加（埋め込みベースの類似度計算で必要）
+            comp1["力量コード"] = code1
+
+            for j in range(i + 1, n):
+                code2 = candidates[j][0]
+                comp2 = competence_dict.get(code2, {})
+                # 力量コードを明示的に追加
+                comp2["力量コード"] = code2
+
+                sim = self._calculate_similarity(comp1, comp2)
+                similarity_matrix[i, j] = sim
+                similarity_matrix[j, i] = sim  # 対称性
+
+        return similarity_matrix
+
+    def rerank_category_diversity(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        max_per_category: Optional[int] = None,
+    ) -> List[Tuple[str, float]]:
+        """
+        カテゴリ多様性を考慮した再ランキング
+
+        Args:
+            candidates: (力量コード, スコア)のリスト
+            competence_info: 力量情報DataFrame
+            k: 最終的な推薦数
+            max_per_category: カテゴリごとの最大推薦数（Noneの場合は制限なし）
+
+        Returns:
+            カテゴリ多様性を考慮した(力量コード, スコア)のリスト
+        """
+        if len(candidates) == 0:
+            return []
+
+        # 力量情報をマッピング
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
+
+        # カテゴリごとのカウント
+        category_counts = defaultdict(int)
+        selected = []
+
+        for comp_code, score in candidates:
+            if len(selected) >= k:
+                break
+
+            # カテゴリを取得
+            comp_info = competence_dict.get(comp_code, {})
+            category = comp_info.get("力量カテゴリー名", "Unknown")
+
+            # カテゴリごとの制限をチェック
+            if max_per_category is None or category_counts[category] < max_per_category:
+                selected.append((comp_code, score))
+                category_counts[category] += 1
+
+        # 制限により不足した場合、残りを追加
+        if len(selected) < k:
+            for comp_code, score in candidates:
+                if len(selected) >= k:
+                    break
+                if (comp_code, score) not in selected:
+                    selected.append((comp_code, score))
+
+        return selected[:k]
+
+    def rerank_type_diversity(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        type_ratios: Optional[Dict[str, float]] = None,
+    ) -> List[Tuple[str, float]]:
+        """
+        タイプ多様性を考慮した再ランキング（SKILL/EDUCATION/LICENSE）
+
+        Args:
+            candidates: (力量コード, スコア)のリスト
+            competence_info: 力量情報DataFrame
+            k: 最終的な推薦数
+            type_ratios: タイプごとの目標比率（例: {'SKILL': 0.6, 'EDUCATION': 0.3, 'LICENSE': 0.1}）
+
+        Returns:
+            タイプ多様性を考慮した(力量コード, スコア)のリスト
+        """
+        if len(candidates) == 0:
+            return []
+
+        # デフォルトの比率
+        if type_ratios is None:
+            type_ratios = {"SKILL": 0.5, "EDUCATION": 0.3, "LICENSE": 0.2}
+
+        # 力量情報をマッピング
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
+
+        # 候補をタイプごとに分類
+        candidates_by_type = defaultdict(list)
+        for comp_code, score in candidates:
+            comp_info = competence_dict.get(comp_code, {})
+            comp_type = comp_info.get("力量タイプ", "SKILL")
+            candidates_by_type[comp_type].append((comp_code, score))
+
+        # 各タイプから目標比率に従って選択
+        selected = []
+        type_targets = {t: int(k * ratio) for t, ratio in type_ratios.items()}
+
+        # まず目標数まで各タイプから選択
+        for comp_type, target_count in type_targets.items():
+            type_candidates = candidates_by_type.get(comp_type, [])
+            selected.extend(type_candidates[:target_count])
+
+        # 不足分を残りから補充（スコア順）
+        if len(selected) < k:
+            remaining = [
+                (comp_code, score)
+                for comp_code, score in candidates
+                if (comp_code, score) not in selected
+            ]
+            selected.extend(remaining[: k - len(selected)])
+
+        # スコアでソート
+        selected.sort(key=lambda x: x[1], reverse=True)
+
+        return selected[:k]
+
+    def rerank_hybrid(
+        self,
+        candidates: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        k: int = 10,
+        max_per_category: Optional[int] = 3,
+        type_ratios: Optional[Dict[str, float]] = None,
+        use_position_aware: bool = True,
+    ) -> List[Tuple[str, float]]:
+        """
+        ハイブリッド再ランキング（MMR + カテゴリ多様性 + タイプ多様性）
+
+        改善点:
+        - Position-aware rankingのサポート
+        - より効率的なパイプライン
+
+        Args:
+            candidates: (力量コード, スコア)のリスト
+            competence_info: 力量情報DataFrame
+            k: 最終的な推薦数
+            max_per_category: カテゴリごとの最大推薦数
+            type_ratios: タイプごとの目標比率
+            use_position_aware: position-aware rankingを使用するか
+
+        Returns:
+            ハイブリッド再ランキングされた(力量コード, スコア)のリスト
+        """
+        # Step 1: MMRで多様性を考慮したTop候補を選択（position-aware対応）
+        mmr_candidates = self.rerank_mmr(
+            candidates, competence_info, k=k * 2, use_position_aware=use_position_aware
+        )
+
+        # Step 2: カテゴリ多様性を適用
+        category_diverse = self.rerank_category_diversity(
+            mmr_candidates, competence_info, k=k * 2, max_per_category=max_per_category
+        )
+
+        # Step 3: タイプ多様性を適用
+        final_ranking = self.rerank_type_diversity(
+            category_diverse, competence_info, k=k, type_ratios=type_ratios
+        )
+
+        return final_ranking
+
+    def _calculate_similarity(self, comp1: Dict, comp2: Dict) -> float:
+        """
+        2つの力量の類似度を計算（カテゴリ/タイプベース + 埋め込みベース）
+
+        Args:
+            comp1: 力量1の情報辞書（"力量コード"キーを含む）
+            comp2: 力量2の情報辞書（"力量コード"キーを含む）
+
+        Returns:
+            類似度（0-1）
+        """
+        # カテゴリ/タイプベースの類似度
+        category_type_sim = self._calculate_category_type_similarity(comp1, comp2)
+
+        # 埋め込みベースの類似度
+        if self.embedding_weight > 0 and self.embeddings:
+            code1 = comp1.get("力量コード")
+            code2 = comp2.get("力量コード")
+            if code1 and code2:
+                embedding_sim = self._get_embedding_similarity(code1, code2)
+                if embedding_sim is not None:
+                    # カテゴリ/タイプベースと埋め込みベースをブレンド
+                    similarity = (
+                        (1 - self.embedding_weight) * category_type_sim
+                        + self.embedding_weight * embedding_sim
+                    )
+                    return min(similarity, 1.0)
+
+        # 埋め込みが使えない場合はカテゴリ/タイプベースのみ
+        return category_type_sim
+
+    def _calculate_category_type_similarity(self, comp1: Dict, comp2: Dict) -> float:
+        """
+        カテゴリ/タイプベースの類似度を計算（従来方式）
+
+        Args:
+            comp1: 力量1の情報辞書
+            comp2: 力量2の情報辞書
+
+        Returns:
+            類似度（0-1）
+        """
+        similarity = 0.0
+
+        # カテゴリが同じ
+        if comp1.get("力量カテゴリー名") == comp2.get("力量カテゴリー名"):
+            similarity += self.category_weight
+
+        # タイプが同じ
+        if comp1.get("力量タイプ") == comp2.get("力量タイプ"):
+            similarity += self.type_weight
+
+        # 正規化
+        max_similarity = self.category_weight + self.type_weight
+        if max_similarity > 0:
+            similarity = similarity / max_similarity
+
+        return min(similarity, 1.0)
+
+    def _get_embedding_similarity(self, code1: str, code2: str) -> Optional[float]:
+        """
+        埋め込みベースの類似度を計算（コサイン類似度）
+
+        Args:
+            code1: 力量コード1
+            code2: 力量コード2
+
+        Returns:
+            類似度（0-1）、埋め込みが取得できない場合はNone
+        """
+        try:
+            vec1 = self._get_embedding_vector(code1)
+            vec2 = self._get_embedding_vector(code2)
+
+            if vec1 is not None and vec2 is not None:
+                # コサイン類似度を計算（scipy.spatial.distance.cosineは距離なので1から引く）
+                # cosine距離 = 1 - cosine類似度
+                cosine_dist = cosine(vec1, vec2)
+                cosine_sim = 1 - cosine_dist
+
+                # 0-1の範囲にクリップ（数値誤差対策）
+                return max(0.0, min(1.0, cosine_sim))
+
+        except Exception:
+            # 埋め込み取得に失敗した場合はNoneを返す
+            pass
+
+        return None
+
+    def _get_embedding_vector(self, code: str) -> Optional[np.ndarray]:
+        """
+        力量コードに対応する埋め込みベクトルを取得
+
+        Args:
+            code: 力量コード
+
+        Returns:
+            埋め込みベクトル、取得できない場合はNone
+        """
+        if not self.embeddings:
+            return None
+
+        embedding_type = self.embeddings.get("embedding_type", "node2vec")
+
+        # Node2Vec埋め込み
+        if embedding_type in ["node2vec", "both"]:
+            node2vec_model = self.embeddings.get("node2vec_model")
+            if node2vec_model and hasattr(node2vec_model, "wv"):
+                try:
+                    if code in node2vec_model.wv:
+                        return node2vec_model.wv[code]
+                except (KeyError, AttributeError):
+                    pass
+
+        # NMF埋め込み
+        if embedding_type in ["nmf", "both"]:
+            nmf_model = self.embeddings.get("nmf_model")
+            if nmf_model and hasattr(nmf_model, "get_competence_factors"):
+                try:
+                    return nmf_model.get_competence_factors(code)
+                except (ValueError, KeyError):
+                    pass
+
+        # 両方を平均（embedding_type="both"でNode2VecとNMF両方が取得できた場合）
+        if embedding_type == "both":
+            node2vec_model = self.embeddings.get("node2vec_model")
+            nmf_model = self.embeddings.get("nmf_model")
+
+            vec_n2v = None
+            vec_nmf = None
+
+            if node2vec_model and hasattr(node2vec_model, "wv"):
+                try:
+                    if code in node2vec_model.wv:
+                        vec_n2v = node2vec_model.wv[code]
+                except (KeyError, AttributeError):
+                    pass
+
+            if nmf_model and hasattr(nmf_model, "get_competence_factors"):
+                try:
+                    vec_nmf = nmf_model.get_competence_factors(code)
+                except (ValueError, KeyError):
+                    pass
+
+            # 次元数を合わせて平均（簡易版）
+            if vec_n2v is not None and vec_nmf is not None:
+                # 次元数が異なる場合は、短い方にゼロパディング
+                max_dim = max(len(vec_n2v), len(vec_nmf))
+                vec_n2v_padded = np.pad(
+                    vec_n2v, (0, max_dim - len(vec_n2v)), mode="constant"
+                )
+                vec_nmf_padded = np.pad(
+                    vec_nmf, (0, max_dim - len(vec_nmf)), mode="constant"
+                )
+                return (vec_n2v_padded + vec_nmf_padded) / 2
+            elif vec_n2v is not None:
+                return vec_n2v
+            elif vec_nmf is not None:
+                return vec_nmf
+
+        return None
+
+    def calculate_diversity_metrics(
+        self,
+        recommendations: List[Tuple[str, float]],
+        competence_info: pd.DataFrame,
+        all_competences: Optional[List[str]] = None,
+    ) -> Dict[str, float]:
+        """
+        推薦結果の多様性指標を計算
+
+        Args:
+            recommendations: (力量コード, スコア)のリスト
+            competence_info: 力量情報DataFrame
+            all_competences: 全力量のリスト（カバレッジ計算用）
+
+        Returns:
+            多様性指標の辞書
+        """
+        if len(recommendations) == 0:
+            return {
+                "category_diversity": 0.0,
+                "type_diversity": 0.0,
+                "intra_list_diversity": 0.0,
+                "intra_list_similarity": 0.0,
+                "coverage": 0.0,
+            }
+
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
+
+        # カテゴリ多様性：ユニークなカテゴリ数 / 推薦数
+        categories = set()
+        types = set()
+        for comp_code, _ in recommendations:
+            comp_info = competence_dict.get(comp_code, {})
+            categories.add(comp_info.get("力量カテゴリー名", "Unknown"))
+            types.add(comp_info.get("力量タイプ", "SKILL"))
+
+        category_diversity = len(categories) / len(recommendations)
+        type_diversity = len(types) / len(recommendations)
+
+        # Intra-List Diversity: アイテム間の平均非類似度
+        # Intra-List Similarity: アイテム間の平均類似度
+        similarities = []
+        for i in range(len(recommendations)):
+            for j in range(i + 1, len(recommendations)):
+                comp1 = competence_dict.get(recommendations[i][0], {})
+                comp2 = competence_dict.get(recommendations[j][0], {})
+                sim = self._calculate_similarity(comp1, comp2)
+                similarities.append(sim)
+
+        avg_similarity = np.mean(similarities) if similarities else 0.0
+        intra_list_diversity = 1.0 - avg_similarity
+        intra_list_similarity = avg_similarity
+
+        # カバレッジ：全力量中、推薦された力量の割合
+        if all_competences is not None:
+            recommended_comps = set(comp_code for comp_code, _ in recommendations)
+            coverage = len(recommended_comps) / len(all_competences)
+        else:
+            coverage = 0.0
+
+        return {
+            "category_diversity": category_diversity,
+            "type_diversity": type_diversity,
+            "intra_list_diversity": intra_list_diversity,
+            "intra_list_similarity": intra_list_similarity,
+            "coverage": coverage,
+            "unique_categories": len(categories),
+            "unique_types": len(types),
+        }
+
+    def calculate_coverage(
+        self, all_recommendations: List[List[Tuple[str, float]]], all_competences: List[str]
+    ) -> float:
+        """
+        カバレッジを計算（全ユーザーの推薦結果を考慮）
+
+        Args:
+            all_recommendations: 全ユーザーの推薦結果のリスト
+            all_competences: 全力量のリスト
+
+        Returns:
+            カバレッジ（0-1）
+        """
+        recommended_comps = set()
+        for recs in all_recommendations:
+            for comp_code, _ in recs:
+                recommended_comps.add(comp_code)
+
+        return len(recommended_comps) / len(all_competences) if all_competences else 0.0
+
+    def calculate_serendipity(
+        self,
+        recommendations: List[Tuple[str, float]],
+        member_competence: pd.DataFrame,
+        member_code: str,
+        competence_info: pd.DataFrame,
+        popularity_threshold: float = 0.3,
+    ) -> float:
+        """
+        セレンディピティ（意外だが有用な推薦）を計算
+
+        セレンディピティは以下の条件を満たす推薦の割合：
+        1. ユーザーの既習得力量と異なるカテゴリ・タイプである（意外性）
+        2. かつ、推薦スコアが高い（有用性）
+        3. かつ、人気度が低すぎない（一定の実績がある）
+
+        Args:
+            recommendations: (力量コード, スコア)のリスト
+            member_competence: メンバー習得力量DataFrame
+            member_code: 対象メンバーコード
+            competence_info: 力量情報DataFrame
+            popularity_threshold: 人気度の閾値（これ以下を「意外」とみなす）
+
+        Returns:
+            セレンディピティスコア（0-1）
+        """
+        if len(recommendations) == 0:
+            return 0.0
+
+        # ユーザーの既習得力量を取得
+        acquired_comps = member_competence[member_competence["メンバーコード"] == member_code][
+            "力量コード"
+        ].tolist()
+
+        if not acquired_comps:
+            # 既習得力量がない場合、全て意外とみなす
+            return 1.0
+
+        # 既習得力量のカテゴリとタイプを取得
+        competence_dict = competence_info.set_index("力量コード").to_dict("index")
+
+        acquired_categories = set()
+        acquired_types = set()
+        for comp_code in acquired_comps:
+            comp_info = competence_dict.get(comp_code, {})
+            acquired_categories.add(comp_info.get("力量カテゴリー名"))
+            acquired_types.add(comp_info.get("力量タイプ"))
+
+        # 人気度を計算（全メンバーでの習得率）
+        popularity_scores = {}
+        all_members = member_competence["メンバーコード"].nunique()
+        for comp_code in competence_info["力量コード"]:
+            member_count = len(member_competence[member_competence["力量コード"] == comp_code])
+            popularity_scores[comp_code] = member_count / all_members if all_members > 0 else 0.0
+
+        # セレンディピティをカウント
+        serendipitous_count = 0
+        for comp_code, score in recommendations:
+            comp_info = competence_dict.get(comp_code, {})
+            category = comp_info.get("力量カテゴリー名")
+            comp_type = comp_info.get("力量タイプ")
+
+            # 意外性の判定：既習得力量と異なるカテゴリまたはタイプ
+            is_unexpected = category not in acquired_categories or comp_type not in acquired_types
+
+            # 人気度の判定：適度に人気（あまりにマイナーすぎない）
+            popularity = popularity_scores.get(comp_code, 0.0)
+            has_reasonable_popularity = popularity <= popularity_threshold and popularity > 0.01
+
+            # スコアの判定：推薦スコアが高い（有用性）
+            is_useful = score > 0.5  # スコアが正規化されていると仮定
+
+            if is_unexpected and has_reasonable_popularity and is_useful:
+                serendipitous_count += 1
+
+        return serendipitous_count / len(recommendations)

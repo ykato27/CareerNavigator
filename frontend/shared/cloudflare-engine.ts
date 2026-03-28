@@ -1,0 +1,756 @@
+export const REQUIRED_FILE_KEYS = ['members', 'skills', 'education', 'license', 'categories', 'acquired'] as const;
+const HEADER_CLEANUP_PATTERN = /\s*###\[.*?\]###/g;
+export const SESSION_TTL_DAYS = 30;
+export const TRAINING_MODE = 'cloudflare-approx' as const;
+export const ARTIFACT_VERSION = '2026-03-28' as const;
+
+export type FileKey = (typeof REQUIRED_FILE_KEYS)[number];
+export type Row = Record<string, string>;
+export type StorageMode = 'r2' | 'd1' | 'browser';
+
+export interface SessionData {
+  id: string;
+  createdAt: string;
+  expires_at: string;
+  files: Record<FileKey, Row[]>;
+  members: MemberRecord[];
+  skills: SkillRecord[];
+  acquired: AcquisitionRecord[];
+}
+
+export interface MemberRecord {
+  member_code: string;
+  member_name: string;
+  role: string;
+  grade: string;
+  occupation: string;
+  display_name: string;
+}
+
+export interface SkillRecord {
+  skill_code: string;
+  skill_name: string;
+  category: string;
+  type: string;
+}
+
+export interface AcquisitionRecord {
+  member_code: string;
+  skill_code: string;
+  skill_name: string;
+  category: string;
+  level: number;
+}
+
+export interface ConstraintRecord {
+  id: string;
+  session_id?: string;
+  from_skill: string;
+  to_skill: string;
+  constraint_type: 'required' | 'forbidden';
+  value?: number;
+  created_at: string;
+}
+
+export interface ModelArtifact {
+  model_id: string;
+  session_id: string;
+  created_at: string;
+  artifact_version: string;
+  training_mode: typeof TRAINING_MODE;
+  source_storage: StorageMode;
+  weights: Record<string, number>;
+  min_members_per_skill: number;
+  correlation_threshold: number;
+  members: MemberRecord[];
+  skills: SkillRecord[];
+  skill_popularity: Record<string, number>;
+  adjacency: Record<string, Record<string, number>>;
+  skill_degree: Record<string, number>;
+  member_skill_codes: Record<string, string[]>;
+  member_skill_names: Record<string, string[]>;
+  member_skill_levels: Record<string, Record<string, number>>;
+  constraints: ConstraintRecord[];
+}
+
+export interface HttpErrorLike extends Error {
+  response: { status: number; data: { detail: string } };
+  statusCode: number;
+}
+
+export function createHttpError(status: number, detail: string): HttpErrorLike {
+  const error = new Error(detail) as HttpErrorLike;
+  error.statusCode = status;
+  error.response = {
+    status,
+    data: { detail },
+  };
+  return error;
+}
+
+export function cleanHeader(header: string): string {
+  return header.replace(HEADER_CLEANUP_PATTERN, '').trim();
+}
+
+export function parseCsv(text: string): Row[] {
+  const normalized = text.replace(/^\uFEFF/, '');
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < normalized.length; i += 1) {
+    const char = normalized[i];
+    const next = normalized[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        currentCell += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      currentRow.push(currentCell);
+      currentCell = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') {
+        i += 1;
+      }
+      currentRow.push(currentCell);
+      rows.push(currentRow);
+      currentRow = [];
+      currentCell = '';
+      continue;
+    }
+
+    currentCell += char;
+  }
+
+  if (currentCell.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentCell);
+    rows.push(currentRow);
+  }
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const headers = rows[0].map((header) => cleanHeader(header));
+  return rows
+    .slice(1)
+    .filter((row) => row.some((cell) => cell.trim() !== ''))
+    .map((row) => {
+      const record: Row = {};
+      headers.forEach((header, index) => {
+        record[header] = (row[index] ?? '').trim();
+      });
+      return record;
+    });
+}
+
+export function rowSignature(row: Row): string {
+  return Object.keys(row)
+    .sort()
+    .map((key) => `${key}:${row[key]}`)
+    .join('|');
+}
+
+export function mergeRows(rowsList: Row[][]): Row[] {
+  const merged: Row[] = [];
+  const seen = new Set<string>();
+  const duplicates: string[] = [];
+
+  rowsList.forEach((rows, fileIndex) => {
+    rows.forEach((row, rowIndex) => {
+      const signature = rowSignature(row);
+      if (seen.has(signature)) {
+        duplicates.push(`file_${fileIndex + 1}:${rowIndex + 2}`);
+        return;
+      }
+      seen.add(signature);
+      merged.push(row);
+    });
+  });
+
+  if (duplicates.length > 0) {
+    throw createHttpError(400, `重複行が検出されました: ${duplicates.join(', ')}`);
+  }
+
+  return merged;
+}
+
+export function pickFirst(row: Row, keys: string[], fallback = ''): string {
+  for (const key of keys) {
+    if (row[key]) {
+      return row[key];
+    }
+  }
+  return fallback;
+}
+
+export function toNumber(value: string | number | undefined, fallback = 0): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export function normalizeWeights(weights?: Record<string, number>): Record<string, number> {
+  const base = {
+    readiness: 0.6,
+    bayesian: 0.3,
+    utility: 0.1,
+    ...weights,
+  };
+  const total = Object.values(base).reduce((sum, value) => sum + value, 0);
+  if (total <= 0) {
+    return { readiness: 0.6, bayesian: 0.3, utility: 0.1 };
+  }
+  return {
+    readiness: base.readiness / total,
+    bayesian: base.bayesian / total,
+    utility: base.utility / total,
+  };
+}
+
+export function generateSessionId(): string {
+  return `session_${Date.now()}`;
+}
+
+export function generateModelId(sessionId: string): string {
+  return `model_${sessionId}_${Date.now()}`;
+}
+
+export function computeExpiryIso(createdAt: string, ttlDays = SESSION_TTL_DAYS): string {
+  const base = new Date(createdAt);
+  if (Number.isNaN(base.getTime())) {
+    return new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString();
+  }
+  base.setUTCDate(base.getUTCDate() + ttlDays);
+  return base.toISOString();
+}
+
+export function isExpiredAt(expiresAt: string | null | undefined, now = new Date()): boolean {
+  if (!expiresAt) {
+    return false;
+  }
+  const expiresAtTime = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiresAtTime)) {
+    return false;
+  }
+  return expiresAtTime <= now.getTime();
+}
+
+export function buildSessionData(files: Record<FileKey, Row[]>, ttlDays = SESSION_TTL_DAYS): SessionData {
+  const createdAt = new Date().toISOString();
+  const members = files.members
+    .map((row) => {
+      const memberCode = pickFirst(row, ['メンバーコード', 'member_code']);
+      const memberName = pickFirst(row, ['メンバー名', 'name']);
+      const role = pickFirst(row, ['役職', 'job_position'], '未設定');
+      const grade = pickFirst(row, ['職能・等級', 'job_grade'], '未設定');
+      const occupation = pickFirst(row, ['職種', 'occupations'], '未設定');
+      return {
+        member_code: memberCode,
+        member_name: memberName,
+        role,
+        grade,
+        occupation,
+        display_name: `${memberCode} - ${memberName}`,
+      };
+    })
+    .filter((member) => member.member_code && member.member_name);
+
+  const skillsByCode = new Map<string, SkillRecord>();
+  const masterSources: Array<[Row[], string]> = [
+    [files.skills, 'SKILL'],
+    [files.education, 'EDUCATION'],
+    [files.license, 'LICENSE'],
+  ];
+
+  for (const [rows, type] of masterSources) {
+    rows.forEach((row) => {
+      const skillCode = pickFirst(row, ['力量コード', 'skill_code']);
+      const skillName = pickFirst(row, ['力量名', 'skill_name']);
+      if (!skillCode || !skillName) {
+        return;
+      }
+      skillsByCode.set(skillCode, {
+        skill_code: skillCode,
+        skill_name: skillName,
+        category: pickFirst(row, ['力量カテゴリー', '力量カテゴリー名', 'competence_category_name_1'], '未分類'),
+        type,
+      });
+    });
+  }
+
+  const acquired = files.acquired
+    .map((row) => {
+      const skillCode = pickFirst(row, ['力量コード', 'skill_code']);
+      const existingSkill = skillsByCode.get(skillCode);
+      const skillName = pickFirst(row, ['力量名', 'skill_name'], existingSkill?.skill_name ?? skillCode);
+      const category = existingSkill?.category ?? pickFirst(row, ['力量カテゴリー', '力量カテゴリー名'], '未分類');
+      const type = pickFirst(row, ['力量タイプ', 'competence_type'], existingSkill?.type ?? 'SKILL');
+      if (skillCode && !skillsByCode.has(skillCode)) {
+        skillsByCode.set(skillCode, { skill_code: skillCode, skill_name: skillName, category, type });
+      }
+      return {
+        member_code: pickFirst(row, ['メンバーコード', 'member_code']),
+        skill_code: skillCode,
+        skill_name: skillName,
+        category,
+        level: toNumber(pickFirst(row, ['レベル', 'level']), 0),
+      };
+    })
+    .filter((record) => record.member_code && record.skill_code);
+
+  return {
+    id: generateSessionId(),
+    createdAt,
+    expires_at: computeExpiryIso(createdAt, ttlDays),
+    files,
+    members,
+    skills: Array.from(skillsByCode.values()),
+    acquired,
+  };
+}
+
+export function buildArtifact(
+  session: SessionData,
+  options: {
+    modelId: string;
+    weights?: Record<string, number>;
+    minMembersPerSkill?: number;
+    correlationThreshold?: number;
+    constraints?: ConstraintRecord[];
+    sourceStorage?: StorageMode;
+  }
+): ModelArtifact {
+  const weights = normalizeWeights(options.weights);
+  const minMembersPerSkill = options.minMembersPerSkill ?? 5;
+  const correlationThreshold = options.correlationThreshold ?? 0.2;
+  const constraints = options.constraints ?? [];
+
+  const memberSkillCodes: Record<string, string[]> = {};
+  const memberSkillNames: Record<string, string[]> = {};
+  const memberSkillLevels: Record<string, Record<string, number>> = {};
+  const skillOwners = new Map<string, Set<string>>();
+
+  session.acquired.forEach((record) => {
+    if (!memberSkillCodes[record.member_code]) {
+      memberSkillCodes[record.member_code] = [];
+      memberSkillNames[record.member_code] = [];
+      memberSkillLevels[record.member_code] = {};
+    }
+
+    if (!memberSkillCodes[record.member_code].includes(record.skill_code)) {
+      memberSkillCodes[record.member_code].push(record.skill_code);
+      memberSkillNames[record.member_code].push(record.skill_name);
+    }
+    memberSkillLevels[record.member_code][record.skill_code] = record.level;
+
+    if (!skillOwners.has(record.skill_code)) {
+      skillOwners.set(record.skill_code, new Set<string>());
+    }
+    skillOwners.get(record.skill_code)?.add(record.member_code);
+  });
+
+  const eligibleSkillCodes = new Set<string>(
+    session.skills
+      .filter((skill) => (skillOwners.get(skill.skill_code)?.size ?? 0) >= minMembersPerSkill)
+      .map((skill) => skill.skill_code)
+  );
+
+  const adjacency: Record<string, Record<string, number>> = {};
+  const pairCounts = new Map<string, number>();
+  const skillPopularity: Record<string, number> = {};
+  const totalMembers = Math.max(session.members.length, 1);
+
+  eligibleSkillCodes.forEach((skillCode) => {
+    const owners = skillOwners.get(skillCode)?.size ?? 0;
+    skillPopularity[skillCode] = owners / totalMembers;
+  });
+
+  Object.values(memberSkillCodes).forEach((skillCodes) => {
+    const filtered = skillCodes.filter((skillCode) => eligibleSkillCodes.has(skillCode));
+    for (let i = 0; i < filtered.length; i += 1) {
+      for (let j = 0; j < filtered.length; j += 1) {
+        if (i === j) {
+          continue;
+        }
+        const key = `${filtered[i]}::${filtered[j]}`;
+        pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+      }
+    }
+  });
+
+  pairCounts.forEach((count, key) => {
+    const [source, target] = key.split('::');
+    const owners = skillOwners.get(source)?.size ?? 1;
+    const weight = count / owners;
+    if (weight < correlationThreshold) {
+      return;
+    }
+    if (!adjacency[source]) {
+      adjacency[source] = {};
+    }
+    adjacency[source][target] = weight;
+  });
+
+  const skillByName = new Map(session.skills.map((skill) => [skill.skill_name, skill.skill_code]));
+  constraints.forEach((constraint) => {
+    const fromCode = skillByName.get(constraint.from_skill);
+    const toCode = skillByName.get(constraint.to_skill);
+    if (!fromCode || !toCode) {
+      return;
+    }
+    if (!adjacency[fromCode]) {
+      adjacency[fromCode] = {};
+    }
+    if (constraint.constraint_type === 'required') {
+      adjacency[fromCode][toCode] = Math.max(adjacency[fromCode][toCode] ?? 0, constraint.value ?? 0.5);
+    } else {
+      delete adjacency[fromCode][toCode];
+    }
+  });
+
+  const skillDegree: Record<string, number> = {};
+  Object.entries(adjacency).forEach(([skillCode, edges]) => {
+    skillDegree[skillCode] = Object.values(edges).reduce((sum, value) => sum + value, 0);
+  });
+
+  return {
+    model_id: options.modelId,
+    session_id: session.id,
+    created_at: new Date().toISOString(),
+    artifact_version: ARTIFACT_VERSION,
+    training_mode: TRAINING_MODE,
+    source_storage: options.sourceStorage ?? 'd1',
+    weights,
+    min_members_per_skill: minMembersPerSkill,
+    correlation_threshold: correlationThreshold,
+    members: session.members,
+    skills: session.skills.filter((skill) => eligibleSkillCodes.has(skill.skill_code)),
+    skill_popularity: skillPopularity,
+    adjacency,
+    skill_degree: skillDegree,
+    member_skill_codes: memberSkillCodes,
+    member_skill_names: memberSkillNames,
+    member_skill_levels: memberSkillLevels,
+    constraints,
+  };
+}
+
+export function pickMember(session: SessionData, memberCode: string): MemberRecord {
+  const member = session.members.find((item) => item.member_code === memberCode);
+  if (!member) {
+    throw createHttpError(404, `Member '${memberCode}' not found`);
+  }
+  return member;
+}
+
+export function scoreRecommendations(artifact: ModelArtifact, memberId: string, topN: number) {
+  const ownedCodes = new Set(artifact.member_skill_codes[memberId] ?? []);
+  if (!artifact.members.some((member) => member.member_code === memberId)) {
+    throw createHttpError(404, `Member '${memberId}' not found`);
+  }
+
+  const maxUtility = Math.max(1, ...Object.values(artifact.skill_degree));
+  const skillNameByCode = new Map(artifact.skills.map((skill) => [skill.skill_code, skill.skill_name]));
+
+  return artifact.skills
+    .filter((skill) => !ownedCodes.has(skill.skill_code))
+    .map((skill) => {
+      const readinessReasons = Array.from(ownedCodes)
+        .map((ownedSkill) => ({
+          skillName: skillNameByCode.get(ownedSkill) ?? ownedSkill,
+          effect: artifact.adjacency[ownedSkill]?.[skill.skill_code] ?? 0,
+        }))
+        .filter((reason) => reason.effect > 0)
+        .sort((a, b) => b.effect - a.effect)
+        .slice(0, 5);
+
+      const readiness = readinessReasons[0]?.effect ?? 0;
+      const bayesian = artifact.skill_popularity[skill.skill_code] ?? 0;
+      const utilityReasons = Object.entries(artifact.adjacency[skill.skill_code] ?? {})
+        .map(([targetSkillCode, effect]) => ({
+          skillName: skillNameByCode.get(targetSkillCode) ?? targetSkillCode,
+          effect,
+        }))
+        .sort((a, b) => b.effect - a.effect)
+        .slice(0, 5);
+      const utility = (artifact.skill_degree[skill.skill_code] ?? 0) / maxUtility;
+      const finalScore =
+        artifact.weights.readiness * readiness +
+        artifact.weights.bayesian * bayesian +
+        artifact.weights.utility * utility;
+
+      return {
+        rank: 0,
+        competence_code: skill.skill_code,
+        competence_name: skill.skill_name,
+        skill_code: skill.skill_code,
+        skill_name: skill.skill_name,
+        category: skill.category,
+        score: finalScore,
+        total_score: finalScore,
+        final_score: finalScore,
+        readiness_score: readiness,
+        readiness_score_normalized: readiness,
+        probability_score: bayesian,
+        bayesian_score: bayesian,
+        bayesian_score_normalized: bayesian,
+        utility_score: utility,
+        utility_score_normalized: utility,
+        reason: readinessReasons.length > 0 ? `${readinessReasons[0].skillName} との関連が強いため` : '既存スキル構成との整合性が高いため',
+        explanation: readinessReasons.length > 0
+          ? `${readinessReasons[0].skillName} を保有しているため、${skill.skill_name} の習得準備度が高いと推定しました。`
+          : `${skill.skill_name} は現在のスキル構成に対して有望です。`,
+        dependencies: readinessReasons.map((reason) => reason.skillName),
+        readiness_reasons: readinessReasons.map((reason) => [reason.skillName, reason.effect] as [string, number]),
+        utility_reasons: utilityReasons.map((reason) => [reason.skillName, reason.effect] as [string, number]),
+        prerequisites: readinessReasons.map((reason) => ({ skill_name: reason.skillName, effect: reason.effect })),
+        enables: utilityReasons.map((reason) => ({ skill_name: reason.skillName, effect: reason.effect })),
+        details: {
+          readiness_score_normalized: readiness,
+          bayesian_score_normalized: bayesian,
+          utility_score_normalized: utility,
+          readiness_reasons: readinessReasons.map((reason) => [reason.skillName, reason.effect] as [string, number]),
+          utility_reasons: utilityReasons.map((reason) => [reason.skillName, reason.effect] as [string, number]),
+          bayesian_score: bayesian,
+        },
+      };
+    })
+    .sort((a, b) => b.final_score - a.final_score)
+    .map((recommendation, index) => ({ ...recommendation, rank: index + 1 }))
+    .slice(0, topN);
+}
+
+export function memberCurrentSkills(artifact: ModelArtifact, memberCode: string) {
+  const skillByCode = new Map(artifact.skills.map((skill) => [skill.skill_code, skill]));
+  const levels = artifact.member_skill_levels[memberCode] ?? {};
+  return (artifact.member_skill_codes[memberCode] ?? [])
+    .map((skillCode) => {
+      const skill = skillByCode.get(skillCode);
+      if (!skill) {
+        return null;
+      }
+      return {
+        skill_code: skill.skill_code,
+        skill_name: skill.skill_name,
+        category: skill.category,
+        level: levels[skill.skill_code] ?? 0,
+      };
+    })
+    .filter(Boolean);
+}
+
+export function getRoleSkills(session: SessionData, roleName: string, minFrequency: number) {
+  const roleMembers = session.members.filter((member) => member.role === roleName);
+  const memberCodes = new Set(roleMembers.map((member) => member.member_code));
+  const counts = new Map<string, number>();
+  const skillLookup = new Map(session.skills.map((skill) => [skill.skill_code, skill]));
+
+  session.acquired.forEach((record) => {
+    if (!memberCodes.has(record.member_code)) {
+      return;
+    }
+    counts.set(record.skill_code, (counts.get(record.skill_code) ?? 0) + 1);
+  });
+
+  const totalMembers = Math.max(roleMembers.length, 1);
+  return Array.from(counts.entries())
+    .map(([skillCode, count]) => {
+      const skill = skillLookup.get(skillCode);
+      if (!skill) {
+        return null;
+      }
+      const frequency = count / totalMembers;
+      if (frequency < minFrequency) {
+        return null;
+      }
+      return {
+        skill_code: skillCode,
+        skill_name: skill.skill_name,
+        category: skill.category,
+        frequency,
+        member_count: count,
+        priority: frequency >= 0.5 ? 'high' : frequency >= 0.3 ? 'medium' : 'low',
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b?.frequency ?? 0) - (a?.frequency ?? 0));
+}
+
+export function buildGapAnalysis(session: SessionData, artifact: ModelArtifact, sourceMemberCode: string, targetSkillCodes: string[]) {
+  const sourceMember = pickMember(session, sourceMemberCode);
+  const sourceSkills = new Set(artifact.member_skill_codes[sourceMemberCode] ?? []);
+  const missingSkillCodes = targetSkillCodes.filter((skillCode) => !sourceSkills.has(skillCode));
+  const skillByCode = new Map(artifact.skills.map((skill) => [skill.skill_code, skill]));
+  const gapSkills = missingSkillCodes
+    .map((skillCode) => {
+      const skill = skillByCode.get(skillCode);
+      if (!skill) {
+        return null;
+      }
+      return { skill_code: skill.skill_code, skill_name: skill.skill_name, category: skill.category };
+    })
+    .filter(Boolean);
+
+  return {
+    source_member: sourceMember,
+    gap_skills: gapSkills,
+    gap_count: gapSkills.length,
+    source_skill_count: sourceSkills.size,
+    completion_rate: targetSkillCodes.length === 0 ? 1 : (targetSkillCodes.length - gapSkills.length) / targetSkillCodes.length,
+  };
+}
+
+export function buildCareerPathResponse(
+  artifact: ModelArtifact,
+  sourceMemberCode: string,
+  targetSkillCodes: string[],
+  minTotalScore: number,
+  minReadinessScore: number
+) {
+  const targetSet = new Set(targetSkillCodes);
+  const recommendations = scoreRecommendations(artifact, sourceMemberCode, artifact.skills.length)
+    .filter((recommendation) => targetSet.has(recommendation.skill_code))
+    .filter((recommendation) => recommendation.total_score >= minTotalScore && recommendation.readiness_score >= minReadinessScore)
+    .map((recommendation) => ({
+      competence_code: recommendation.skill_code,
+      competence_name: recommendation.skill_name,
+      category: recommendation.category,
+      total_score: recommendation.total_score,
+      readiness_score: recommendation.readiness_score,
+      bayesian_score: recommendation.bayesian_score,
+      utility_score: recommendation.utility_score,
+      readiness_reasons: recommendation.readiness_reasons,
+      utility_reasons: recommendation.utility_reasons,
+      prerequisites: recommendation.prerequisites,
+      enables: recommendation.enables,
+      explanation: recommendation.explanation,
+    }));
+
+  const avgScore =
+    recommendations.length === 0
+      ? 0
+      : recommendations.reduce((sum, recommendation) => sum + recommendation.total_score, 0) / recommendations.length;
+  const totalDependencies = recommendations.reduce((sum, recommendation) => sum + recommendation.prerequisites.length, 0);
+
+  return {
+    success: true,
+    recommended_skills: recommendations,
+    skill_count: recommendations.length,
+    avg_score: avgScore,
+    total_dependencies: totalDependencies,
+    estimated_months: Math.max(1, Math.ceil(recommendations.length / 2)),
+    message: recommendations.length > 0 ? `${recommendations.length}件の優先スキルを抽出しました` : '条件に一致する推薦がありませんでした',
+  };
+}
+
+export function buildRoadmapChart(recommendedSkills: Array<{ competence_name: string; total_score: number }>) {
+  return {
+    data: [
+      {
+        type: 'bar',
+        orientation: 'h',
+        x: recommendedSkills.map(() => 7),
+        y: recommendedSkills.map((skill) => skill.competence_name),
+        base: recommendedSkills.map((_, index) => index * 7),
+        marker: {
+          color: recommendedSkills.map((skill) => (skill.total_score >= 0.7 ? '#2ecc71' : skill.total_score >= 0.4 ? '#3498db' : '#95a5a6')),
+        },
+        customdata: recommendedSkills.map((_, index) => [index * 7, index * 7 + 6]),
+        hovertemplate: '%{y}<br>開始週: %{base}<br>終了週: %{customdata[1]}<extra></extra>',
+      },
+    ],
+    layout: {
+      title: '学習ロードマップ',
+      barmode: 'stack',
+      xaxis: { title: '週' },
+      yaxis: { automargin: true },
+      margin: { l: 160, r: 20, t: 60, b: 40 },
+      height: Math.max(360, recommendedSkills.length * 56),
+    },
+  };
+}
+
+export function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+export function polarLayout(labels: string[], radius: number, centerX: number, centerY: number) {
+  return labels.map((label, index) => {
+    const angle = (Math.PI * 2 * index) / Math.max(labels.length, 1);
+    return { id: label, x: centerX + Math.cos(angle) * radius, y: centerY + Math.sin(angle) * radius };
+  });
+}
+
+export function buildGraphHtml(
+  title: string,
+  nodes: Array<{ id: string; label: string; color: string; x: number; y: number }>,
+  edges: Array<{ source: string; target: string; weight: number }>
+): string {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const svgEdges = edges
+    .map((edge) => {
+      const source = nodeById.get(edge.source);
+      const target = nodeById.get(edge.target);
+      if (!source || !target) {
+        return '';
+      }
+      return `<line x1="${source.x}" y1="${source.y}" x2="${target.x}" y2="${target.y}" stroke="#94a3b8" stroke-width="${Math.max(1, edge.weight * 6)}" marker-end="url(#arrow)" />`;
+    })
+    .join('');
+  const svgNodes = nodes
+    .map(
+      (node) => `
+        <g>
+          <circle cx="${node.x}" cy="${node.y}" r="28" fill="${node.color}" stroke="#0f172a" stroke-width="1.5"></circle>
+          <text x="${node.x}" y="${node.y + 48}" text-anchor="middle" font-size="12" fill="#0f172a">${escapeHtml(node.label)}</text>
+        </g>`
+    )
+    .join('');
+
+  return `<!doctype html>
+  <html lang="ja">
+    <head>
+      <meta charset="utf-8" />
+      <title>${escapeHtml(title)}</title>
+      <style>
+        body { margin: 0; font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; }
+        .wrap { padding: 16px; }
+        .meta { margin-bottom: 12px; font-size: 14px; color: #334155; }
+        svg { width: 100%; height: 100%; min-height: 560px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <div class="meta">${escapeHtml(title)}</div>
+        <svg viewBox="0 0 960 600" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"></path>
+            </marker>
+          </defs>
+          ${svgEdges}
+          ${svgNodes}
+        </svg>
+      </div>
+    </body>
+  </html>`;
+}

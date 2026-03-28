@@ -1,0 +1,101 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# uv
+.uv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data files
+# data/ ディレクトリ以下のCSVファイルは除外（機密情報保護）
+data/**/*.csv
+data/**/*.xlsx
+data/**/*.xls
+
+# output/ ディレクトリは出力データなので除外
+output/*.csv
+output/*.xlsx
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+
+# Persistence
+*.db
+*.db-journal
+models/
+!tests/fixtures/models/
+
+# Temporary files
+*.html
+!frontend/index.html
+
+# Node.js
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+frontend/.wrangler/
+
+# Environment variables
+.env.local
+.env.production.local
+.env.development.local
+.env.test.local
+
+# Backend temporary uploads
+backend/temp_uploads/
+
+# Saved models (excluded for privacy and size)
+backend/saved_models/
+
+# Session constraints (excluded for privacy)
+backend/session_constraints/
+
+# Test coverage reports
+coverage.json
+.coverage
+htmlcov/
+coverage_middleware.txt
+coverage_report.txt
+final_coverage.txt

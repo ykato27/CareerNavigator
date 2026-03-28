@@ -1,0 +1,589 @@
+"""
+機械学習ベースの推薦エンジン（NMF対応版）
+
+DataFrameベースのMatrixFactorizationModelと整合する設計。
+"""
+
+import pandas as pd
+from typing import List, Optional, Dict
+from skillnote_recommendation.core.models import Recommendation
+from skillnote_recommendation.ml.matrix_factorization import MatrixFactorizationModel
+from skillnote_recommendation.ml.diversity import DiversityReranker
+from skillnote_recommendation.ml.exceptions import ColdStartError, MLModelNotTrainedError
+from skillnote_recommendation.core.reference_persons import ReferencePersonFinder
+
+
+class MLRecommender:
+    """機械学習ベース推薦エンジン（NMF版）"""
+
+    def __init__(
+        self,
+        mf_model: MatrixFactorizationModel,
+        competence_master: pd.DataFrame,
+        member_competence: pd.DataFrame,
+        member_master: pd.DataFrame,
+        diversity_reranker: Optional[DiversityReranker] = None,
+        reference_person_finder: Optional[ReferencePersonFinder] = None,
+        tuning_results: Optional[dict] = None,
+        skill_domain_sem_model: Optional['SkillDomainSEMModel'] = None,
+    ):
+        self.mf_model = mf_model
+        self.competence_master = competence_master
+        self.member_competence = member_competence
+        self.member_master = member_master
+        self.diversity_reranker = diversity_reranker or DiversityReranker()
+        self.reference_person_finder = reference_person_finder
+        self._member_acquired_cache = {}
+        self.tuning_results = tuning_results  # チューニング結果を保存
+        self.skill_domain_sem_model = skill_domain_sem_model  # SEMモデル（オプション）
+
+    # =========================================================
+    # 学習
+    # =========================================================
+    @classmethod
+    def build(
+        cls,
+        member_competence: pd.DataFrame,
+        competence_master: pd.DataFrame,
+        member_master: pd.DataFrame,
+        use_preprocessing: bool = True,
+        use_tuning: bool = False,
+        n_components: Optional[int] = None,
+        tuning_n_trials: Optional[int] = None,
+        tuning_timeout: Optional[int] = None,
+        tuning_search_space: Optional[Dict] = None,
+        tuning_sampler: Optional[str] = None,
+        tuning_random_state: Optional[int] = None,
+        tuning_progress_callback: Optional[object] = None,
+    ):
+        """
+        member_competence（会員習得力量データ）から会員×力量マトリックスを生成し、
+        MatrixFactorizationModel（NMF）を学習。
+
+        Args:
+            member_competence: メンバー習得力量データ
+            competence_master: 力量マスタ
+            member_master: メンバーマスタ
+            use_preprocessing: データ前処理を使用するか（デフォルト: True）
+            use_tuning: ハイパーパラメータチューニングを使用するか（デフォルト: False）
+            n_components: 潜在因子数（Noneの場合はConfigから取得）
+            tuning_n_trials: チューニング試行回数（Noneの場合はデフォルト）
+            tuning_timeout: チューニングタイムアウト（Noneの場合はデフォルト）
+            tuning_search_space: チューニング探索空間（Noneの場合はデフォルト）
+            tuning_sampler: チューニングサンプラー（Noneの場合は"tpe"）
+            tuning_random_state: チューニングの乱数シード（Noneの場合はデフォルト）
+            tuning_progress_callback: チューニング進捗コールバック
+        """
+        from skillnote_recommendation.core.config import Config
+        from skillnote_recommendation.ml.data_preprocessing import create_preprocessor_from_config
+
+        print("\n" + "=" * 80)
+        print("MLモデル学習開始（NMF）")
+        print("=" * 80)
+
+        # 会員×力量マトリックスを作成
+        skill_matrix = member_competence.pivot_table(
+            index="メンバーコード", columns="力量コード", values="正規化レベル", fill_value=0
+        )
+
+        print(f"元の会員数: {skill_matrix.shape[0]}")
+        print(f"元の力量数: {skill_matrix.shape[1]}")
+
+        # データ前処理
+        preprocessing_stats = None
+        if use_preprocessing and Config.DATA_PREPROCESSING_PARAMS["enable_preprocessing"]:
+            print("\n--- データ前処理実行 ---")
+            preprocessor = create_preprocessor_from_config(Config)
+            skill_matrix, preprocessing_stats = preprocessor.preprocess(skill_matrix, verbose=True)
+
+        # ハイパーパラメータチューニングまたは通常学習
+        tuning_results = None
+        if use_tuning:
+            print("\n--- ハイパーパラメータチューニング実行 ---")
+            print(f"[DEBUG] tuning_n_trials: {tuning_n_trials} (型: {type(tuning_n_trials)})")
+            print(f"[DEBUG] tuning_timeout: {tuning_timeout}")
+            print(f"[DEBUG] tuning_search_space: {tuning_search_space}")
+            print(f"[DEBUG] tuning_sampler: {tuning_sampler}")
+            print(f"[DEBUG] progress_callback設定: {tuning_progress_callback is not None}")
+
+            from skillnote_recommendation.ml.hyperparameter_tuning import (
+                tune_nmf_hyperparameters_from_config,
+            )
+
+            try:
+                print("[DEBUG] Calling tune_nmf_hyperparameters_from_config...")
+                best_params, best_value, mf_model, tuner = tune_nmf_hyperparameters_from_config(
+                    skill_matrix=skill_matrix,
+                    config=Config,
+                    show_progress_bar=True,
+                    return_tuner=True,  # Tunerオブジェクトも返す
+                    custom_n_trials=tuning_n_trials,
+                    custom_timeout=tuning_timeout,
+                    custom_search_space=tuning_search_space,
+                    custom_sampler=tuning_sampler,
+                    custom_random_state=tuning_random_state,
+                    progress_callback=tuning_progress_callback,
+                )
+                print(f"\n✅ チューニング完了")
+                print(f"最適パラメータ: {best_params}")
+                print(f"最小再構成誤差: {best_value:.6f}")
+                print(f"[DEBUG] 実行された試行数: {len(tuner.study.trials)}")
+
+                # チューニング結果を保存
+                tuning_results = {
+                    "best_params": best_params,
+                    "best_value": best_value,
+                    "tuner": tuner,
+                    "default_params": Config.MF_PARAMS.copy(),
+                }
+            except ImportError as e:
+                print(f"⚠️ Optunaがインストールされていません: {e}")
+                print("通常の学習に切り替えます。")
+                use_tuning = False
+            except Exception as e:
+                import traceback
+
+                print(f"❌ チューニング中にエラーが発生: {type(e).__name__}: {e}")
+                print(f"[ERROR] Traceback:\n{traceback.format_exc()}")
+                raise
+
+        if not use_tuning:
+            print("\n--- 通常学習実行 ---")
+            # Configからパラメータを読み込み
+            mf_params = Config.MF_PARAMS.copy()
+            config_n_components = mf_params.pop("n_components")
+            # n_componentsが指定されていればそれを使用、なければConfigから取得
+            final_n_components = n_components if n_components is not None else config_n_components
+            random_state = mf_params.pop("random_state")
+            use_confidence_weighting = mf_params.pop("use_confidence_weighting", False)
+            confidence_alpha = mf_params.pop("confidence_alpha", 1.0)
+
+            # NMFモデルを学習
+            mf_model = MatrixFactorizationModel(
+                n_components=final_n_components,
+                random_state=random_state,
+                use_confidence_weighting=use_confidence_weighting,
+                confidence_alpha=confidence_alpha,
+                **mf_params,
+            )
+            mf_model.fit(skill_matrix)
+
+            print(f"\n✅ 学習完了")
+            print(f"潜在因子数: {mf_model.n_components}")
+            print(f"Confidence Weighting: {mf_model.use_confidence_weighting}")
+            if mf_model.use_confidence_weighting:
+                print(f"Confidence Alpha: {mf_model.confidence_alpha}")
+            print(f"イテレーション数: {mf_model.model.n_iter_}")
+            print(f"再構成誤差: {mf_model.get_reconstruction_error():.6f}")
+
+        # 前処理統計を表示
+        if preprocessing_stats:
+            print(f"\n--- 前処理統計 ---")
+            print(f"除外メンバー数: {preprocessing_stats['removed_members']}")
+            print(f"除外力量数: {preprocessing_stats['removed_competences']}")
+            print(f"元のスパース性: {preprocessing_stats['original_sparsity']:.2f}%")
+            print(f"最終スパース性: {preprocessing_stats['final_sparsity']:.2f}%")
+
+        print("=" * 80)
+
+        # 参考人物検索エンジンを初期化
+        reference_finder = ReferencePersonFinder(
+            member_competence=member_competence,
+            member_master=member_master,
+            competence_master=competence_master,
+        )
+
+        return cls(
+            mf_model=mf_model,
+            competence_master=competence_master,
+            member_competence=member_competence,
+            member_master=member_master,
+            diversity_reranker=DiversityReranker(),
+            reference_person_finder=reference_finder,
+            tuning_results=tuning_results,  # チューニング結果を渡す
+        )
+
+    # =========================================================
+    # 推薦
+    # =========================================================
+    def recommend(
+        self,
+        member_code: str,
+        top_n: int = 10,
+        competence_type: Optional[List[str]] = None,
+        category_filter: Optional[str] = None,
+        use_diversity: bool = True,
+        diversity_strategy: str = "hybrid",
+    ) -> List[Recommendation]:
+        """特定会員に対する推薦を生成"""
+        if not self.mf_model.is_fitted:
+            raise MLModelNotTrainedError()
+
+        # コールドスタート問題のチェック：会員が学習データに存在するか
+        if member_code not in self.mf_model.member_index:
+            raise ColdStartError(member_code)
+
+        # 既習得力量を取得
+        acquired = self._get_acquired_competences(member_code)
+
+        # Top-K推薦
+        try:
+            candidates = self.mf_model.predict_top_k(
+                member_code=member_code,
+                k=top_n * 3 if use_diversity else top_n,
+                exclude_acquired=True,
+                acquired_competences=acquired,
+            )
+        except ValueError as e:
+            # predict_top_kからのValueErrorもColdStartErrorに変換
+            if "学習データに存在しません" in str(e):
+                raise ColdStartError(member_code) from e
+            raise
+
+        # 力量情報を付加
+        enriched = []
+        for code, score in candidates:
+            info = self.competence_master[self.competence_master["力量コード"] == code]
+            if len(info) > 0:
+                enriched.append((code, score, info.iloc[0]))
+
+        # フィルタリング
+        filtered = []
+        for code, score, info in enriched:
+            # 力量タイプフィルタ（複数選択対応）
+            if competence_type:
+                # competence_typeがリストの場合は、いずれかに一致すればOK
+                if isinstance(competence_type, list):
+                    if info["力量タイプ"] not in competence_type:
+                        continue
+                # 文字列の場合は従来通り（後方互換性）
+                elif info["力量タイプ"] != competence_type:
+                    continue
+
+            # カテゴリフィルタ
+            if category_filter:
+                cat = str(info.get("力量カテゴリー名", ""))
+                if category_filter.lower() not in cat.lower():
+                    continue
+
+            filtered.append((code, score))
+
+        # 多様性再ランキング
+        if use_diversity and len(filtered) > 0:
+            if diversity_strategy == "mmr":
+                final = self.diversity_reranker.rerank_mmr(
+                    filtered, self.competence_master, k=top_n
+                )
+            elif diversity_strategy == "category":
+                final = self.diversity_reranker.rerank_category_diversity(
+                    filtered, self.competence_master, k=top_n
+                )
+            elif diversity_strategy == "type":
+                final = self.diversity_reranker.rerank_type_diversity(
+                    filtered, self.competence_master, k=top_n
+                )
+            elif diversity_strategy == "hybrid":
+                final = self.diversity_reranker.rerank_hybrid(
+                    filtered, self.competence_master, k=top_n
+                )
+            else:
+                final = filtered[:top_n]
+        else:
+            final = filtered[:top_n]
+
+        # Recommendationオブジェクトに変換
+        results = []
+        for code, score in final:
+            info = self.competence_master[self.competence_master["力量コード"] == code].iloc[0]
+            priority = self._normalize_score(score, final)
+
+            # 参考人物を検索
+            reference_persons = []
+            if self.reference_person_finder:
+                reference_persons = self.reference_person_finder.find_reference_persons(
+                    target_member_code=member_code, recommended_competence_code=code, top_n=3
+                )
+
+            # リッチな推薦理由を生成（参考人物情報を含む）
+            reason = self._generate_rich_reason(
+                member_code=member_code,
+                competence_info=info,
+                score=score,
+                use_diversity=use_diversity,
+                diversity_strategy=diversity_strategy,
+                reference_persons=reference_persons,
+            )
+
+            rec = Recommendation(
+                competence_code=code,
+                competence_name=info["力量名"],
+                competence_type=info["力量タイプ"],
+                category=info.get("力量カテゴリー名", ""),
+                priority_score=priority,
+                category_importance=0.0,
+                acquisition_ease=0.0,
+                popularity=0.0,
+                reason=reason,
+                reference_persons=reference_persons,
+            )
+            results.append(rec)
+
+        return results
+
+    # =========================================================
+    # 内部関数
+    # =========================================================
+    def _get_acquired_competences(self, member_code: str) -> List[str]:
+        if member_code not in self._member_acquired_cache:
+            acquired = (
+                self.member_competence[self.member_competence["メンバーコード"] == member_code][
+                    "力量コード"
+                ]
+                .unique()
+                .tolist()
+            )
+            self._member_acquired_cache[member_code] = acquired
+        return self._member_acquired_cache[member_code]
+
+    def _normalize_score(self, score: float, all_candidates: List[tuple]) -> float:
+        if not all_candidates:
+            return 5.0
+        scores = [s for _, s in all_candidates]
+        min_s, max_s = min(scores), max(scores)
+        if max_s == min_s:
+            return 5.0
+        return round(((score - min_s) / (max_s - min_s)) * 10, 2)
+
+    def _generate_rich_reason(
+        self,
+        member_code: str,
+        competence_info: pd.Series,
+        score: float,
+        use_diversity: bool,
+        diversity_strategy: str,
+        reference_persons: list,
+    ) -> str:
+        """
+        個人の力量プロファイルに基づいたリッチな推薦理由を生成
+
+        Args:
+            member_code: 対象会員コード
+            competence_info: 推薦力量の情報
+            score: 推薦スコア
+            use_diversity: 多様性を考慮するか
+            diversity_strategy: 多様性戦略
+            reference_persons: 参考人物リスト
+
+        Returns:
+            リッチな推薦理由（マークダウン形式）
+        """
+        name = competence_info["力量名"]
+        typ = competence_info["力量タイプ"]
+        cat = competence_info.get("力量カテゴリー名", "")
+
+        # 会員の力量プロファイルを分析
+        acquired = self._get_acquired_competences(member_code)
+        acquired_count = len(acquired)
+
+        # カテゴリ別の保有力量を分析
+        category_profile = self._analyze_category_profile(member_code)
+
+        # === 推薦理由の構築 ===
+        reason_parts = []
+
+        # 1. 導入部：なぜこの力量が推薦されるのか
+        intro = self._generate_reason_intro(name, typ, cat, score, acquired_count, category_profile)
+        reason_parts.append(intro)
+
+        # 2. 個人プロファイルとの関連性
+        profile_relevance = self._generate_profile_relevance(
+            member_code, name, typ, cat, acquired, category_profile
+        )
+        if profile_relevance:
+            reason_parts.append(profile_relevance)
+
+        # 3. 多様性戦略の説明
+        if use_diversity:
+            diversity_explanation = self._generate_diversity_explanation(diversity_strategy)
+            if diversity_explanation:
+                reason_parts.append(diversity_explanation)
+
+        # 4. 習得によるメリット
+        benefits = self._generate_benefits(typ, cat, category_profile)
+        if benefits:
+            reason_parts.append(benefits)
+
+        return "\n\n".join(reason_parts)
+
+    def _generate_reason_intro(
+        self,
+        name: str,
+        typ: str,
+        cat: str,
+        score: float,
+        acquired_count: int,
+        category_profile: Dict,
+    ) -> str:
+        """推薦理由の導入部を生成"""
+        score_pct = int(score * 100) if score <= 1 else int(score * 10)
+
+        if typ == "SKILL":
+            intro = (
+                f"**スキル「{name}」**は、あなたの現在の力量プロファイル（保有力量{acquired_count}個）と"
+                f"機械学習モデルの分析から、**適合度{score_pct}%**で推薦されます。"
+            )
+        elif typ == "EDUCATION":
+            intro = (
+                f"**研修「{name}」**は、あなたのキャリアパス分析と保有力量{acquired_count}個の傾向から、"
+                f"**適合度{score_pct}%**で受講が推奨されます。"
+            )
+        else:
+            intro = (
+                f"**資格「{name}」**は、あなたの現在のスキルセット（{acquired_count}個の力量）を考慮し、"
+                f"**適合度{score_pct}%**で取得が推奨されます。"
+            )
+
+        if cat:
+            intro += f"\n\n📁 **カテゴリ**: {cat}"
+
+        return intro
+
+    def _generate_profile_relevance(
+        self,
+        member_code: str,
+        name: str,
+        typ: str,
+        cat: str,
+        acquired: List[str],
+        category_profile: Dict,
+    ) -> str:
+        """個人プロファイルとの関連性を説明"""
+        if not category_profile:
+            return ""
+
+        # カテゴリ別の保有状況を分析
+        if cat and cat in category_profile:
+            cat_count = category_profile[cat]
+
+            # 力量カテゴリー名カラムが存在する場合のみカテゴリ分析
+            if "力量カテゴリー名" in self.competence_master.columns:
+                total_cat = len(
+                    self.competence_master[self.competence_master["力量カテゴリー名"] == cat]
+                )
+                cat_ratio = int((cat_count / total_cat * 100)) if total_cat > 0 else 0
+
+                relevance = (
+                    f"🎯 **あなたのプロファイルとの関連性**\n\n"
+                    f"あなたは既に「{cat}」カテゴリの力量を{cat_count}個保有しており、"
+                    f"このカテゴリの{cat_ratio}%をカバーしています。\n"
+                    f"この力量を習得することで、{cat}分野での専門性がさらに強化されます。"
+                )
+            else:
+                # カラムが存在しない場合はシンプルなメッセージ
+                relevance = (
+                    f"🎯 **あなたのプロファイルとの関連性**\n\n"
+                    f"あなたは既に「{cat}」カテゴリの力量を{cat_count}個保有しています。\n"
+                    f"この力量を習得することで、専門性がさらに強化されます。"
+                )
+            return relevance
+
+        # カテゴリ情報がない場合は、全体的な傾向を説明
+        top_category = max(category_profile.items(), key=lambda x: x[1])[0]
+        top_count = category_profile[top_category]
+
+        relevance = (
+            f"🎯 **あなたのプロファイルとの関連性**\n\n"
+            f"あなたの主要な力量は「{top_category}」カテゴリ（{top_count}個）です。\n"
+            f"「{name}」を習得することで、キャリアの幅を広げることができます。"
+        )
+        return relevance
+
+    def _generate_diversity_explanation(self, strategy: str) -> str:
+        """多様性戦略の説明を生成"""
+        if strategy == "hybrid":
+            return (
+                "⚖️ **推薦戦略**: バランス重視\n\n"
+                "類似性と多様性のバランスを考慮し、あなたのキャリアに最適な構成を提案しています。"
+            )
+        elif strategy == "mmr":
+            return (
+                "🎨 **推薦戦略**: 多様性重視\n\n"
+                "既存の力量と重複を避け、新しい分野への挑戦を重視した推薦です。"
+            )
+        elif strategy == "category":
+            return (
+                "📚 **推薦戦略**: カテゴリ多様性\n\n"
+                "異なるカテゴリの力量をバランスよく推薦し、幅広いスキルセットの構築を支援します。"
+            )
+        elif strategy == "type":
+            return (
+                "🔄 **推薦戦略**: タイプ多様性\n\n"
+                "スキル・研修・資格のバランスを考慮し、総合的な成長を目指します。"
+            )
+        return ""
+
+    def _generate_benefits(self, typ: str, cat: str, category_profile: Dict) -> str:
+        """習得によるメリットを生成"""
+        if typ == "SKILL":
+            benefits = (
+                "✨ **習得によるメリット**\n\n"
+                "- 実務での即戦力スキルとして活用可能\n"
+                "- 同様のスキルを持つメンバーとの協業機会が増加\n"
+                "- キャリアの選択肢が広がります"
+            )
+        elif typ == "EDUCATION":
+            benefits = (
+                "✨ **受講によるメリット**\n\n"
+                "- 体系的な知識習得が可能\n"
+                "- 研修を通じた社内ネットワーク構築\n"
+                "- 認定取得によるスキルの証明"
+            )
+        else:
+            benefits = (
+                "✨ **取得によるメリット**\n\n"
+                "- 外部に対するスキル証明が可能\n"
+                "- キャリアアップの機会増加\n"
+                "- 専門性の客観的な評価"
+            )
+
+        return benefits
+
+    def _analyze_category_profile(self, member_code: str) -> Dict[str, int]:
+        """会員のカテゴリ別力量保有状況を分析"""
+        member_comps = self.member_competence[
+            self.member_competence["メンバーコード"] == member_code
+        ]
+
+        # member_competence に既に「力量カテゴリー名」カラムが存在するか確認
+        if "力量カテゴリー名" in member_comps.columns:
+            # 既に存在する場合は、そのまま使用
+            category_counts = member_comps["力量カテゴリー名"].dropna().value_counts().to_dict()
+        elif "力量カテゴリー名" in self.competence_master.columns:
+            # member_competence にない場合は、competence_master からマージ
+            merged = member_comps.merge(
+                self.competence_master[["力量コード", "力量カテゴリー名"]],
+                on="力量コード",
+                how="left",
+                suffixes=("", "_master"),
+            )
+            # マージ後のカラム名を確認（_y サフィックスがつく可能性）
+            cat_col = (
+                "力量カテゴリー名_master"
+                if "力量カテゴリー名_master" in merged.columns
+                else "力量カテゴリー名"
+            )
+            category_counts = merged[cat_col].dropna().value_counts().to_dict()
+        else:
+            # どちらにも存在しない場合は空の辞書
+            return {}
+
+        # 空文字列のキーを削除
+        category_counts = {k: v for k, v in category_counts.items() if k and str(k).strip()}
+
+        return category_counts
+
+    def calculate_diversity_metrics(
+        self, recommendations: List[Recommendation]
+    ) -> Dict[str, float]:
+        pairs = [(rec.competence_code, rec.priority_score) for rec in recommendations]
+        return self.diversity_reranker.calculate_diversity_metrics(pairs, self.competence_master)
