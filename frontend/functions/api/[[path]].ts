@@ -336,13 +336,13 @@ async function handleGet(request: Request, env: Env) {
 
   const sessionMatch = path.match(/^\/api\/session\/([^/]+)$/);
   if (sessionMatch) {
-    const sessionRow = await loadSessionRow(env, sessionMatch[1]);
+    const session = await loadSession(env, sessionMatch[1]);
     return jsonResponse({
       success: true,
-      session_id: sessionRow.id,
-      created_at: sessionRow.created_at,
-      expires_at: getSessionExpiry(sessionRow.created_at, sessionRow.expires_at, env),
-      source_storage: sessionRow.source_storage ?? getStorageMode(env),
+      session_id: session.id,
+      created_at: session.createdAt,
+      expires_at: session.expires_at,
+      source_storage: getStorageMode(env),
     });
   }
 
