@@ -107,6 +107,27 @@ class TestSessionManagement:
         assert session_manager_reset.session_exists("recent")
         assert not session_manager_reset.session_exists(old_session_id)
 
+    def test_cleanup_old_sessions_calls_remove_outside_lock(self, session_manager_reset, monkeypatch):
+        """Test cleanup removes sessions after releasing the data lock."""
+        old_session_id = "old_session"
+        session_manager_reset.add_session(old_session_id, {"data": "old"})
+        session_manager_reset._sessions[old_session_id]["last_accessed"] = time.time() - 90000
+
+        original_remove_session = session_manager_reset.remove_session
+        observed_lock_states = []
+
+        def wrapped_remove_session(session_id):
+            observed_lock_states.append(session_manager_reset._data_lock.locked())
+            return original_remove_session(session_id)
+
+        monkeypatch.setattr(session_manager_reset, "remove_session", wrapped_remove_session)
+
+        removed_count = session_manager_reset.cleanup_old_sessions(max_age_seconds=86400)
+
+        assert removed_count == 1
+        assert observed_lock_states == [False]
+        assert not session_manager_reset.session_exists(old_session_id)
+
 
 class TestModelManagement:
     """Tests for model management methods."""
@@ -168,6 +189,27 @@ class TestModelManagement:
         
         assert removed_count == 1
         assert session_manager_reset.model_exists("recent_model")
+        assert not session_manager_reset.model_exists(old_model_id)
+
+    def test_cleanup_old_models_calls_remove_outside_lock(self, session_manager_reset, monkeypatch):
+        """Test cleanup removes models after releasing the data lock."""
+        old_model_id = "old_model"
+        session_manager_reset.add_model(old_model_id, {"data": "old"})
+        session_manager_reset._models[old_model_id]["timestamp"] = time.time() - 90000
+
+        original_remove_model = session_manager_reset.remove_model
+        observed_lock_states = []
+
+        def wrapped_remove_model(model_id):
+            observed_lock_states.append(session_manager_reset._data_lock.locked())
+            return original_remove_model(model_id)
+
+        monkeypatch.setattr(session_manager_reset, "remove_model", wrapped_remove_model)
+
+        removed_count = session_manager_reset.cleanup_old_models(max_age_seconds=86400)
+
+        assert removed_count == 1
+        assert observed_lock_states == [False]
         assert not session_manager_reset.model_exists(old_model_id)
 
 

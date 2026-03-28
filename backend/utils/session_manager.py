@@ -79,7 +79,6 @@ class SessionManager:
         Returns the number of sessions removed.
         """
         current_time = time.time()
-        removed_count = 0
 
         with self._data_lock:
             sessions_to_remove = [
@@ -88,11 +87,10 @@ class SessionManager:
                 if current_time - data.get("last_accessed", 0) > max_age_seconds
             ]
 
-            for session_id in sessions_to_remove:
-                self.remove_session(session_id)
-                removed_count += 1
+        for session_id in sessions_to_remove:
+            self.remove_session(session_id)
 
-        return removed_count
+        return len(sessions_to_remove)
 
     # Model management
     def add_model(self, model_id: str, model: Any, metadata: Optional[Dict[str, Any]] = None) -> None:
@@ -155,7 +153,6 @@ class SessionManager:
         Returns the number of models removed.
         """
         current_time = time.time()
-        removed_count = 0
 
         with self._data_lock:
             models_to_remove = [
@@ -164,11 +161,10 @@ class SessionManager:
                 if current_time - data.get("timestamp", 0) > max_age_seconds
             ]
 
-            for model_id in models_to_remove:
-                self.remove_model(model_id)
-                removed_count += 1
+        for model_id in models_to_remove:
+            self.remove_model(model_id)
 
-        return removed_count
+        return len(models_to_remove)
     
     def load_all_models(self) -> Dict[str, Any]:
         """
