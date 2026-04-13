@@ -24,10 +24,11 @@ Cloudflare R2
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev -- --port 5174
 ```
 
 `localhost` ではブラウザ内フォールバックが有効なので、Cloudflare の設定なしでも基本操作を確認できます。
+Python backend を使う場合は `http://localhost:8010` を API 接続先にし、画面は `http://localhost:5174` を開きます。
 
 ### Cloudflare-like
 

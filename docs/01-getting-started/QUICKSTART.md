@@ -7,12 +7,15 @@
 ```bash
 cd CareerNavigator/frontend
 npm install
-npm run dev
+npm run dev -- --port 5174
 ```
 
-- 起動先: `http://localhost:5173`
+- 起動先: `http://localhost:5174`
 - `localhost` ではブラウザ内フォールバックが有効です
 - Cloudflare の D1/R2 がなくても基本操作を確認できます
+
+Python backend も使う場合は、root の [README.md](/C:/Users/加藤裕樹/Desktop/CareerNavigator/README.md) に従って backend を `8010` 番で起動してください。
+`8000` 番は別アプリが使っている可能性があるため、このプロジェクトでは使いません。
 
 ## Cloudflare 向けビルド
 
