@@ -62,6 +62,12 @@ uv run --extra web uvicorn backend.main:app --reload --port 8000
 `backend` は `backend.*` の絶対 import を使っているため、プロジェクトルートから起動してください。
 `backend` ディレクトリ内で `uvicorn main:app` を実行すると、`ModuleNotFoundError: No module named 'backend'` が発生します。
 
+フロントエンドから Python backend を使う場合は、`frontend/.env.local` に API URL を設定します。
+
+```bash
+VITE_API_BASE_URL=http://localhost:8000
+```
+
 別ターミナルでフロントエンドを起動します。
 
 ```bash

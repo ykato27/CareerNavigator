@@ -79,6 +79,12 @@ function isLocalhost(): boolean {
   return ['localhost', '127.0.0.1'].includes(window.location.hostname);
 }
 
+function isRelativeApiRequest(config: AxiosRequestConfig): boolean {
+  const base = config.baseURL ?? '';
+  const path = config.url ?? '';
+  return !base && path.startsWith('/api/');
+}
+
 async function performHttpRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   const url = new URL(normalizeUrl(config), typeof window !== 'undefined' ? window.location.origin : 'https://career-navigator.local');
   if (config.params) {
@@ -93,6 +99,7 @@ async function performHttpRequest(config: AxiosRequestConfig): Promise<AxiosResp
   const method = (config.method ?? 'GET').toUpperCase();
   let body: BodyInit | undefined;
   if (config.data instanceof FormData) {
+    headers.delete('Content-Type');
     body = config.data;
   } else if (config.data !== undefined && method !== 'GET') {
     if (!headers.has('Content-Type')) {
@@ -160,7 +167,7 @@ function createAxiosInstance(defaults: AxiosRequestConfig = {}): AxiosInstance {
       } catch (error: any) {
         const shouldFallback =
           isLocalhost() &&
-          (normalizeUrl(mergedConfig).startsWith('/api/') || normalizeUrl(mergedConfig).includes('/api/'));
+          isRelativeApiRequest(mergedConfig);
 
         if (shouldFallback && !(error instanceof AxiosError && error.response && error.response.status !== 404)) {
           try {
