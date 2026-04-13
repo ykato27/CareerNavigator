@@ -68,6 +68,9 @@ uv run --extra web uvicorn backend.main:app --reload --port 8000
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
+API URL を切り替えた直後は、画面を再読み込みして CSV をアップロードし直してください。
+ブラウザ内 fallback で作ったセッションは Python backend から参照できません。
+
 別ターミナルでフロントエンドを起動します。
 
 ```bash
