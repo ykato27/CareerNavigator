@@ -53,6 +53,7 @@ npm run dev -- --port 5174
 ### 2. バックエンドも起動する
 
 FastAPI の参照実装も一緒に起動したい場合の手順です。
+この環境では `8000` 番が別アプリに使われることがあるため、CareerNavigator backend は `8010` 番で起動します。
 
 ```bash
 cd C:\Users\加藤裕樹\Desktop\CareerNavigator
@@ -84,6 +85,9 @@ npm run dev -- --port 5174
 - フロントエンド: `http://localhost:5174`
 - バックエンド: `http://localhost:8010`
 - API ドキュメント: `http://localhost:8010/api/docs`
+
+`http://localhost:8000` は CareerNavigator 以外の API が待ち受けている可能性があるため、このプロジェクトでは使いません。
+画面は必ずフロントエンドの URL を開いてください。backend の URL は API と `/api/docs` の確認用です。
 
 ### 3. 型チェックとビルド
 
