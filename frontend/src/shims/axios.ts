@@ -169,7 +169,7 @@ function createAxiosInstance(defaults: AxiosRequestConfig = {}): AxiosInstance {
           isLocalhost() &&
           isRelativeApiRequest(mergedConfig);
 
-        if (shouldFallback && !(error instanceof AxiosError && error.response && error.response.status !== 404)) {
+        if (shouldFallback) {
           try {
             const data = await handleBrowserApiRequest({
               ...mergedConfig,
