@@ -56,7 +56,7 @@ FastAPI の参照実装も一緒に起動したい場合の手順です。
 
 ```bash
 cd C:\Users\加藤裕樹\Desktop\CareerNavigator
-uv run --extra web uvicorn backend.main:app --reload --port 8000
+uv run --extra web uvicorn backend.main:app --reload --port 8010
 ```
 
 `backend` は `backend.*` の絶対 import を使っているため、プロジェクトルートから起動してください。
@@ -65,7 +65,7 @@ uv run --extra web uvicorn backend.main:app --reload --port 8000
 フロントエンドから Python backend を使う場合は、`frontend/.env.local` に API URL を設定します。
 
 ```bash
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8010
 ```
 
 API URL を切り替えた直後は、画面を再読み込みして CSV をアップロードし直してください。
@@ -82,8 +82,8 @@ npm run dev -- --port 5174
 補足:
 
 - フロントエンド: `http://localhost:5174`
-- バックエンド: `http://localhost:8000`
-- API ドキュメント: `http://localhost:8000/api/docs`
+- バックエンド: `http://localhost:8010`
+- API ドキュメント: `http://localhost:8010/api/docs`
 
 ### 3. 型チェックとビルド
 
