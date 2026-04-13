@@ -55,9 +55,12 @@ npm run dev
 FastAPI の参照実装も一緒に起動したい場合の手順です。
 
 ```bash
-cd backend
-uv run uvicorn main:app --reload --port 8000
+cd C:\Users\加藤裕樹\Desktop\CareerNavigator
+uv run --extra web uvicorn backend.main:app --reload --port 8000
 ```
+
+`backend` は `backend.*` の絶対 import を使っているため、プロジェクトルートから起動してください。
+`backend` ディレクトリ内で `uvicorn main:app` を実行すると、`ModuleNotFoundError: No module named 'backend'` が発生します。
 
 別ターミナルでフロントエンドを起動します。
 
